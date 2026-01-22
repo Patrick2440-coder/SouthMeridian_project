@@ -1,3 +1,51 @@
+<?php
+session_start();
+
+// ===================== DB CONNECTION =====================
+$host = "localhost";
+$db   = "south_meridian_hoa";
+$user = "root";
+$pass = ""; // your DB password
+$conn = new mysqli($host, $user, $pass, $db);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// ===================== AJAX LOGIN PROCESS =====================
+if(isset($_POST['action']) && $_POST['action'] == 'login'){
+    $email = $_POST['email'] ?? '';
+    $password = $_POST['password'] ?? '';
+
+    $stmt = $conn->prepare("SELECT id, email, password, role, phase FROM admins WHERE email=?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if($result->num_rows === 1){
+        $user = $result->fetch_assoc();
+        if($password === $user['password']){ // plain text for now
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['phase'] = $user['phase'];
+
+            if($user['role'] === 'superadmin'){
+                echo "superadmin/dashboard.php";
+            } elseif($user['role'] === 'admin'){
+                echo "admin/dashboard.php";
+            } else {
+                echo "homeowner/dashboard.php";
+            }
+            exit;
+        } else {
+            echo "Incorrect password";
+            exit;
+        }
+    } else {
+        echo "Email not found";
+        exit;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -79,60 +127,50 @@
     </div>
   </header>
 
+  <!-- ================= LOGIN MODAL ================= -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 shadow">
 
-  <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content rounded-4 shadow">
-
-      <!-- Header -->
-      <div class="modal-header bg-success text-white rounded-top-4">
-        <h5 class="modal-title" style="color: white;">South Meridian Homes</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-
-      <!-- Body -->
-      <div class="modal-body px-4 py-4 text-center">
-
-        <!-- Logo -->
-        <img src="#"
-             alt="Logo"
-             class="mb-3"
-             style="max-width:90px;">
-
-        <h6 class="fw-bold mb-3 text-success">Homeowners Login</h6>
-
-        <form id="loginForm">
-          <div class="form-floating mb-3">
-            <input type="email" class="form-control" id="email" placeholder="Email">
-            <label for="email">Email address</label>
+          <div class="modal-header bg-success text-white rounded-top-4">
+            <h5 class="modal-title" style="color: white;">South Meridian Homes</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
 
-          <div class="form-floating mb-3">
-            <input type="password" class="form-control" id="password" placeholder="Password">
-            <label for="password">Password</label>
+          <div class="modal-body px-4 py-4 text-center">
+
+            <img src="#" alt="Logo" class="mb-3" style="max-width:90px;">
+            <h6 class="fw-bold mb-3 text-success">Homeowners Login</h6>
+
+            <form id="loginForm">
+              <div class="form-floating mb-3">
+                <input type="email" class="form-control" id="email" name="email" placeholder="Email" required>
+                <label for="email">Email address</label>
+              </div>
+
+              <div class="form-floating mb-3">
+                <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+                <label for="password">Password</label>
+              </div>
+
+              <div class="loading text-primary mb-2" style="display:none;">Checking credentials...</div>
+              <div class="error-message text-danger mb-2" style="display:none;"></div>
+
+              <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">Log in</button>
+            </form>
+
+            <div class="mt-3">
+              <div class="d-flex justify-content-start mt-3">
+                <a href="#" class="text-success text-decoration-none">Forgot password?</a>
+              </div>
+              <span class="text-muted small d-block my-2">Don’t have an account? <a href="register.html" class="text-success text-decoration-none">Create Account</a></span>
+            </div>
+
           </div>
-
-          <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
-            Log in
-          </button>
-        </form>
-
-        <!-- Links -->
-        <div class="mt-3">
-         <div class="d-flex justify-content-start mt-3">
-            <a href="#" class="text-success text-decoration-none">
-              Forgot password?
-            </a>
-          </div>
-
-          <span class="text-muted small d-block my-2">Don’t have an account? <a href="register.html" class="text-success text-decoration-none"> Create Account</a></span>
-
         </div>
-
       </div>
     </div>
-  </div>
-</div>
+
 
 
   <main class="main">
@@ -373,32 +411,37 @@
 
   <!-- Main JS File -->
   <script src="assets/js/main.js"></script>
-<script>
-document.getElementById("loginForm").addEventListener("submit", function(e) {
-    e.preventDefault();
+  <script>
+  document.getElementById("loginForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const form = this;
+      const loading = form.querySelector('.loading');
+      const error = form.querySelector('.error-message');
 
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
+      loading.style.display = 'block';
+      error.style.display = 'none';
 
-    // Sample credentials
-    const superAdminEmail = "superadmin@gmail.com";
-    const superAdminPassword = "admin";
+      const formData = new FormData(form);
+      formData.append('action', 'login');
 
-    if (email === superAdminEmail && password === superAdminPassword) {
-        alert("Login successful!");
-        window.location.href = "superadmin/dashboard.html";
-    }else if(email === "admin@gmail.com" && password === "admin"){
-        alert("Login successful!");
-        window.location.href = "admin/dashboard.html";
-    }else if(email === "homeowner@gmail.com" && password === "homeowner"){
-        alert("Login successful!");
-        window.location.href = "homeowner/dashboard.html";
-
-    } else {
-        alert("Invalid email or password");
-    }
-});
-</script>
+      fetch('index.php', { method: 'POST', body: formData })
+      .then(res => res.text())
+      .then(data => {
+          loading.style.display = 'none';
+          if(data.includes('.php')){
+              window.location.href = data.trim();
+          } else {
+              error.innerText = data;
+              error.style.display = 'block';
+          }
+      })
+      .catch(err => {
+          loading.style.display = 'none';
+          error.innerText = "An error occurred. Try again.";
+          error.style.display = 'block';
+      });
+  });
+  </script>
 
 </body>
 

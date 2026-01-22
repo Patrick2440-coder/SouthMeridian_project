@@ -107,7 +107,7 @@
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="../index.html"><i class="dw dw-logout"></i> Log Out</a>
+						<a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
 					</div>
 				</div>
 			</div>
@@ -204,14 +204,14 @@
    <div class="sidebar-menu">
     <ul id="accordion-menu">
         <li>
-            <a href="dashboard.html" class="dropdown-toggle no-arrow">
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-house-1"></span>
                 <span class="mtext">Dashboard</span>
             </a>
         </li>
 
         <li>
-            <a href="HO-management.html" class="dropdown-toggle no-arrow">
+            <a href="HO-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user1"></span>
                 <span class="mtext">Homeowner Management</span>
             </a>
@@ -219,7 +219,7 @@
 
         <!-- NEW: User Management -->
         <li>
-            <a href="users-management.html" class="dropdown-toggle no-arrow">
+            <a href="users-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user"></span>
                 <span class="mtext">User Management</span>
             </a>
@@ -227,7 +227,7 @@
 
         <!-- NEW: Announcement -->
         <li>
-            <a href="announcements.html" class="dropdown-toggle no-arrow">
+            <a href="announcements.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-megaphone"></span>
                 <span class="mtext">Announcement</span>
             </a>

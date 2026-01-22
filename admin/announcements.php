@@ -107,7 +107,7 @@
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="login.html"><i class="dw dw-logout"></i> Log Out</a>
+						<a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
 					</div>
 				</div>
 			</div>
@@ -201,26 +201,25 @@
 			</div>
 		</div>
 	<div class="menu-block customscroll">
-    <div class="sidebar-menu">
+   <div class="sidebar-menu">
     <ul id="accordion-menu">
         <li>
-            <a href="dashboard.html" class="dropdown-toggle no-arrow">
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-house-1"></span>
                 <span class="mtext">Dashboard</span>
             </a>
         </li>
 
         <li>
-         
-              <a href="HO-management.html" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-user"></span>
+            <a href="HO-management.php" class="dropdown-toggle no-arrow">
+                <span class="micon dw dw-user1"></span>
                 <span class="mtext">Homeowner Management</span>
             </a>
         </li>
 
         <!-- NEW: User Management -->
         <li>
-            <a href="users-management.html" class="dropdown-toggle no-arrow">
+            <a href="users-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user"></span>
                 <span class="mtext">User Management</span>
             </a>
@@ -228,7 +227,7 @@
 
         <!-- NEW: Announcement -->
         <li>
-            <a href="announcements.html" class="dropdown-toggle no-arrow">
+            <a href="announcements.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-megaphone"></span>
                 <span class="mtext">Announcement</span>
             </a>
@@ -236,213 +235,210 @@
 
         <!-- Settings (now pushed down) -->
         <li>
-            <a href="settings.html" class="dropdown-toggle no-arrow">
+            <a href="#" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-settings2"></span>
                 <span class="mtext">Settings</span>
             </a>
         </li>
     </ul>
-    </div>
+</div>
+
 </div>
 
 	</div>
 	<div class="mobile-menu-overlay"></div>
 
 	<div class="main-container">
-			<div class="row">
-    <!-- Activity Graph -->
-    <div class="col-xl-12 mb-30">
+		<div class="pd-ltr-20">
+	
+		
+		
+
+<div class="container mt-4">
+    <div class="card shadow-sm border-0">
+  <div class="col-xl-12 mb-30">
         <div class="card-box height-100-p pd-20">
-            <h2 class="h4 mb-20">Home Owner Management</h2>
-             <!-- Tabs -->
-  <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="approval-tab" data-bs-toggle="tab" data-bs-target="#approval" type="button" role="tab">
-        Household Approval
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="registration-tab" data-bs-toggle="tab" data-bs-target="#registration" type="button" role="tab">
-        Register Household
-      </button>
-    </li>
-  </ul>
-
-  <!-- Tab Contents -->
-  <div class="tab-content" id="mainTabsContent">
-    <!-- Approval Table -->
-    <div class="tab-pane fade show active" id="approval" role="tabpanel">
-      <table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td>Juan Dela Cruz</td>
-            <td>Phase 1,Blk3 - Lot 12</td>
-            <td>
-              <button class="btn btn-sm btn-info" title="View"> <i class="dw dw-eye"></i></button>
-              <button class="btn btn-sm btn-danger" title="Delete"><i class="dw dw-trash"></i></button>
-            </td>
-          </tr>
-          <tr>
-            <td>2</td>
-            <td>Maria Santos</td>
-            <td>Phase 1,Blk2 - Lot 5</td>
-            <td>
-              <button class="btn btn-sm btn-info" title="View"> <i class="dw dw-eye"></i></button>
-              <button class="btn btn-sm btn-danger" title="Delete"><i class="dw dw-trash"></i></button>
-            </td>
-          </tr>
-          <tr>
-            <td>3</td>
-            <td>Carlos Reyes</td>
-            <td>Phase 1,Blk 1 - Lot 8</td>
-            <td>
-              <button class="btn btn-sm btn-info" title="View"> <i class="dw dw-eye"></i></button>
-              <button class="btn btn-sm btn-danger" title="Delete"><i class="dw dw-trash"></i></button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Registration Form -->
-    <div class="tab-pane fade" id="registration" role="tabpanel">
-      <form id="registrationForm" method="POST" enctype="multipart/form-data">
-
-        <!-- HOMEOWNER INFORMATION -->
-        <h5 class="mb-3 border-bottom pb-2">Homeowner Information</h5>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-4">
-            <label class="form-label">First Name</label>
-            <input type="text" class="form-control" required>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Middle Name</label>
-            <input type="text" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Last Name</label>
-            <input type="text" class="form-control" required>
-          </div>
+           <div class="card-header text-white">
+            <h5 class="mb-0 d-flex align-items-center">
+                <i class="dw dw-megaphone me-2"></i>
+                Create Announcement
+            </h5>
         </div>
+            
+             <div class="card-body">
+            <form id="announcementForm">
 
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Contact Number</label>
-            <input type="tel" class="form-control" placeholder="09XXXXXXXXX" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Email Address</label>
-            <input type="email" class="form-control" required>
-          </div>
+                <!-- Announcement Title -->
+                <div class="mb-3">
+                    <label for="title" class="form-label fw-semibold">
+                        Announcement Title
+                    </label>
+                    <input
+                        type="text"
+                        id="title"
+                        class="form-control"
+                        placeholder="Enter announcement title"
+                        required
+                    >
+                </div>
+
+                <!-- Category -->
+                <div class="mb-3">
+                    <label for="category" class="form-label fw-semibold">
+                        Category
+                    </label>
+                    <select id="category" class="form-control" required>
+                        <option value="">Select category</option>
+                        <option value="general">General Notice</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="meeting">Meeting</option>
+                        <option value="emergency">Emergency</option>
+                    </select>
+                </div>
+
+                <!-- Target Audience -->
+                <div class="mb-3">
+                    <label for="audience" class="form-label fw-semibold">
+                        Target Audience
+                    </label>
+                    <select id="audience" class="form-control" required>
+                        <option value="">Select audience</option>
+                        <option value="all">All Homeowners</option>
+                        <option value="block">Specific Block</option>
+                        <option value="selected">Selected Homeowners</option>
+                    </select>
+                </div>
+
+                <!-- Announcement Message -->
+                <div class="mb-3">
+                    <label for="message" class="form-label fw-semibold">
+                        Announcement Message
+                    </label>
+                    <textarea
+                        id="message"
+                        class="form-control"
+                        rows="5"
+                        placeholder="Write the announcement details here..."
+                        required
+                    ></textarea>
+                </div>
+
+                <!-- Schedule Dates -->
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="startDate" class="form-label fw-semibold">
+                            Start Date
+                        </label>
+                        <input
+                            type="date"
+                            id="startDate"
+                            class="form-control"
+                            required
+                        >
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="endDate" class="form-label fw-semibold">
+                            End Date
+                        </label>
+                        <input
+                            type="date"
+                            id="endDate"
+                            class="form-control"
+                        >
+                    </div>
+                </div>
+
+                <!-- Priority Level -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        Priority Level
+                    </label>
+
+                    <div class="d-flex gap-4">
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="radio"
+                                name="priority"
+                                id="priorityNormal"
+                                value="normal"
+                                checked
+                            >
+                            <label class="form-check-label" for="priorityNormal">
+                                Normal
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="radio"
+                                name="priority"
+                                id="priorityImportant"
+                                value="important"
+                            >
+                            <label class="form-check-label text-warning fw-semibold" for="priorityImportant">
+                                Important
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="radio"
+                                name="priority"
+                                id="priorityUrgent"
+                                value="urgent"
+                            >
+                            <label class="form-check-label text-danger fw-semibold" for="priorityUrgent">
+                                Urgent
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                 
+                    <button type="submit" class="btn btn-primary">
+                        <i class="dw dw-paper-plane me-1"></i>
+                        Publish Announcement
+                    </button>
+                </div>
+
+            </form>
         </div>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="password" minlength="8" required>
-            <div class="form-text">Minimum of 8 characters</div>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Confirm Password</label>
-            <input type="password" class="form-control" id="confirmPassword" minlength="8" required>
-          </div>
-        </div>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Phase</label>
-            <select class="form-control" required>
-              <option disabled selected>Select Phase</option>
-              <option>Phase 1</option>
-              <option>Phase 2</option>
-              <option>Phase 3</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">House / Lot Number</label>
-            <input type="text" class="form-control" required>
-          </div>
-        </div>
-
-        <!-- Required Documents -->
-        <h5 class="mt-5 mb-3 border-bottom pb-2">Required Documents</h5>
-        <div class="row g-4 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Valid ID (Government Issued)</label>
-            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Proof of Billing</label>
-            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
-          </div>
-        </div>
-
-        <!-- Household Members -->
-        <h5 class="mt-5 mb-3 border-bottom pb-2">Household Members</h5>
-        <div id="members">
-          <div class="member border rounded p-3 mb-4">
-            <div class="row g-3 align-items-end">
-              <div class="col-md-4">
-                <label class="form-label">First Name</label>
-                <input type="text" class="form-control" required>
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Middle Name</label>
-                <input type="text" class="form-control">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Last Name</label>
-                <input type="text" class="form-control" required>
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Relation</label>
-                <select  class="form-control"required>
-                  <option disabled selected>Select</option>
-                  <option>Homeowner</option>
-                  <option>Spouse</option>
-                  <option>Child</option>
-                  <option>Parent</option>
-                  <option>Relative</option>
-                  <option>Tenant</option>
-                  <option>Caretaker</option>
-                </select>
-              </div>
-            </div>
-            <div class="text-end mt-2">
-              <button type="button" class="btn btn-sm btn-outline-danger removeMember d-none">Remove</button>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn-outline-success mb-4" onclick="addMember()">+ Add Member</button>
-
-       
-
-        <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-success px-4">Submit</button>
-        </div>
-
-      </form>
-    </div>
-
-  </div>
         </div>
     </div>
+      
 
-  <div class="footer-wrap pd-20 mb-20 card-box">
+        <!-- Card Body -->
+      
+    </div>
+</div>
+
+<br>
+
+
+<!-- Include jQuery and DataTables JS -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('#homeownersTable').DataTable({
+        responsive: true,   // Makes the table responsive
+        columnDefs: [
+            { orderable: false, targets: 3 } // Disable sorting on the Action column
+        ]
+    });
+});
+</script>
+
+			<div class="footer-wrap pd-20 mb-20 card-box">
 			© Copyright South Meridian Homes All Rights Reserved
 			</div>
-</div>
+		</br>
 	</div>
 	<!-- js -->
 	<script src="vendors/scripts/core.js"></script>
@@ -457,37 +453,6 @@
 	<script src="vendors/scripts/dashboard.js"></script>
 	
 
-<!-- JS -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-$(document).ready(function() {
-  $('#approvalTable').DataTable({
-    responsive: true,
-    columnDefs: [{ orderable: false, targets: 3 }]
-  });
-});
-
-// Function to add household members dynamically
-function addMember() {
-  const members = document.getElementById('members');
-  const member = members.firstElementChild.cloneNode(true);
-
-  member.querySelectorAll('input').forEach(input => input.value = '');
-  member.querySelector('select').selectedIndex = 0;
-  member.querySelector('.removeMember').classList.remove('d-none');
-
-  members.appendChild(member);
-}
-
-document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('removeMember')) {
-    e.target.closest('.member').remove();
-  }
-});
-</script>
-	
 </body>
 </html>

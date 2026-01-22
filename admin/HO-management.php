@@ -1,3 +1,42 @@
+<?php
+session_start();
+
+// ===================== SESSION CHECK =====================
+if (!isset($_SESSION['role']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'superadmin')) {
+    echo "<script>alert('Access denied.'); window.location='index.html';</script>";
+    exit();
+}
+
+// ===================== DB CONNECTION =====================
+$host = "localhost";
+$db   = "south_meridian_hoa"; // replace with your DB name
+$user = "root";
+$pass = ""; // replace with your DB password
+$conn = new mysqli($host, $user, $pass, $db);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// ===================== GET ADMIN INFO =====================
+$admin_id = $_SESSION['user_id'];
+$sqlAdmin = $conn->prepare("SELECT phase, role FROM admins WHERE id = ?");
+$sqlAdmin->bind_param("i", $admin_id);
+$sqlAdmin->execute();
+$resultAdmin = $sqlAdmin->get_result();
+$admin = $resultAdmin->fetch_assoc();
+$admin_phase = $admin['phase'];
+$admin_role = $admin['role'];
+
+// ===================== FETCH PENDING HOMEOWNERS =====================
+if ($admin_role == 'superadmin') {
+    $sqlHO = $conn->prepare("SELECT * FROM homeowners WHERE status='pending'");
+} else {
+    $sqlHO = $conn->prepare("SELECT * FROM homeowners WHERE status='pending' AND phase=?");
+    $sqlHO->bind_param("s", $admin_phase);
+}
+$sqlHO->execute();
+$resultHO = $sqlHO->get_result();
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -107,7 +146,7 @@
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="../index.html"><i class="dw dw-logout"></i> Log Out</a>
+						<a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
 					</div>
 				</div>
 			</div>
@@ -201,25 +240,26 @@
 			</div>
 		</div>
 	<div class="menu-block customscroll">
-   <div class="sidebar-menu">
+    <div class="sidebar-menu">
     <ul id="accordion-menu">
         <li>
-            <a href="dashboard.html" class="dropdown-toggle no-arrow">
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-house-1"></span>
                 <span class="mtext">Dashboard</span>
             </a>
         </li>
 
         <li>
-            <a href="HO-management.html" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-user1"></span>
+         
+              <a href="HO-management.php" class="dropdown-toggle no-arrow">
+                <span class="micon dw dw-user"></span>
                 <span class="mtext">Homeowner Management</span>
             </a>
         </li>
 
         <!-- NEW: User Management -->
         <li>
-            <a href="users-management.html" class="dropdown-toggle no-arrow">
+            <a href="users-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user"></span>
                 <span class="mtext">User Management</span>
             </a>
@@ -227,7 +267,7 @@
 
         <!-- NEW: Announcement -->
         <li>
-            <a href="announcements.html" class="dropdown-toggle no-arrow">
+            <a href="announcements.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-megaphone"></span>
                 <span class="mtext">Announcement</span>
             </a>
@@ -235,119 +275,196 @@
 
         <!-- Settings (now pushed down) -->
         <li>
-            <a href="#" class="dropdown-toggle no-arrow">
+            <a href="settings.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-settings2"></span>
                 <span class="mtext">Settings</span>
             </a>
         </li>
     </ul>
-</div>
-
+    </div>
 </div>
 
 	</div>
 	<div class="mobile-menu-overlay"></div>
 
 	<div class="main-container">
-		<div class="pd-ltr-20">
-			<div class="card-box pd-20 height-100-p mb-30">
-				<div class="row align-items-center">
-					<div class="col-md-4">
-						<img src="vendors/images/banner-img.png" alt="">
-					</div>
-					<div class="col-md-8">
-						<h4 class="font-20 weight-500 mb-10 text-capitalize">
-							<div class="weight-600 font-30 text-blue">Welcome Admin!</div>
-						</h4>
-						<p class="font-18 max-width-600">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Unde hic non repellendus debitis iure, doloremque assumenda. Autem modi, corrupti, nobis ea iure fugiat, veniam non quaerat mollitia animi error corporis.</p>
-					</div>
-				</div>
-			</div>
-		
 			<div class="row">
     <!-- Activity Graph -->
     <div class="col-xl-12 mb-30">
         <div class="card-box height-100-p pd-20">
-            <h2 class="h4 mb-20">Activity</h2>
-            <canvas id="activityChart"></canvas>
+            <h2 class="h4 mb-20">Home Owner Management</h2>
+             <!-- Tabs -->
+  <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="approval-tab" data-bs-toggle="tab" data-bs-target="#approval" type="button" role="tab">
+        Household Approval
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="registration-tab" data-bs-toggle="tab" data-bs-target="#registration" type="button" role="tab">
+        Register Household
+      </button>
+    </li>
+  </ul>
+
+ <!-- Tab Contents -->
+					<div class="tab-content" id="mainTabsContent">
+						<!-- Approval Table -->
+						<div class="tab-pane fade show active" id="approval" role="tabpanel">
+							<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
+								<thead>
+									<tr>
+										<th>ID</th>
+										<th>Name</th>
+										<th>Address</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody>
+								<?php while($row = $resultHO->fetch_assoc()): ?>
+									<tr>
+										<td><?= $row['id'] ?></td>
+										<td><?= $row['first_name'] . ' ' . ($row['middle_name'] ?: '') . ' ' . $row['last_name'] ?></td>
+										<td><?= $row['phase'] . ', ' . $row['house_lot_number'] ?></td>
+										<td>
+											<button class="btn btn-sm btn-info" title="View"> <i class="dw dw-eye"></i></button>
+											<button class="btn btn-sm btn-danger" title="Delete"><i class="dw dw-trash"></i></button>
+										</td>
+									</tr>
+								<?php endwhile; ?>
+								</tbody>
+							</table>
+						</div>
+    <!-- Registration Form -->
+    <div class="tab-pane fade" id="registration" role="tabpanel">
+      <form id="registrationForm" method="POST" enctype="multipart/form-data">
+
+        <!-- HOMEOWNER INFORMATION -->
+        <h5 class="mb-3 border-bottom pb-2">Homeowner Information</h5>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <label class="form-label">First Name</label>
+            <input type="text" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Middle Name</label>
+            <input type="text" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Last Name</label>
+            <input type="text" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label">Contact Number</label>
+            <input type="tel" class="form-control" placeholder="09XXXXXXXXX" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" minlength="8" required>
+            <div class="form-text">Minimum of 8 characters</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Confirm Password</label>
+            <input type="password" class="form-control" id="confirmPassword" minlength="8" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label">Phase</label>
+            <select class="form-control" required>
+              <option disabled selected>Select Phase</option>
+              <option>Phase 1</option>
+              <option>Phase 2</option>
+              <option>Phase 3</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">House / Lot Number</label>
+            <input type="text" class="form-control" required>
+          </div>
+        </div>
+
+        <!-- Required Documents -->
+        <h5 class="mt-5 mb-3 border-bottom pb-2">Required Documents</h5>
+        <div class="row g-4 mb-4">
+          <div class="col-md-6">
+            <label class="form-label">Valid ID (Government Issued)</label>
+            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Proof of Billing</label>
+            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
+          </div>
+        </div>
+
+        <!-- Household Members -->
+        <h5 class="mt-5 mb-3 border-bottom pb-2">Household Members</h5>
+        <div id="members">
+          <div class="member border rounded p-3 mb-4">
+            <div class="row g-3 align-items-end">
+              <div class="col-md-4">
+                <label class="form-label">First Name</label>
+                <input type="text" class="form-control" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Middle Name</label>
+                <input type="text" class="form-control">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Last Name</label>
+                <input type="text" class="form-control" required>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Relation</label>
+                <select  class="form-control"required>
+                  <option disabled selected>Select</option>
+                  <option>Homeowner</option>
+                  <option>Spouse</option>
+                  <option>Child</option>
+                  <option>Parent</option>
+                  <option>Relative</option>
+                  <option>Tenant</option>
+                  <option>Caretaker</option>
+                </select>
+              </div>
+            </div>
+            <div class="text-end mt-2">
+              <button type="button" class="btn btn-sm btn-outline-danger removeMember d-none">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-outline-success mb-4" onclick="addMember()">+ Add Member</button>
+
+       
+
+        <div class="d-flex justify-content-end">
+          <button type="submit" class="btn btn-success px-4">Submit</button>
+        </div>
+
+      </form>
+    </div>
+
+  </div>
         </div>
     </div>
 
-  
-</div>
-
-<div class="card mb-4 shadow-sm">
-    <div class="card-header text-white">
-        <h5 class="mb-0">Home Owners List</h5>
-    </div><br>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table id="homeownersTable" class="table table-striped table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Blk/Lot</th>
-                        <th class="text-center">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>2023-54143</td>
-                        <td>Mark James Abella</td>
-                        <td>Blk 12 Lot 34</td>
-                        <td class="text-center">
-                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
-                                <i class="dw dw-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>2023-54355</td>
-                        <td>Airiel Jessel Abuda</td>
-                        <td>Blk 10 Lot 7</td>
-                        <td class="text-center">
-                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
-                                <i class="dw dw-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>2023-55931</td>
-                        <td>Yashica Kashmir Acosta</td>
-                        <td>Blk 5 Lot 12</td>
-                        <td class="text-center">
-                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
-                                <i class="dw dw-eye"></i>
-                            </a>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-
-<!-- Include jQuery and DataTables JS -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-
-<script>
-$(document).ready(function() {
-    $('#homeownersTable').DataTable({
-        responsive: true,   // Makes the table responsive
-        columnDefs: [
-            { orderable: false, targets: 3 } // Disable sorting on the Action column
-        ]
-    });
-});
-</script>
-
-			<div class="footer-wrap pd-20 mb-20 card-box">
+  <div class="footer-wrap pd-20 mb-20 card-box">
 			© Copyright South Meridian Homes All Rights Reserved
 			</div>
-		</div>
+</div>
 	</div>
 	<!-- js -->
 	<script src="vendors/scripts/core.js"></script>
@@ -362,47 +479,34 @@ $(document).ready(function() {
 	<script src="vendors/scripts/dashboard.js"></script>
 	
 
-	<script>
-const ctx = document.getElementById('activityChart').getContext('2d');
-const activityChart = new Chart(ctx, {
-    type: 'line', // can be 'bar', 'pie', etc.
-    data: {
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], // X-axis labels
-        datasets: [{
-            label: 'Activity',
-            data: [12, 19, 3, 5, 2, 3], // sample data
-            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { display: true }
-        },
-        scales: {
-            y: { beginAtZero: true }
-        }
-    }
-});
-</script>
-<!-- Include jQuery and DataTables JS -->
+<!-- JS -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-$(document).ready(function() {
-    $('#homeownersTable').DataTable({
-        responsive: true,   // Makes the table responsive
-        columnDefs: [
-            { orderable: false, targets: 3 } // Disable sorting on the Action column
-        ]
-    });
-});
-</script>
+	<script>
+	$(document).ready(function() {
+		$('#approvalTable').DataTable({
+			responsive: true,
+			columnDefs: [{ orderable: false, targets: 3 }]
+		});
+	});
+
+	function addMember() {
+		const members = document.getElementById('members');
+		const member = members.firstElementChild.cloneNode(true);
+		member.querySelectorAll('input').forEach(input => input.value = '');
+		member.querySelector('select').selectedIndex = 0;
+		member.querySelector('.removeMember').classList.remove('d-none');
+		members.appendChild(member);
+	}
+
+	document.addEventListener('click', function(e) {
+		if (e.target.classList.contains('removeMember')) {
+			e.target.closest('.member').remove();
+		}
+	});
+	</script>
 	
 </body>
 </html>

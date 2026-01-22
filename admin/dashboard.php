@@ -107,7 +107,7 @@
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="../index.html"><i class="dw dw-logout"></i> Log Out</a>
+						<a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
 					</div>
 				</div>
 			</div>
@@ -204,14 +204,14 @@
    <div class="sidebar-menu">
     <ul id="accordion-menu">
         <li>
-            <a href="dashboard.html" class="dropdown-toggle no-arrow">
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-house-1"></span>
                 <span class="mtext">Dashboard</span>
             </a>
         </li>
 
         <li>
-            <a href="HO-management.html" class="dropdown-toggle no-arrow">
+            <a href="HO-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user1"></span>
                 <span class="mtext">Homeowner Management</span>
             </a>
@@ -219,7 +219,7 @@
 
         <!-- NEW: User Management -->
         <li>
-            <a href="users-management.html" class="dropdown-toggle no-arrow">
+            <a href="users-management.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-user"></span>
                 <span class="mtext">User Management</span>
             </a>
@@ -227,7 +227,7 @@
 
         <!-- NEW: Announcement -->
         <li>
-            <a href="announcements.html" class="dropdown-toggle no-arrow">
+            <a href="announcements.php" class="dropdown-toggle no-arrow">
                 <span class="micon dw dw-megaphone"></span>
                 <span class="mtext">Announcement</span>
             </a>
@@ -250,174 +250,83 @@
 
 	<div class="main-container">
 		<div class="pd-ltr-20">
-	
+			<div class="card-box pd-20 height-100-p mb-30">
+				<div class="row align-items-center">
+					<div class="col-md-4">
+						<img src="vendors/images/banner-img.png" alt="">
+					</div>
+					<div class="col-md-8">
+						<h4 class="font-20 weight-500 mb-10 text-capitalize">
+							<div class="weight-600 font-30 text-blue">Welcome Admin!</div>
+						</h4>
+						<p class="font-18 max-width-600">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Unde hic non repellendus debitis iure, doloremque assumenda. Autem modi, corrupti, nobis ea iure fugiat, veniam non quaerat mollitia animi error corporis.</p>
+					</div>
+				</div>
+			</div>
 		
-		
-
-<div class="container mt-4">
-    <div class="card shadow-sm border-0">
-  <div class="col-xl-12 mb-30">
+			<div class="row">
+    <!-- Activity Graph -->
+    <div class="col-xl-12 mb-30">
         <div class="card-box height-100-p pd-20">
-           <div class="card-header text-white">
-            <h5 class="mb-0 d-flex align-items-center">
-                <i class="dw dw-megaphone me-2"></i>
-                Create Announcement
-            </h5>
-        </div>
-            
-             <div class="card-body">
-            <form id="announcementForm">
-
-                <!-- Announcement Title -->
-                <div class="mb-3">
-                    <label for="title" class="form-label fw-semibold">
-                        Announcement Title
-                    </label>
-                    <input
-                        type="text"
-                        id="title"
-                        class="form-control"
-                        placeholder="Enter announcement title"
-                        required
-                    >
-                </div>
-
-                <!-- Category -->
-                <div class="mb-3">
-                    <label for="category" class="form-label fw-semibold">
-                        Category
-                    </label>
-                    <select id="category" class="form-control" required>
-                        <option value="">Select category</option>
-                        <option value="general">General Notice</option>
-                        <option value="maintenance">Maintenance</option>
-                        <option value="meeting">Meeting</option>
-                        <option value="emergency">Emergency</option>
-                    </select>
-                </div>
-
-                <!-- Target Audience -->
-                <div class="mb-3">
-                    <label for="audience" class="form-label fw-semibold">
-                        Target Audience
-                    </label>
-                    <select id="audience" class="form-control" required>
-                        <option value="">Select audience</option>
-                        <option value="all">All Homeowners</option>
-                        <option value="block">Specific Block</option>
-                        <option value="selected">Selected Homeowners</option>
-                    </select>
-                </div>
-
-                <!-- Announcement Message -->
-                <div class="mb-3">
-                    <label for="message" class="form-label fw-semibold">
-                        Announcement Message
-                    </label>
-                    <textarea
-                        id="message"
-                        class="form-control"
-                        rows="5"
-                        placeholder="Write the announcement details here..."
-                        required
-                    ></textarea>
-                </div>
-
-                <!-- Schedule Dates -->
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="startDate" class="form-label fw-semibold">
-                            Start Date
-                        </label>
-                        <input
-                            type="date"
-                            id="startDate"
-                            class="form-control"
-                            required
-                        >
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="endDate" class="form-label fw-semibold">
-                            End Date
-                        </label>
-                        <input
-                            type="date"
-                            id="endDate"
-                            class="form-control"
-                        >
-                    </div>
-                </div>
-
-                <!-- Priority Level -->
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">
-                        Priority Level
-                    </label>
-
-                    <div class="d-flex gap-4">
-                        <div class="form-check">
-                            <input
-                                class="form-check-input"
-                                type="radio"
-                                name="priority"
-                                id="priorityNormal"
-                                value="normal"
-                                checked
-                            >
-                            <label class="form-check-label" for="priorityNormal">
-                                Normal
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input
-                                class="form-check-input"
-                                type="radio"
-                                name="priority"
-                                id="priorityImportant"
-                                value="important"
-                            >
-                            <label class="form-check-label text-warning fw-semibold" for="priorityImportant">
-                                Important
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input
-                                class="form-check-input"
-                                type="radio"
-                                name="priority"
-                                id="priorityUrgent"
-                                value="urgent"
-                            >
-                            <label class="form-check-label text-danger fw-semibold" for="priorityUrgent">
-                                Urgent
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="d-flex justify-content-end gap-2 mt-4">
-                 
-                    <button type="submit" class="btn btn-primary">
-                        <i class="dw dw-paper-plane me-1"></i>
-                        Publish Announcement
-                    </button>
-                </div>
-
-            </form>
-        </div>
+            <h2 class="h4 mb-20">Activity</h2>
+            <canvas id="activityChart"></canvas>
         </div>
     </div>
-      
 
-        <!-- Card Body -->
-      
-    </div>
+  
 </div>
 
-<br>
+<div class="card mb-4 shadow-sm">
+    <div class="card-header text-white">
+        <h5 class="mb-0">Home Owners List</h5>
+    </div><br>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="homeownersTable" class="table table-striped table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Blk/Lot</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>2023-54143</td>
+                        <td>Mark James Abella</td>
+                        <td>Blk 12 Lot 34</td>
+                        <td class="text-center">
+                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
+                                <i class="dw dw-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>2023-54355</td>
+                        <td>Airiel Jessel Abuda</td>
+                        <td>Blk 10 Lot 7</td>
+                        <td class="text-center">
+                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
+                                <i class="dw dw-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>2023-55931</td>
+                        <td>Yashica Kashmir Acosta</td>
+                        <td>Blk 5 Lot 12</td>
+                        <td class="text-center">
+                            <a href="#" class="btn btn-sm btn-outline-primary" title="View">
+                                <i class="dw dw-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 
 <!-- Include jQuery and DataTables JS -->
@@ -438,7 +347,7 @@ $(document).ready(function() {
 			<div class="footer-wrap pd-20 mb-20 card-box">
 			© Copyright South Meridian Homes All Rights Reserved
 			</div>
-		</br>
+		</div>
 	</div>
 	<!-- js -->
 	<script src="vendors/scripts/core.js"></script>
@@ -453,6 +362,47 @@ $(document).ready(function() {
 	<script src="vendors/scripts/dashboard.js"></script>
 	
 
+	<script>
+const ctx = document.getElementById('activityChart').getContext('2d');
+const activityChart = new Chart(ctx, {
+    type: 'line', // can be 'bar', 'pie', etc.
+    data: {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], // X-axis labels
+        datasets: [{
+            label: 'Activity',
+            data: [12, 19, 3, 5, 2, 3], // sample data
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: true }
+        },
+        scales: {
+            y: { beginAtZero: true }
+        }
+    }
+});
+</script>
+<!-- Include jQuery and DataTables JS -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 
+<script>
+$(document).ready(function() {
+    $('#homeownersTable').DataTable({
+        responsive: true,   // Makes the table responsive
+        columnDefs: [
+            { orderable: false, targets: 3 } // Disable sorting on the Action column
+        ]
+    });
+});
+</script>
+	
 </body>
 </html>
