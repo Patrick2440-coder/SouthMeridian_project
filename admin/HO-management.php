@@ -72,12 +72,12 @@ if(isset($_POST['submit_location'])) {
         }
     }
 
-    echo "<script>alert('Registration complete! Wait for 2-3 days for approval.'); location.href='HO-management.php';</script>";
+    echo "<script>alert('Done Registering.'); location.href='HO-management.php';</script>";
     exit;
 }
 
 // Determine if we need to show map
-$showMap = isset($_POST['registration_submit']) && !isset($_POST['latitude']);
+$showMap = isset($_POST['registration_submit']) && empty($_POST['submit_location']);
 
 // ===================== GET ADMIN INFO =====================
 $admin_id = $_SESSION['user_id'];
@@ -132,6 +132,11 @@ $resultHO = $sqlHO->get_result();
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
+    <!-- ================= MAPS ================= -->
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 </head>
 <style>
 	.badge {
@@ -144,6 +149,11 @@ $resultHO = $sqlHO->get_result();
 .badge-warning { background-color: #f0ad4e; }  /* Pending */
 .badge-success { background-color: #5cb85c; }  /* Approved */
 .badge-danger  { background-color: #d9534f; }  /* Rejected */
+
+#map {
+  height: 500px;
+  width: 100%;
+}
 </style>
 <body>
 	
@@ -560,57 +570,45 @@ $resultHO = $sqlHO->get_result();
 </form>
 
 <script>
-var map = L.map('map').setView([14.3545, 120.946], 16);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+let map, marker;
 
-// Allowed area polygon
-var allowedArea = L.polygon([
-  [14.357391, 120.943993],
-  [14.351903, 120.944937],
-  [14.352257, 120.948118],
-  [14.357828, 120.947329]
-], {color: 'green', fillColor:'rgba(0,255,0,0.2)'}).addTo(map);
+document.getElementById('registration-tab')
+  .addEventListener('shown.bs.tab', function () {
 
-map.fitBounds(allowedArea.getBounds());
-
-// Draggable marker
-var center = allowedArea.getBounds().getCenter();
-var marker = L.marker(center, {draggable:true}).addTo(map);
-
-// Restrict marker inside polygon
-function isInsidePolygon(point, polygon) {
-    var x = point.lat, y = point.lng;
-    var inside = false;
-    var vs = polygon.getLatLngs()[0];
-    for(var i=0,j=vs.length-1;i<vs.length;j=i++){
-        var xi = vs[i].lat, yi = vs[i].lng;
-        var xj = vs[j].lat, yj = vs[j].lng;
-        var intersect = ((yi>y)!=(yj>y)) && (x<(xj-xi)*(y-yi)/(yj-yi)+xi);
-        if(intersect) inside=!inside;
+    if (map) {
+      map.invalidateSize();
+      return;
     }
-    return inside;
-}
 
-marker.on('drag', function(e){
-    var latLng = e.target.getLatLng();
-    if(!isInsidePolygon(latLng, allowedArea)){
-        marker.setLatLng(e.target._origPos || center);
-        alert("You can only pin within allowed area!");
-    } else {
-        e.target._origPos = latLng;
-    }
+    map = L.map('map').setView([14.3545, 120.946], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const allowedArea = L.polygon([
+      [14.357391, 120.943993],
+      [14.351903, 120.944937],
+      [14.352257, 120.948118],
+      [14.357828, 120.947329]
+    ], { color: 'green' }).addTo(map);
+
+    map.fitBounds(allowedArea.getBounds());
+
+    const center = allowedArea.getBounds().getCenter();
+    marker = L.marker(center, { draggable: true }).addTo(map);
+
+    marker.on('dragend', function (e) {
+      const pos = e.target.getLatLng();
+      document.getElementById('latitude').value = pos.lat;
+      document.getElementById('longitude').value = pos.lng;
+    });
+
+    document.getElementById('latitude').value = center.lat;
+    document.getElementById('longitude').value = center.lng;
 });
-
-marker.on('dragend', function(e){
-    var latLng = e.target.getLatLng();
-    document.getElementById('latitude').value = latLng.lat;
-    document.getElementById('longitude').value = latLng.lng;
-});
-
-// Initialize hidden fields
-document.getElementById('latitude').value = marker.getLatLng().lat;
-document.getElementById('longitude').value = marker.getLatLng().lng;
 </script>
+
 <?php endif; ?>
 </div>
 
@@ -694,10 +692,6 @@ document.getElementById('longitude').value = marker.getLatLng().lng;
 <script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
 <script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
 
-<!-- ================= MAPS ================= -->
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <!-- ================= PAGE-SPECIFIC ================= -->
 
@@ -758,6 +752,18 @@ $(function () {
 </script>
   </div>
 </div>
+
+<?php if ($showMap): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const registrationTab = document.querySelector('#registration-tab');
+    if (registrationTab) {
+        const tab = new bootstrap.Tab(registrationTab);
+        tab.show();
+    }
+});
+</script>
+<?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 	

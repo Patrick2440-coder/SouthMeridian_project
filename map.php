@@ -13,26 +13,42 @@ if ($conn->connect_error) {
 
 // ===================== HANDLE FINAL SUBMISSION =====================
 if(isset($_POST['submit_location'])) {
+
     // Homeowner basic info
     $first_name = $_POST['first_name'];
     $middle_name = $_POST['middle_name'];
     $last_name = $_POST['last_name'];
     $contact_number = $_POST['contact_number'];
     $email = $_POST['email'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT); // hashed password
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $phase = $_POST['phase'];
     $house_lot_number = $_POST['house_lot_number'];
     $latitude = $_POST['latitude'];
     $longitude = $_POST['longitude'];
 
-    // Assign admin based on phase
+    // ===================== CHECK IF EMAIL EXISTS =====================
+    $checkEmail = $conn->prepare("SELECT id FROM homeowners WHERE email = ? LIMIT 1");
+    $checkEmail->bind_param("s", $email);
+    $checkEmail->execute();
+    $checkEmail->store_result();
+
+    if ($checkEmail->num_rows > 0) {
+        echo "<script>
+            alert('This email address is already registered. Please use another email.');
+            window.location.href = 'register.html';
+        </script>";
+        exit;
+    }
+    $checkEmail->close();
+
+    // ===================== ASSIGN ADMIN BASED ON PHASE =====================
     $stmtAdmin = $conn->prepare("SELECT id FROM admins WHERE phase=? LIMIT 1");
     $stmtAdmin->bind_param("s", $phase);
     $stmtAdmin->execute();
     $resAdmin = $stmtAdmin->get_result()->fetch_assoc();
     $admin_id = $resAdmin['id'] ?? NULL;
 
-    // Handle file uploads
+    // ===================== HANDLE FILE UPLOADS =====================
     $uploadDir = "uploads/";
     if(!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
 
@@ -42,39 +58,49 @@ if(isset($_POST['submit_location'])) {
     move_uploaded_file($_FILES['valid_id']['tmp_name'], $valid_id_path);
     move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proof_path);
 
-    // Insert homeowner
-    $stmtHome = $conn->prepare("INSERT INTO homeowners 
-        (first_name,middle_name,last_name,contact_number,email,password,phase,house_lot_number,valid_id_path,proof_of_billing_path,latitude,longitude,admin_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    $stmtHome->bind_param("sssssssssssdi",
-        $first_name, $middle_name, $last_name, $contact_number, $email, $password, $phase, $house_lot_number,
+    // ===================== INSERT HOMEOWNER =====================
+    $stmtHome = $conn->prepare("
+        INSERT INTO homeowners 
+        (first_name, middle_name, last_name, contact_number, email, password, phase, house_lot_number,
+         valid_id_path, proof_of_billing_path, latitude, longitude, admin_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ");
+
+    $stmtHome->bind_param(
+        "sssssssssssdi",
+        $first_name, $middle_name, $last_name, $contact_number,
+        $email, $password, $phase, $house_lot_number,
         $valid_id_path, $proof_path, $latitude, $longitude, $admin_id
     );
+
     $stmtHome->execute();
     $homeowner_id = $stmtHome->insert_id;
 
-    // Insert household members
+    // ===================== INSERT HOUSEHOLD MEMBERS =====================
     if(isset($_POST['member_first_name'])) {
         foreach($_POST['member_first_name'] as $i => $mfname) {
             $mmname = $_POST['member_middle_name'][$i];
             $mlname = $_POST['member_last_name'][$i];
             $relation = $_POST['member_relation'][$i];
 
-            $stmtMember = $conn->prepare("INSERT INTO household_members
+            $stmtMember = $conn->prepare("
+                INSERT INTO household_members
                 (homeowner_id, first_name, middle_name, last_name, relation)
-                VALUES (?,?,?,?,?)");
+                VALUES (?,?,?,?,?)
+            ");
             $stmtMember->bind_param("issss", $homeowner_id, $mfname, $mmname, $mlname, $relation);
             $stmtMember->execute();
         }
     }
 
-    // Success
+    // ===================== SUCCESS =====================
     echo "<script>
         alert('Registration complete! Wait for 2 to 3 days for approval.');
         window.location.href='index.php';
     </script>";
     exit;
 }
+
 ?>
 
 <!DOCTYPE html>
