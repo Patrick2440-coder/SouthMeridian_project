@@ -71,7 +71,7 @@ if(isset($_POST['submit_location'])) {
     // Success
     echo "<script>
         alert('Registration complete! Wait for 2 to 3 days for approval.');
-        window.location.href='index.html';
+        window.location.href='index.php';
     </script>";
     exit;
 }

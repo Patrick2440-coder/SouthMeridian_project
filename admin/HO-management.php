@@ -16,6 +16,68 @@ $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
+// Handle final submission including latitude & longitude
+if(isset($_POST['submit_location'])) {
+    // Homeowner basic info
+    $first_name = $_POST['first_name'];
+    $middle_name = $_POST['middle_name'];
+    $last_name = $_POST['last_name'];
+    $contact_number = $_POST['contact_number'];
+    $email = $_POST['email'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $phase = $_POST['phase'];
+    $house_lot_number = $_POST['house_lot_number'];
+    $latitude = $_POST['latitude'];
+    $longitude = $_POST['longitude'];
+
+    // Assign admin based on phase
+    $stmtAdmin = $conn->prepare("SELECT id FROM admins WHERE phase=? LIMIT 1");
+    $stmtAdmin->bind_param("s", $phase);
+    $stmtAdmin->execute();
+    $resAdmin = $stmtAdmin->get_result()->fetch_assoc();
+    $admin_id = $resAdmin['id'] ?? NULL;
+
+    // Handle file uploads
+    $uploadDir = "uploads/";
+    if(!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+    $valid_id_path = $uploadDir . time() . "_id_" . basename($_FILES['valid_id']['name']);
+    $proof_path = $uploadDir . time() . "_proof_" . basename($_FILES['proof_of_billing']['name']);
+    move_uploaded_file($_FILES['valid_id']['tmp_name'], $valid_id_path);
+    move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proof_path);
+
+    // Insert homeowner
+    $stmtHome = $conn->prepare("INSERT INTO homeowners 
+        (first_name,middle_name,last_name,contact_number,email,password,phase,house_lot_number,valid_id_path,proof_of_billing_path,latitude,longitude,admin_id,status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    $status = 'pending';
+    $stmtHome->bind_param("sssssssssssdis", 
+        $first_name, $middle_name, $last_name, $contact_number, $email, $password, $phase, $house_lot_number,
+        $valid_id_path, $proof_path, $latitude, $longitude, $admin_id, $status
+    );
+    $stmtHome->execute();
+    $homeowner_id = $stmtHome->insert_id;
+
+    // Insert household members
+    if(isset($_POST['member_first_name'])) {
+        foreach($_POST['member_first_name'] as $i => $mfname) {
+            $mmname = $_POST['member_middle_name'][$i];
+            $mlname = $_POST['member_last_name'][$i];
+            $relation = $_POST['member_relation'][$i];
+
+            $stmtMember = $conn->prepare("INSERT INTO household_members
+                (homeowner_id, first_name, middle_name, last_name, relation)
+                VALUES (?,?,?,?,?)");
+            $stmtMember->bind_param("issss", $homeowner_id, $mfname, $mmname, $mlname, $relation);
+            $stmtMember->execute();
+        }
+    }
+
+    echo "<script>alert('Registration complete! Wait for 2-3 days for approval.'); location.href='HO-management.php';</script>";
+    exit;
+}
+
+// Determine if we need to show map
+$showMap = isset($_POST['registration_submit']) && !isset($_POST['latitude']);
 
 // ===================== GET ADMIN INFO =====================
 $admin_id = $_SESSION['user_id'];
@@ -60,6 +122,8 @@ $resultHO = $sqlHO->get_result();
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+	  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 	<!-- Global site tag (gtag.js) - Google Analytics -->
@@ -69,6 +133,18 @@ $resultHO = $sqlHO->get_result();
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
 </head>
+<style>
+	.badge {
+    padding: 0.25em 0.5em;
+    border-radius: 0.25rem;
+    color: #fff;
+    font-size: 0.875rem;
+}
+
+.badge-warning { background-color: #f0ad4e; }  /* Pending */
+.badge-success { background-color: #5cb85c; }  /* Approved */
+.badge-danger  { background-color: #d9534f; }  /* Rejected */
+</style>
 <body>
 	
 	<div class="header">
@@ -294,169 +370,297 @@ $resultHO = $sqlHO->get_result();
         <div class="card-box height-100-p pd-20">
             <h2 class="h4 mb-20">Home Owner Management</h2>
              <!-- Tabs -->
-  <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="approval-tab" data-bs-toggle="tab" data-bs-target="#approval" type="button" role="tab">
-        Household Approval
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="registration-tab" data-bs-toggle="tab" data-bs-target="#registration" type="button" role="tab">
-        Register Household
-      </button>
-    </li>
-  </ul>
+				<ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+					<li class="nav-item" role="presentation">
+						<button class="nav-link active" id="approval-tab" data-bs-toggle="tab" data-bs-target="#approval" type="button" role="tab">
+							Household Approval
+						</button>
+					</li>
+					<li class="nav-item" role="presentation">
+						<button class="nav-link" id="registration-tab" data-bs-toggle="tab" data-bs-target="#registration" type="button" role="tab">
+							Register Household
+						</button>
+					</li>
+					<li class="nav-item" role="presentation">
+						<button class="nav-link" id="approved-tab" data-bs-toggle="tab" data-bs-target="#approved" type="button" role="tab">
+							Approved Households
+						</button>
+					</li>
+				</ul>
 
  <!-- Tab Contents -->
 					<div class="tab-content" id="mainTabsContent">
-						<!-- Approval Table -->
-						<div class="tab-pane fade show active" id="approval" role="tabpanel">
-							<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
-								<thead>
-									<tr>
-										<th>ID</th>
-										<th>Name</th>
-										<th>Address</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-								<?php while($row = $resultHO->fetch_assoc()): ?>
-									<tr>
-										<td><?= $row['id'] ?></td>
-										<td><?= $row['first_name'] . ' ' . ($row['middle_name'] ?: '') . ' ' . $row['last_name'] ?></td>
-										<td><?= $row['phase'] . ', ' . $row['house_lot_number'] ?></td>
-										<td>
-											<button class="btn btn-sm btn-info" title="View"> <i class="dw dw-eye"></i></button>
-											<button class="btn btn-sm btn-danger" title="Delete"><i class="dw dw-trash"></i></button>
-										</td>
-									</tr>
-								<?php endwhile; ?>
-								</tbody>
-							</table>
-						</div>
+    <!-- 1️⃣ Household Approval Table -->
+    <div class="tab-pane fade show active" id="approval" role="tabpanel">
+        <table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php while($row = $resultHO->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= $row['id'] ?></td>
+                        <td><?= $row['first_name'] . ' ' . ($row['middle_name'] ?: '') . ' ' . $row['last_name'] ?></td>
+                        <td><?= $row['phase'] . ', ' . $row['house_lot_number'] ?></td>
+                        <td>
+                            <?php
+                                $status = $row['status'];
+                                $badgeClass = '';
+                                if($status == 'pending') $badgeClass = 'badge-warning';
+                                elseif($status == 'approved') $badgeClass = 'badge-success';
+                                elseif($status == 'rejected') $badgeClass = 'badge-danger';
+                            ?>
+                            <span class="badge <?= $badgeClass ?>"><?= ucfirst($status) ?></span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-success approveHomeowner" data-id="<?= $row['id'] ?>" title="Approve">
+                                <i class="dw dw-checked"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger rejectHomeowner" data-id="<?= $row['id'] ?>" title="Reject">
+                                <i class="dw dw-cancel-1"></i> Reject
+                            </button>
+                            <button class="btn btn-sm btn-info viewHomeowner" data-id="<?= $row['id'] ?>" title="View">
+                                <i class="dw dw-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
     <!-- Registration Form -->
-    <div class="tab-pane fade" id="registration" role="tabpanel">
-      <form id="registrationForm" method="POST" enctype="multipart/form-data">
-
-        <!-- HOMEOWNER INFORMATION -->
-        <h5 class="mb-3 border-bottom pb-2">Homeowner Information</h5>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-4">
-            <label class="form-label">First Name</label>
-            <input type="text" class="form-control" required>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Middle Name</label>
-            <input type="text" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Last Name</label>
-            <input type="text" class="form-control" required>
-          </div>
-        </div>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Contact Number</label>
-            <input type="tel" class="form-control" placeholder="09XXXXXXXXX" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Email Address</label>
-            <input type="email" class="form-control" required>
-          </div>
-        </div>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="password" minlength="8" required>
-            <div class="form-text">Minimum of 8 characters</div>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Confirm Password</label>
-            <input type="password" class="form-control" id="confirmPassword" minlength="8" required>
-          </div>
-        </div>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Phase</label>
-            <select class="form-control" required>
-              <option disabled selected>Select Phase</option>
-              <option>Phase 1</option>
-              <option>Phase 2</option>
-              <option>Phase 3</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">House / Lot Number</label>
-            <input type="text" class="form-control" required>
-          </div>
-        </div>
-
-        <!-- Required Documents -->
-        <h5 class="mt-5 mb-3 border-bottom pb-2">Required Documents</h5>
-        <div class="row g-4 mb-4">
-          <div class="col-md-6">
-            <label class="form-label">Valid ID (Government Issued)</label>
-            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Proof of Billing</label>
-            <input type="file" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
-          </div>
-        </div>
-
-        <!-- Household Members -->
-        <h5 class="mt-5 mb-3 border-bottom pb-2">Household Members</h5>
-        <div id="members">
-          <div class="member border rounded p-3 mb-4">
-            <div class="row g-3 align-items-end">
-              <div class="col-md-4">
-                <label class="form-label">First Name</label>
-                <input type="text" class="form-control" required>
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Middle Name</label>
-                <input type="text" class="form-control">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Last Name</label>
-                <input type="text" class="form-control" required>
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Relation</label>
-                <select  class="form-control"required>
-                  <option disabled selected>Select</option>
-                  <option>Homeowner</option>
-                  <option>Spouse</option>
-                  <option>Child</option>
-                  <option>Parent</option>
-                  <option>Relative</option>
-                  <option>Tenant</option>
-                  <option>Caretaker</option>
-                </select>
-              </div>
-            </div>
-            <div class="text-end mt-2">
-              <button type="button" class="btn btn-sm btn-outline-danger removeMember d-none">Remove</button>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn-outline-success mb-4" onclick="addMember()">+ Add Member</button>
-
-       
-
-        <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-success px-4">Submit</button>
-        </div>
-
-      </form>
+<div class="tab-pane fade" id="registration" role="tabpanel">
+<?php if(!$showMap): ?>
+<form id="registrationForm" method="POST" enctype="multipart/form-data">
+    <!-- HOMEOWNER INFO FORM -->
+    <h5 class="mb-3 border-bottom pb-2">Homeowner Information</h5>
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <label class="form-label">First Name</label>
+        <input type="text" name="first_name" class="form-control" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Middle Name</label>
+        <input type="text" name="middle_name" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Last Name</label>
+        <input type="text" name="last_name" class="form-control" required>
+      </div>
     </div>
 
+    <!-- CONTACT, EMAIL, PASSWORD, PHASE, LOT NUMBER -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <label class="form-label">Contact Number</label>
+        <input type="tel" name="contact_number" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email Address</label>
+        <input type="email" name="email" class="form-control" required>
+      </div>
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control" minlength="8" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" name="confirm_password" class="form-control" minlength="8" required>
+      </div>
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <label class="form-label">Phase</label>
+        <select name="phase" class="form-control" required>
+          <option disabled selected>Select Phase</option>
+          <option>Phase 1</option>
+          <option>Phase 2</option>
+          <option>Phase 3</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">House / Lot Number</label>
+        <input type="text" name="house_lot_number" class="form-control" required>
+      </div>
+    </div>
+
+    <!-- FILE UPLOADS -->
+    <h5 class="mt-5 mb-3 border-bottom pb-2">Required Documents</h5>
+    <div class="row g-4 mb-4">
+      <div class="col-md-6">
+        <label class="form-label">Valid ID</label>
+        <input type="file" name="valid_id" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Proof of Billing</label>
+        <input type="file" name="proof_of_billing" class="form-control" required>
+      </div>
+    </div>
+
+    <!-- HOUSEHOLD MEMBERS -->
+    <h5 class="mt-5 mb-3 border-bottom pb-2">Household Members</h5>
+    <div id="members">
+      <div class="member border rounded p-3 mb-4">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4"><input type="text" name="member_first_name[]" class="form-control" placeholder="First Name" required></div>
+          <div class="col-md-3"><input type="text" name="member_middle_name[]" class="form-control" placeholder="Middle Name"></div>
+          <div class="col-md-3"><input type="text" name="member_last_name[]" class="form-control" placeholder="Last Name" required></div>
+          <div class="col-md-2">
+            <select name="member_relation[]" class="form-control" required>
+              <option disabled selected>Relation</option>
+              <option>Homeowner</option>
+              <option>Spouse</option>
+              <option>Child</option>
+              <option>Parent</option>
+              <option>Relative</option>
+              <option>Tenant</option>
+              <option>Caretaker</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="btn btn-outline-success mb-4" onclick="addMember()">+ Add Member</button>
+
+    <div class="d-flex justify-content-end">
+      <button type="submit" name="registration_submit" class="btn btn-success px-4">Next: Pin Location</button>
+    </div>
+</form>
+<script src="./leaflet/dist/leaflet.js"></script>
+<?php else: ?>
+<!-- SHOW MAP AFTER FORM SUBMITTED -->
+<form method="POST" enctype="multipart/form-data">
+  <h5 class="mb-3 border-bottom pb-2 text-success">Pin Homeowner Location</h5>
+
+  <?php
+  // carry over all previous inputs as hidden
+  foreach($_POST as $key => $value){
+      if(is_array($value)){
+          foreach($value as $v){
+              echo '<input type="hidden" name="'.$key.'[]" value="'.$v.'">';
+          }
+      } else {
+          echo '<input type="hidden" name="'.$key.'" value="'.$value.'">';
+      }
+  }
+  ?>
+  <input type="hidden" name="latitude" id="latitude">
+  <input type="hidden" name="longitude" id="longitude">
+
+  <div id="map" style="height:500px; border:2px solid #077f46; border-radius:12px;"></div>
+  <button type="submit" name="submit_location" class="btn btn-success w-100 mt-3">Submit Registration</button>
+</form>
+
+<script>
+var map = L.map('map').setView([14.3545, 120.946], 16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+
+// Allowed area polygon
+var allowedArea = L.polygon([
+  [14.357391, 120.943993],
+  [14.351903, 120.944937],
+  [14.352257, 120.948118],
+  [14.357828, 120.947329]
+], {color: 'green', fillColor:'rgba(0,255,0,0.2)'}).addTo(map);
+
+map.fitBounds(allowedArea.getBounds());
+
+// Draggable marker
+var center = allowedArea.getBounds().getCenter();
+var marker = L.marker(center, {draggable:true}).addTo(map);
+
+// Restrict marker inside polygon
+function isInsidePolygon(point, polygon) {
+    var x = point.lat, y = point.lng;
+    var inside = false;
+    var vs = polygon.getLatLngs()[0];
+    for(var i=0,j=vs.length-1;i<vs.length;j=i++){
+        var xi = vs[i].lat, yi = vs[i].lng;
+        var xj = vs[j].lat, yj = vs[j].lng;
+        var intersect = ((yi>y)!=(yj>y)) && (x<(xj-xi)*(y-yi)/(yj-yi)+xi);
+        if(intersect) inside=!inside;
+    }
+    return inside;
+}
+
+marker.on('drag', function(e){
+    var latLng = e.target.getLatLng();
+    if(!isInsidePolygon(latLng, allowedArea)){
+        marker.setLatLng(e.target._origPos || center);
+        alert("You can only pin within allowed area!");
+    } else {
+        e.target._origPos = latLng;
+    }
+});
+
+marker.on('dragend', function(e){
+    var latLng = e.target.getLatLng();
+    document.getElementById('latitude').value = latLng.lat;
+    document.getElementById('longitude').value = latLng.lng;
+});
+
+// Initialize hidden fields
+document.getElementById('latitude').value = marker.getLatLng().lat;
+document.getElementById('longitude').value = marker.getLatLng().lng;
+</script>
+<?php endif; ?>
+</div>
+
+ <!-- 3️⃣ Approved Households Table -->
+    <div class="tab-pane fade" id="approved" role="tabpanel">
+        <?php
+        // Fetch approved homeowners
+        if ($admin_role == 'superadmin') {
+            $sqlApproved = $conn->prepare("SELECT * FROM homeowners WHERE status='approved'");
+        } else {
+            $sqlApproved = $conn->prepare("SELECT * FROM homeowners WHERE status='approved' AND phase=?");
+            $sqlApproved->bind_param("s", $admin_phase);
+        }
+        $sqlApproved->execute();
+        $resultApproved = $sqlApproved->get_result();
+        ?>
+        <table id="approvedTable" class="display table table-striped table-bordered nowrap" style="width:100%">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php while($row = $resultApproved->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= $row['id'] ?></td>
+                        <td><?= $row['first_name'] . ' ' . ($row['middle_name'] ?: '') . ' ' . $row['last_name'] ?></td>
+                        <td><?= $row['phase'] . ', ' . $row['house_lot_number'] ?></td>
+                        <td>
+                            <span class="badge badge-success"><?= ucfirst($row['status']) ?></span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-info viewHomeowner" data-id="<?= $row['id'] ?>" title="View">
+                                <i class="dw dw-eye"></i> View
+                            </button>
+                            <button class="btn btn-sm btn-warning editHomeowner" data-id="<?= $row['id'] ?>" title="Edit">
+                                <i class="dw dw-edit-1"></i> Edit
+                            </button>
+                        </td>
+                    </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
+
+</div>
   </div>
         </div>
     </div>
@@ -466,47 +670,96 @@ $resultHO = $sqlHO->get_result();
 			</div>
 </div>
 	</div>
-	<!-- js -->
-	<script src="vendors/scripts/core.js"></script>
-	<script src="vendors/scripts/script.min.js"></script>
-	<script src="vendors/scripts/process.js"></script>
-	<script src="vendors/scripts/layout-settings.js"></script>
-	<script src="src/plugins/apexcharts/apexcharts.min.js"></script>
-	<script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
-	<script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
-	<script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
-	<script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
-	<script src="vendors/scripts/dashboard.js"></script>
-	
+<!-- ================= CORE DEPENDENCIES ================= -->
 
-<!-- JS -->
+<!-- jQuery (MUST be first) -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+
+<!-- ================= VENDOR / TEMPLATE SCRIPTS ================= -->
+
+<script src="vendors/scripts/core.js"></script>
+<script src="vendors/scripts/script.min.js"></script>
+<script src="vendors/scripts/process.js"></script>
+<script src="vendors/scripts/layout-settings.js"></script>
+
+<!-- ================= CHARTS ================= -->
+
+<script src="src/plugins/apexcharts/apexcharts.min.js"></script>
+
+<!-- ================= DATATABLES ================= -->
+
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
+<script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
+<script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
 
-	<script>
-	$(document).ready(function() {
-		$('#approvalTable').DataTable({
-			responsive: true,
-			columnDefs: [{ orderable: false, targets: 3 }]
-		});
-	});
+<!-- ================= MAPS ================= -->
 
-	function addMember() {
-		const members = document.getElementById('members');
-		const member = members.firstElementChild.cloneNode(true);
-		member.querySelectorAll('input').forEach(input => input.value = '');
-		member.querySelector('select').selectedIndex = 0;
-		member.querySelector('.removeMember').classList.remove('d-none');
-		members.appendChild(member);
-	}
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-	document.addEventListener('click', function(e) {
-		if (e.target.classList.contains('removeMember')) {
-			e.target.closest('.member').remove();
-		}
-	});
-	</script>
+<!-- ================= PAGE-SPECIFIC ================= -->
+
+<script src="vendors/scripts/dashboard.js"></script>
+<script>
+$(function () {
+    // Single handler for Approve and Reject buttons
+    $(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
+        e.preventDefault();
+
+        const id = $(this).data('id');
+        const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
+
+        if (!confirm(`Are you sure you want to ${status} this homeowner?`)) return;
+
+        $.ajax({
+            url: './update_homeowner_status.php', // make sure path is correct
+            method: 'POST',
+            dataType: 'json',
+            data: { id, status },
+            success: function (res) {
+                alert(res.message);
+                if (res.success) location.reload();
+            },
+            error: function (xhr) {
+                console.error(xhr.responseText);
+                alert('Action failed. Check console.');
+            }
+        });
+    });
+
+    // Optional: initialize DataTables
+    $('#approvalTable, #approvedTable').DataTable({
+        responsive: true,
+        columnDefs: [{ orderable: false, targets: 4 }]
+    });
+
+    // Add household member
+    function addMember() {
+        const members = document.getElementById('members');
+        const member = members.firstElementChild.cloneNode(true);
+        member.querySelectorAll('input').forEach(input => input.value = '');
+        member.querySelector('select').selectedIndex = 0;
+        member.querySelector('.removeMember').classList.remove('d-none');
+        members.appendChild(member);
+    }
+
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('removeMember')) {
+            e.target.closest('.member').remove();
+        }
+    });
+
+    // expose addMember globally
+    window.addMember = addMember;
+});
+
+</script>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 	
 </body>
 </html>
