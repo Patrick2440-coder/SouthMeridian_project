@@ -435,9 +435,12 @@ $resultHO = $sqlHO->get_result();
                             <button class="btn btn-sm btn-danger rejectHomeowner" data-id="<?= $row['id'] ?>" title="Reject">
                                 <i class="dw dw-cancel-1"></i> Reject
                             </button>
-                            <button class="btn btn-sm btn-info viewHomeowner" data-id="<?= $row['id'] ?>" title="View">
-                                <i class="dw dw-eye"></i>
-                            </button>
+                            
+                            <a class="btn btn-sm btn-info" href="view_homeowner.php?id=<?= $row['id'] ?>" title="View">
+                            <i class="dw dw-eye"></i>
+                            </a>
+                           
+                            
                         </td>
                     </tr>
                 <?php endwhile; ?>
@@ -645,9 +648,9 @@ document.getElementById('registration-tab')
                             <span class="badge badge-success"><?= ucfirst($row['status']) ?></span>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-info viewHomeowner" data-id="<?= $row['id'] ?>" title="View">
-                                <i class="dw dw-eye"></i> View
-                            </button>
+                            <a class="btn btn-sm btn-info" href="view_homeowner.php?id=<?= $row['id'] ?>" title="View">
+                            <i class="dw dw-eye"></i>
+                            </a>
                             <button class="btn btn-sm btn-warning editHomeowner" data-id="<?= $row['id'] ?>" title="Edit">
                                 <i class="dw dw-edit-1"></i> Edit
                             </button>
@@ -699,30 +702,45 @@ document.getElementById('registration-tab')
 <script>
 $(function () {
     // Single handler for Approve and Reject buttons
-    $(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
+$(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
     e.preventDefault();
 
     const id = $(this).data('id');
     const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
+    let reason = '';
+
+    if (status === 'rejected') {
+        reason = prompt("Enter rejection reason:");
+        if (reason === null) return;
+        reason = reason.trim();
+        if (!reason) {
+            alert("Rejection reason is required.");
+            return;
+        }
+    }
 
     if (!confirm(`Are you sure you want to ${status} this homeowner?`)) return;
 
-    // 1️⃣ Update status
-        $.post('update_homeowner_status_email.php', { id: id, status: status }, function(res) {
-            if (!res.success) {
-                alert(res.message);
-                return;
-            }
+    $.post('update_homeowner_status_email.php', {
+        id: id,
+        status: status,
+        reason: reason
+    }, function (res) {
+        if (!res.success) {
             alert(res.message);
-            location.reload();
-        }, 'json').fail(function(xhr, status, error) {
-            console.log(xhr.responseText); // <-- see actual PHP error
-            alert('Request failed: ' + error);
-        });
+            return;
+        }
+        alert(res.message);
+        location.reload();
+    }, 'json').fail(function (xhr) {
+        console.error(xhr.responseText);
+        alert('Request failed');
+    });
+});
 });
 
 
-    });
+
 
     // Optional: initialize DataTables
     $('#approvalTable, #approvedTable').DataTable({
