@@ -700,27 +700,28 @@ document.getElementById('registration-tab')
 $(function () {
     // Single handler for Approve and Reject buttons
     $(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
-        e.preventDefault();
+    e.preventDefault();
 
-        const id = $(this).data('id');
-        const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
+    const id = $(this).data('id');
+    const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
 
-        if (!confirm(`Are you sure you want to ${status} this homeowner?`)) return;
+    if (!confirm(`Are you sure you want to ${status} this homeowner?`)) return;
 
-        $.ajax({
-            url: './update_homeowner_status.php', // make sure path is correct
-            method: 'POST',
-            dataType: 'json',
-            data: { id, status },
-            success: function (res) {
+    // 1️⃣ Update status
+        $.post('update_homeowner_status_email.php', { id: id, status: status }, function(res) {
+            if (!res.success) {
                 alert(res.message);
-                if (res.success) location.reload();
-            },
-            error: function (xhr) {
-                console.error(xhr.responseText);
-                alert('Action failed. Check console.');
+                return;
             }
+            alert(res.message);
+            location.reload();
+        }, 'json').fail(function(xhr, status, error) {
+            console.log(xhr.responseText); // <-- see actual PHP error
+            alert('Request failed: ' + error);
         });
+});
+
+
     });
 
     // Optional: initialize DataTables
@@ -747,7 +748,8 @@ $(function () {
 
     // expose addMember globally
     window.addMember = addMember;
-});
+
+
 
 </script>
   </div>
