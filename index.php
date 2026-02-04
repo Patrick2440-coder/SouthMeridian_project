@@ -92,7 +92,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'login'){
   <header id="header" class="header d-flex align-items-center sticky-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
 
-      <a href="index.html" class="logo d-flex align-items-center">
+      <a href="index.php" class="logo d-flex align-items-center">
         <!-- Uncomment the line below if you also wish to use an image logo -->
         <!-- <img src="assets/img/logo.webp" alt=""> -->
         <svg class="my-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -113,7 +113,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'login'){
 
       <nav id="navmenu" class="navmenu">
         <ul>
-          <li><a href="index.html" class="active">Home</a></li>
+          <li><a href="index.php" class="active">Home</a></li>
           <li><a href="#about">About</a></li>
 
            <a href="#" data-bs-toggle="modal" data-bs-target="#loginModal" style="color: #077f46;background-color: white;border-radius: 50px;width: 100px;height: 50px;">

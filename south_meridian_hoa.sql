@@ -120,6 +120,68 @@ INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_nam
 --
 
 --
+-- Table structure for table `hoa_officers`
+--
+CREATE TABLE IF NOT EXISTS hoa_officers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  phase ENUM('Phase 1','Phase 2','Phase 3') NOT NULL,
+  position VARCHAR(50) NOT NULL,
+  officer_name VARCHAR(255) DEFAULT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_phase_position (phase, position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `announcements`
+CREATE TABLE IF NOT EXISTS announcements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  admin_id INT NULL,
+  phase ENUM('Phase 1','Phase 2','Phase 3','Superadmin') NOT NULL DEFAULT 'Superadmin',
+  title VARCHAR(255) NOT NULL,
+  category ENUM('general','maintenance','meeting','emergency') NOT NULL,
+  audience ENUM('all','block','selected','selected_officer','all_officers') NOT NULL,
+  audience_value VARCHAR(255) NULL, -- e.g. block name
+  message TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NULL,
+  priority ENUM('normal','important','urgent') NOT NULL DEFAULT 'normal',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ann_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS announcement_recipients (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  announcement_id INT NOT NULL,
+  recipient_type ENUM('homeowner','officer') NOT NULL,
+  homeowner_id INT NULL,
+  officer_id INT NULL,
+  recipient_name VARCHAR(255) NULL,
+  recipient_email VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ar_announcement FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ar_homeowner FOREIGN KEY (homeowner_id) REFERENCES homeowners(id) ON DELETE SET NULL,
+  CONSTRAINT fk_ar_officer FOREIGN KEY (officer_id) REFERENCES hoa_officers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `announcement_attachments`
+--
+CREATE TABLE IF NOT EXISTS announcement_attachments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  announcement_id INT NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  stored_name VARCHAR(255) NOT NULL,
+  file_path VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL,
+  file_size INT NOT NULL,
+  uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_announcement_id (announcement_id),
+  CONSTRAINT fk_announcement_attachments
+    FOREIGN KEY (announcement_id) REFERENCES announcements(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+--
 -- Indexes for table `admins`
 --
 ALTER TABLE `admins`
@@ -179,7 +241,14 @@ ALTER TABLE `homeowners`
 --
 ALTER TABLE `household_members`
   ADD CONSTRAINT `household_members_ibfk_1` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`);
+
+--
+-- Add comlumn in table hoa_officers
+--
+ALTER TABLE hoa_officers
+ADD COLUMN officer_email VARCHAR(255) NULL AFTER officer_name;
 COMMIT;
+
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
