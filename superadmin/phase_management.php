@@ -206,8 +206,7 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
             </li>
 
             <li class="sidebar-item">
-              <a class="sidebar-link" href="./phase_management.php" aria-expanded="false"
-                style="background-color: #077f46;color: white;">
+              <a class="sidebar-link" href="./phase_management.php" aria-expanded="false">
                 <i class="ti ti-settings"></i>
                 <span class="hide-menu">Phase Management</span>
               </a>
@@ -265,7 +264,7 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
                   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                     <div>
                       <h5 class="card-title mb-1">Phase Management</h5>
-                      <p class="text-muted mb-0">Current HOA officers per phase (saved in database)</p>
+                      <p class="text-muted mb-0">Current HOA officers per phase</p>
                     </div>
 
                     <div class="d-flex align-items-center gap-2">

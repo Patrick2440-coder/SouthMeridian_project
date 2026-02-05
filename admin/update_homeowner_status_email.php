@@ -20,7 +20,7 @@ $id     = intval($_POST['id'] ?? 0);
 $status = $_POST['status'] ?? '';
 $reason = trim($_POST['reason'] ?? '');
 
-if ($id <= 0 || !in_array($status, ['approved','rejected'])) {
+if ($id <= 0 || !in_array($status, ['approved','rejected'], true)) {
     echo json_encode(['success'=>false,'message'=>'Invalid request']);
     exit;
 }
@@ -36,22 +36,53 @@ if ($conn->connect_error) {
     echo json_encode(['success'=>false,'message'=>'DB error']);
     exit;
 }
-
-// ================= UPDATE STATUS =================
-$stmt = $conn->prepare("UPDATE homeowners SET status=? WHERE id=?");
-$stmt->bind_param("si", $status, $id);
-$stmt->execute();
-$stmt->close();
+$conn->set_charset("utf8mb4");
 
 // ================= FETCH HOMEOWNER =================
-$stmt = $conn->prepare("SELECT first_name, last_name, email FROM homeowners WHERE id=?");
+$stmt = $conn->prepare("SELECT first_name, last_name, email FROM homeowners WHERE id=? LIMIT 1");
 $stmt->bind_param("i", $id);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
+// ✅ If approved: set temporary password = last name and force change password
+if ($status === 'approved' && $user) {
+    $tempPass = $user['last_name']; // homeowner will type this on first login
+    $hash = password_hash($tempPass, PASSWORD_BCRYPT);
+
+    $stmt = $conn->prepare("UPDATE homeowners SET password=?, must_change_password=1 WHERE id=?");
+    $stmt->bind_param("si", $hash, $id);
+    $stmt->execute();
+    $stmt->close();
+}
+
 if (!$user) {
-    echo json_encode(['success'=>true,'message'=>"Homeowner {$status} (email skipped)"]);
+    echo json_encode(['success'=>false,'message'=>'Homeowner not found']);
+    exit;
+}
+
+// ================= UPDATE STATUS (+ PASSWORD IF APPROVED) =================
+if ($status === 'approved') {
+    // temp password = lastname (trim + no spaces)
+    $tempPassPlain = preg_replace('/\s+/', '', trim($user['last_name'] ?? ''));
+    if ($tempPassPlain === '') $tempPassPlain = 'SouthMeridian123'; // fallback (rare)
+
+    $tempPassHash = password_hash($tempPassPlain, PASSWORD_DEFAULT);
+
+    // Also clear any reset token fields (optional cleanup)
+    $stmt = $conn->prepare("UPDATE homeowners SET status=?, password=?, reset_token=NULL, reset_expires=NULL WHERE id=?");
+    $stmt->bind_param("ssi", $status, $tempPassHash, $id);
+    $ok = $stmt->execute();
+    $stmt->close();
+} else {
+    $stmt = $conn->prepare("UPDATE homeowners SET status=? WHERE id=?");
+    $stmt->bind_param("si", $status, $id);
+    $ok = $stmt->execute();
+    $stmt->close();
+}
+
+if (!$ok) {
+    echo json_encode(['success'=>false,'message'=>'Database update failed']);
     exit;
 }
 
@@ -62,8 +93,8 @@ try {
     $mail->Host       = 'smtp.gmail.com';
     $mail->SMTPAuth   = true;
     $mail->Username   = 'baculpopatrick2440@gmail.com';
-    $mail->Password   = 'vxsx lmtv livx hgtl';
-    $mail->SMTPSecure = 'tls';
+    $mail->Password   = 'vxsx lmtv livx hgtl'; // Gmail App Password
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
     $mail->Port       = 587;
 
     $mail->setFrom('baculpopatrick2440@gmail.com', 'South Meridian HOA');
@@ -71,31 +102,37 @@ try {
     $mail->isHTML(true);
 
     if ($status === 'approved') {
-        $token   = bin2hex(random_bytes(32));
-        $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+        $first = htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8');
+        $last  = htmlspecialchars($user['last_name'], ENT_QUOTES, 'UTF-8');
+        $email = htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8');
 
-        $stmt = $conn->prepare("UPDATE homeowners SET reset_token=?, reset_expires=? WHERE id=?");
-        $stmt->bind_param("ssi", $token, $expires, $id);
-        $stmt->execute();
-        $stmt->close();
-
-        $resetLink = "http://localhost/southmeridian/reset-password.php?token=$token";
+        // IMPORTANT: This is the plain temp password sent to the user
+        $tempPassPlain = preg_replace('/\s+/', '', trim($user['last_name'] ?? ''));
+        if ($tempPassPlain === '') $tempPassPlain = 'SouthMeridian123';
 
         $mail->Subject = 'Your HOA Account Has Been Approved';
         $mail->Body = "
-            <h3>Hello {$user['first_name']} {$user['last_name']},</h3>
+            <h3>Hello {$first} {$last},</h3>
             <p>Your homeowner registration has been <strong>approved</strong>.</p>
-            <p><a href='$resetLink'>Set My Password</a></p>
-            <p>This link expires in 1 hour.</p>
+
+            <p>Here are your login credentials:</p>
+            <ul>
+              <li><strong>Email:</strong> {$email}</li>
+              <li><strong>Password:</strong> {$tempPassPlain}</li>
+            </ul>
+
+            <p><strong>Important:</strong> Please change your password after logging in.</p>
             <br>
             <p>— South Meridian HOA</p>
         ";
     } else {
         $safeReason = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
+        $first = htmlspecialchars($user['first_name'], ENT_QUOTES, 'UTF-8');
+        $last  = htmlspecialchars($user['last_name'], ENT_QUOTES, 'UTF-8');
 
         $mail->Subject = 'HOA Registration Rejected';
         $mail->Body = "
-            <h3>Hello {$user['first_name']} {$user['last_name']},</h3>
+            <h3>Hello {$first} {$last},</h3>
             <p>Your homeowner registration has been <strong>rejected</strong>.</p>
             <p><strong>Reason:</strong> {$safeReason}</p>
             <p>Please contact the HOA office if you wish to clarify.</p>
@@ -107,6 +144,7 @@ try {
     $mail->send();
 
 } catch (Exception $e) {
+    // Don't fail the approval just because email failed
     echo json_encode([
         'success'=>true,
         'message'=>"Homeowner {$status}, but email failed"

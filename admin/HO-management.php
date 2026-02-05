@@ -1,12 +1,11 @@
 <?php
 session_start();
 
-// ===================== SESSION CHECK =====================
-if (!isset($_SESSION['role']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'superadmin')) {
-    echo "<script>alert('Access denied.'); window.location='index.html';</script>";
+if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
+    !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
+    echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
     exit();
 }
-
 // ===================== DB CONNECTION =====================
 $host = "localhost";
 $db   = "south_meridian_hoa";
@@ -278,9 +277,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'homeowner_profile') {
     }
 
     // Get admin phase/role
-    $admin_id_sess = (int)($_SESSION['user_id'] ?? 0);
-    $admin_phase = '';
-    $admin_role  = '';
+    $admin_id_sess = (int)($_SESSION['admin_id'] ?? 0);
+    $admin_phase = (string)$_SESSION['admin_phase'];
+    $admin_role  = (string)$_SESSION['admin_role'];
 
     if ($admin_id_sess > 0) {
         $stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=?");
@@ -676,7 +675,13 @@ $resultHO = $sqlHO->get_result();
                 <span class="mtext">Announcement</span>
             </a>
         </li>
-
+                        <!-- NEW: Treasurer -->
+        <li>
+          <a href="treasurer.php" class="dropdown-toggle no-arrow">
+            <span class="micon dw dw-money-1"></span>
+            <span class="mtext">Treasurer</span>
+          </a>
+        </li>
         <!-- Settings (now pushed down) -->
         <li>
             <a href="settings.php" class="dropdown-toggle no-arrow">
@@ -1023,6 +1028,30 @@ document.addEventListener('DOMContentLoaded', initRegistrationMapOnce);
   </div>
 </div>
 
+<!-- ================= EDIT HOMEOWNER MODAL (AJAX) ================= -->
+<div class="modal fade" id="editHomeownerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Edit Homeowner</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body" style="background:#f4f6fb;">
+        <div id="editHomeownerContent" class="p-2"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" id="saveEditHomeownerBtn">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- ================= TOAST NOTIFICATION ================= -->
 <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
   <div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
@@ -1049,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', initRegistrationMapOnce);
             </div>
 	  </div>
 	</div>
+
 
 	<!-- ================= CORE DEPENDENCIES ================= -->
 	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -1272,6 +1302,175 @@ if (modalEl && content) {
            </div>`;
       });
   });
+// ================= EDIT HOMEOWNER (AJAX MODAL + MAP) =================
+const editModalEl = document.getElementById('editHomeownerModal');
+const editContent = document.getElementById('editHomeownerContent');
+const saveEditBtn = document.getElementById('saveEditHomeownerBtn');
+
+let editModal = null;
+let editMapInstance = null;
+let editMarker = null;
+
+function destroyEditMap(){
+  if (editMapInstance) { editMapInstance.remove(); editMapInstance = null; }
+  editMarker = null;
+}
+
+function initEditMap(){
+  const mapEl = document.getElementById('editMap');
+  if (!mapEl) return;
+
+  let lat = parseFloat(mapEl.dataset.lat || '');
+  let lng = parseFloat(mapEl.dataset.lng || '');
+
+  // fallback if empty
+  if (!isFinite(lat) || !isFinite(lng)) {
+    lat = 14.3545;
+    lng = 120.946;
+  }
+
+  destroyEditMap();
+
+  editMapInstance = L.map('editMap').setView([lat, lng], 17);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(editMapInstance);
+
+  // allowed area (same polygon you use)
+  const allowedArea = L.polygon([
+    [14.357391, 120.943993],
+    [14.351903, 120.944937],
+    [14.352257, 120.948118],
+    [14.357828, 120.947329]
+  ], { color: 'green' }).addTo(editMapInstance);
+
+  editMapInstance.fitBounds(allowedArea.getBounds());
+
+  // marker start
+  editMarker = L.marker([lat, lng], { draggable:true }).addTo(editMapInstance);
+
+  function setHidden(pos){
+    document.getElementById('edit_lat').value = pos.lat;
+    document.getElementById('edit_lng').value = pos.lng;
+  }
+  setHidden(editMarker.getLatLng());
+
+  editMarker.on('dragend', function(e){
+    setHidden(e.target.getLatLng());
+  });
+
+  // buttons inside modal
+  const btnCenter = document.getElementById('btnCenterMarker');
+  const btnUsePos = document.getElementById('btnUseCurrentMarker');
+
+  if (btnCenter) {
+    btnCenter.addEventListener('click', function(){
+      if (!allowedArea) return;
+      const c = allowedArea.getBounds().getCenter();
+      editMarker.setLatLng(c);
+      editMapInstance.panTo(c);
+      setHidden(c);
+    });
+  }
+  if (btnUsePos) {
+    btnUsePos.addEventListener('click', function(){
+      setHidden(editMarker.getLatLng());
+    });
+  }
+
+  setTimeout(() => editMapInstance.invalidateSize(), 250);
+}
+
+// add/remove member rows in edit modal
+function bindEditMemberUI(){
+  const addBtn = document.getElementById('addEditMemberBtn');
+  const wrap = document.getElementById('editMembersWrap');
+  const tpl = document.getElementById('editMemberTpl');
+
+  if (addBtn && wrap && tpl) {
+    addBtn.addEventListener('click', function(){
+      wrap.insertAdjacentHTML('beforeend', tpl.innerHTML);
+    });
+  }
+
+  // remove
+  $(document).off('click', '.removeMemberBtn').on('click', '.removeMemberBtn', function(){
+    $(this).closest('.memberRow').remove();
+  });
+}
+
+if (editModalEl && editContent) {
+  editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
+
+  // open edit modal
+  $(document).on('click', '.editHomeowner', function(e){
+    e.preventDefault();
+    const id = $(this).data('id');
+    if (!id) return;
+
+    editContent.innerHTML = `<div class="p-3 text-muted fw-semibold">Loading edit form...</div>`;
+    editModal.show();
+
+    $.get('edit_homeowner_modal.php', { ajax:'edit_homeowner', id:id, _:Date.now() })
+      .done(function(html){
+        editContent.innerHTML = html;
+        bindEditMemberUI();
+        initEditMap();
+      })
+      .fail(function(xhr){
+        editContent.innerHTML = `<div class="alert alert-danger">Failed to load. HTTP ${xhr.status}</div>`;
+      });
+  });
+
+  // save
+  if (saveEditBtn) {
+    saveEditBtn.addEventListener('click', function(){
+      const form = document.getElementById('editHomeownerForm');
+      if (!form) return;
+
+      // make sure lat/lng are captured
+      if (editMarker) {
+        const pos = editMarker.getLatLng();
+        document.getElementById('edit_lat').value = pos.lat;
+        document.getElementById('edit_lng').value = pos.lng;
+      }
+
+      const fd = new FormData(form);
+
+      saveEditBtn.disabled = true;
+      const old = saveEditBtn.textContent;
+      saveEditBtn.textContent = "Saving...";
+
+      fetch('edit_homeowner_modal.php', { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.success) {
+            showToast(res.message || "Update failed.", "error");
+            return;
+          }
+          showToast(res.message || "Updated.", "success");
+          editModal.hide();
+          setTimeout(() => location.reload(), 400);
+        })
+        .catch(err => {
+          console.error(err);
+          showToast("Request failed. Try again.", "error");
+        })
+        .finally(() => {
+          saveEditBtn.disabled = false;
+          saveEditBtn.textContent = old;
+        });
+    });
+  }
+
+  // cleanup
+  editModalEl.addEventListener('hidden.bs.modal', function(){
+    destroyEditMap();
+    editContent.innerHTML = '';
+  });
+}
+
 
   modalEl.addEventListener('hidden.bs.modal', function () {
     if (coverMapInstance) { coverMapInstance.remove(); coverMapInstance = null; }

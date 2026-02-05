@@ -232,7 +232,13 @@
                 <span class="mtext">Announcement</span>
             </a>
         </li>
-
+                    <!-- NEW: Treasurer -->
+            <li>
+            <a href="treasurer.php" class="dropdown-toggle no-arrow">
+                <span class="micon dw dw-money-1"></span>
+                <span class="mtext">Treasurer</span>
+            </a>
+            </li>
         <!-- Settings (now pushed down) -->
         <li>
             <a href="#" class="dropdown-toggle no-arrow">

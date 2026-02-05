@@ -2,50 +2,103 @@
 session_start();
 
 // ===================== DB CONNECTION =====================
-$host = "localhost";
-$db   = "south_meridian_hoa";
-$user = "root";
-$pass = ""; // your DB password
-$conn = new mysqli($host, $user, $pass, $db);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+$conn->set_charset("utf8mb4");
 
 // ===================== AJAX LOGIN PROCESS =====================
-if(isset($_POST['action']) && $_POST['action'] == 'login'){
-    $email = $_POST['email'] ?? '';
-    $password = $_POST['password'] ?? '';
+if (isset($_POST['action']) && $_POST['action'] === 'login') {
+    $email    = trim($_POST['email'] ?? '');
+    $password = (string)($_POST['password'] ?? '');
 
-    $stmt = $conn->prepare("SELECT id, email, password, role, phase FROM admins WHERE email=?");
+    if ($email === '' || $password === '') {
+        echo "Email and password are required";
+        exit;
+    }
+
+    // ----------------- CLEAR PREVIOUS LOGIN KEYS (prevents conflicts) -----------------
+    unset(
+        $_SESSION['admin_id'], $_SESSION['admin_role'], $_SESSION['admin_phase'],
+        $_SESSION['homeowner_id'], $_SESSION['homeowner_role'], $_SESSION['homeowner_phase'],
+        $_SESSION['user_id'], $_SESSION['role'], $_SESSION['phase']
+    );
+
+    // 1) Try admins first
+    $stmt = $conn->prepare("SELECT id, email, password, role, phase FROM admins WHERE email=? LIMIT 1");
     $stmt->bind_param("s", $email);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $admin = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
-    if($result->num_rows === 1){
-        $user = $result->fetch_assoc();
-        if($password === $user['password']){ // plain text for now
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['role'] = $user['role'];
-            $_SESSION['phase'] = $user['phase'];
+    if ($admin) {
+        // Admin passwords are currently plain text (keep as-is for now)
+        if ($password === $admin['password']) {
 
-            if($user['role'] === 'superadmin'){
-                echo "superadmin/dashboard.php";
-            } elseif($user['role'] === 'admin'){
-                echo "admin/dashboard.php";
-            } else {
-                echo "homeowner/dashboard.php";
-            }
+            // ✅ ADMIN SESSION (separate keys)
+            $_SESSION['admin_id']    = (int)$admin['id'];
+            $_SESSION['admin_role']  = (string)$admin['role'];   // admin / superadmin
+            $_SESSION['admin_phase'] = (string)$admin['phase'];  // Phase 1/2/3/Superadmin
+
+            // (optional generic keys for easy checks elsewhere)
+            $_SESSION['role']  = $_SESSION['admin_role'];
+            $_SESSION['phase'] = $_SESSION['admin_phase'];
+            $_SESSION['user_id'] = $_SESSION['admin_id'];
+
+            echo ($_SESSION['admin_role'] === 'superadmin')
+                ? "superadmin/dashboard.php"
+                : "admin/dashboard.php";
             exit;
         } else {
             echo "Incorrect password";
             exit;
         }
-    } else {
+    }
+
+    // 2) If not admin, try homeowners
+    $stmt = $conn->prepare("
+        SELECT id, email, password, status, phase, IFNULL(must_change_password, 1) AS must_change_password
+        FROM homeowners
+        WHERE email=?
+        LIMIT 1
+    ");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $home = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$home) {
         echo "Email not found";
         exit;
     }
+
+    // must be approved
+    if ($home['status'] !== 'approved') {
+        echo "Your account is not approved yet.";
+        exit;
+    }
+
+    // homeowners password is hashed
+    if (!password_verify($password, $home['password'])) {
+        echo "Incorrect password";
+        exit;
+    }
+
+    // ✅ HOMEOWNER SESSION (separate keys)
+    $_SESSION['homeowner_id']    = (int)$home['id'];
+    $_SESSION['homeowner_role']  = 'homeowner';
+    $_SESSION['homeowner_phase'] = (string)$home['phase'];
+
+    // (optional generic keys for easy checks elsewhere)
+    $_SESSION['role']  = 'homeowner';
+    $_SESSION['phase'] = $_SESSION['homeowner_phase'];
+
+    echo "homeowner/homeowner_dashboard.php";
+    exit;
 }
 ?>
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -115,6 +168,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'login'){
         <ul>
           <li><a href="index.php" class="active">Home</a></li>
           <li><a href="#about">About</a></li>
+          <li><a href="announcements">Announcements</a></li>
 
            <a href="#" data-bs-toggle="modal" data-bs-target="#loginModal" style="color: #077f46;background-color: white;border-radius: 50px;width: 100px;height: 50px;">
            &nbsp;&nbsp; Log in

@@ -526,7 +526,13 @@ if (!$mailRes['success']) {
               <span class="mtext">Announcement</span>
             </a>
           </li>
-
+            <!-- NEW: Treasurer -->
+            <li>
+              <a href="treasurer.php" class="dropdown-toggle no-arrow">
+                <span class="micon dw dw-money-1"></span>
+                <span class="mtext">Treasurer</span>
+              </a>
+            </li>
           <li>
             <a href="#" class="dropdown-toggle no-arrow">
               <span class="micon dw dw-settings2"></span>
@@ -606,10 +612,9 @@ if (!$mailRes['success']) {
                     <select id="audience" name="audience" class="form-control" required>
                       <option value="">Select audience</option>
                       <option value="all">All Homeowners</option>
-                      <option value="block">Specific Block</option>
                       <option value="selected">Selected Homeowners</option>
-                      <option value="selected_officer">Selected Officers</option>
                       <option value="all_officers">All Officers</option>
+                      <option value="selected_officer">Selected Officers</option>
                     </select>
                   </div>
 
