@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 05, 2026 at 01:17 PM
+-- Generation Time: Feb 08, 2026 at 03:15 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -145,8 +145,16 @@ CREATE TABLE `hoa_posts` (
   `homeowner_id` int(11) NOT NULL,
   `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
   `content` text NOT NULL,
+  `shared_post_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `hoa_posts`
+--
+
+INSERT INTO `hoa_posts` (`id`, `homeowner_id`, `phase`, `content`, `shared_post_id`, `created_at`) VALUES
+(1, 35, 'Phase 1', 'awdaskdnwa', NULL, '2026-02-08 07:58:36');
 
 -- --------------------------------------------------------
 
@@ -234,6 +242,27 @@ INSERT INTO `homeowners` (`id`, `first_name`, `middle_name`, `last_name`, `conta
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `homeowner_feed_state`
+--
+
+CREATE TABLE `homeowner_feed_state` (
+  `homeowner_id` int(11) NOT NULL,
+  `last_ann_seen` datetime NOT NULL DEFAULT current_timestamp(),
+  `last_comment_seen` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `homeowner_feed_state`
+--
+
+INSERT INTO `homeowner_feed_state` (`homeowner_id`, `last_ann_seen`, `last_comment_seen`, `created_at`, `updated_at`) VALUES
+(35, '2026-02-08 15:58:22', '2026-02-08 15:58:22', '2026-02-08 07:58:22', '2026-02-08 07:58:22');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `household_members`
 --
 
@@ -277,7 +306,8 @@ ALTER TABLE `announcements`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_ann_admin_id` (`admin_id`),
   ADD KEY `idx_ann_phase` (`phase`),
-  ADD KEY `idx_ann_dates` (`start_date`,`end_date`);
+  ADD KEY `idx_ann_dates` (`start_date`,`end_date`),
+  ADD KEY `idx_ann_created_at` (`created_at`);
 
 --
 -- Indexes for table `announcement_attachments`
@@ -309,7 +339,8 @@ ALTER TABLE `hoa_officers`
 ALTER TABLE `hoa_posts`
   ADD PRIMARY KEY (`id`),
   ADD KEY `phase` (`phase`),
-  ADD KEY `homeowner_id` (`homeowner_id`);
+  ADD KEY `homeowner_id` (`homeowner_id`),
+  ADD KEY `idx_shared_post_id` (`shared_post_id`);
 
 --
 -- Indexes for table `hoa_post_comments`
@@ -317,7 +348,8 @@ ALTER TABLE `hoa_posts`
 ALTER TABLE `hoa_post_comments`
   ADD PRIMARY KEY (`id`),
   ADD KEY `post_id` (`post_id`),
-  ADD KEY `homeowner_id` (`homeowner_id`);
+  ADD KEY `homeowner_id` (`homeowner_id`),
+  ADD KEY `idx_comments_created_at` (`created_at`);
 
 --
 -- Indexes for table `hoa_post_likes`
@@ -342,6 +374,12 @@ ALTER TABLE `hoa_post_shares`
 ALTER TABLE `homeowners`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uniq_homeowner_email` (`email`);
+
+--
+-- Indexes for table `homeowner_feed_state`
+--
+ALTER TABLE `homeowner_feed_state`
+  ADD PRIMARY KEY (`homeowner_id`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -375,13 +413,13 @@ ALTER TABLE `announcement_recipients`
 -- AUTO_INCREMENT for table `hoa_officers`
 --
 ALTER TABLE `hoa_officers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=229;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=253;
 
 --
 -- AUTO_INCREMENT for table `hoa_posts`
 --
 ALTER TABLE `hoa_posts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `hoa_post_comments`
@@ -430,6 +468,18 @@ ALTER TABLE `announcement_recipients`
   ADD CONSTRAINT `fk_ar_announcement` FOREIGN KEY (`announcement_id`) REFERENCES `announcements` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_ar_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_ar_officer` FOREIGN KEY (`officer_id`) REFERENCES `hoa_officers` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `hoa_posts`
+--
+ALTER TABLE `hoa_posts`
+  ADD CONSTRAINT `fk_posts_shared_post` FOREIGN KEY (`shared_post_id`) REFERENCES `hoa_posts` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `homeowner_feed_state`
+--
+ALTER TABLE `homeowner_feed_state`
+  ADD CONSTRAINT `fk_feed_state_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
