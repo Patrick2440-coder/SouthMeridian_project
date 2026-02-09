@@ -155,8 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   }
 
   /**
-   * SHARE (Facebook style): create a new post referencing the original (shared_post_id)
-   * Optional: user can add a message (share_message)
+   * SHARE (Facebook style)
    */
   if ($action === 'share_post_create') {
     $post_id = (int)($_POST['post_id'] ?? 0);
@@ -164,7 +163,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($post_id <= 0) { echo json_encode(['success'=>false,'message'=>'Invalid post.']); exit; }
 
-    // must be same phase post
     $stmt = $conn->prepare("SELECT id FROM hoa_posts WHERE id=? AND phase=? LIMIT 1");
     $stmt->bind_param("is", $post_id, $phase);
     $stmt->execute();
@@ -172,13 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $stmt->close();
     if (!$okPost) { echo json_encode(['success'=>false,'message'=>'Post not found.']); exit; }
 
-    // create share post
     $stmt = $conn->prepare("INSERT INTO hoa_posts (homeowner_id, phase, content, shared_post_id) VALUES (?,?,?,?)");
     $stmt->bind_param("issi", $hid, $phase, $share_message, $post_id);
     $ok = $stmt->execute();
     $stmt->close();
 
-    // new share count = number of posts referencing this post
     $stmt = $conn->prepare("SELECT COUNT(*) c FROM hoa_posts WHERE shared_post_id=?");
     $stmt->bind_param("i", $post_id);
     $stmt->execute();
@@ -191,7 +187,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
   /**
    * Notifications: mark as seen
-   * target: "all" | "ann" | "comments"
    */
   if ($action === 'mark_seen') {
     $target = (string)($_POST['target'] ?? 'all');
@@ -261,9 +256,7 @@ while($r = $res->fetch_assoc()) $ann[] = $r;
 $stmt->close();
 
 /**
- * Notification counts:
- * - New announcements since last_ann_seen
- * - New comments on YOUR posts since last_comment_seen (not by you)
+ * Notification counts
  */
 $stmt = $conn->prepare("
   SELECT COUNT(*) c
@@ -295,11 +288,11 @@ $stmt->close();
 $notifCount = $newAnnCount + $newComCount;
 
 /**
- * Notification dropdown items (latest announcements + latest comments)
+ * Notification dropdown items
  */
 $notifItems = [];
 
-// latest announcements since last seen (limit 5)
+// latest announcements since last seen
 $stmt = $conn->prepare("
   SELECT id, title, created_at, 'announcement' AS kind
   FROM announcements
@@ -316,7 +309,7 @@ $res = $stmt->get_result();
 while($r = $res->fetch_assoc()) $notifItems[] = $r;
 $stmt->close();
 
-// latest comments on your posts since last seen (limit 5)
+// latest comments on your posts since last seen
 $stmt = $conn->prepare("
   SELECT c.id, c.created_at, 'comment' AS kind,
          CONCAT(h.first_name,' ',h.last_name) AS actor_name,
@@ -337,16 +330,13 @@ $res = $stmt->get_result();
 while($r = $res->fetch_assoc()) $notifItems[] = $r;
 $stmt->close();
 
-// sort mixed by created_at desc
 usort($notifItems, function($a,$b){
   return strtotime($b['created_at']) <=> strtotime($a['created_at']);
 });
 $notifItems = array_slice($notifItems, 0, 8);
 
 /**
- * FEED POSTS (same phase) with SHARE support:
- * - share_count is COUNT(*) where other posts reference it
- * - if post is a share: join original post + original author
+ * FEED POSTS (same phase) with SHARE support
  */
 $posts = [];
 $stmt = $conn->prepare("
@@ -363,10 +353,8 @@ $stmt = $conn->prepare("
     (SELECT COUNT(*) FROM hoa_post_likes l2 WHERE l2.post_id=p.id AND l2.homeowner_id=?) AS i_liked
   FROM hoa_posts p
   JOIN homeowners h ON h.id = p.homeowner_id
-
   LEFT JOIN hoa_posts op ON op.id = p.shared_post_id
   LEFT JOIN homeowners oh ON oh.id = op.homeowner_id
-
   WHERE p.phase = ?
   ORDER BY p.created_at DESC
   LIMIT 25
@@ -436,7 +424,6 @@ body{ background:var(--fb-bg); }
 /* Navbar */
 .navbar{ border-bottom:4px solid var(--hoa-green); }
 .navbar-brand{ letter-spacing:.2px; }
-
 .container-xl{ max-width:1180px; }
 
 /* Cover Map */
@@ -448,15 +435,9 @@ body{ background:var(--fb-bg); }
   border:1px solid var(--border);
   box-shadow:0 12px 28px rgba(0,0,0,.08);
   background:#e9eef6;
-
-  /* important: create a stacking context */
   isolation:isolate;
 }
-#coverMap{
-  position:absolute;
-  inset:0;
-  z-index:0;
-}
+#coverMap{ position:absolute; inset:0; z-index:0; }
 .fb-cover::after{
   content:"";
   position:absolute; inset:0;
@@ -556,12 +537,7 @@ body{ background:var(--fb-bg); }
   padding:12px;
   margin-top:10px;
 }
-.shared-title{
-  font-weight:900;
-  font-size:13px;
-  color:#0f172a;
-  margin-bottom:6px;
-}
+.shared-title{ font-weight:900; font-size:13px; color:#0f172a; margin-bottom:6px; }
 .shared-meta{ font-size:12px; color:var(--muted); font-weight:800; margin-bottom:6px; }
 .shared-content{ white-space:pre-wrap; font-weight:800; color:#0f172a; }
 
@@ -692,331 +668,518 @@ body{ background:var(--fb-bg); }
   .fb-profile-card{ flex-direction:column; align-items:center; text-align:center; }
   .fb-actions{ margin-left:0; justify-content:center; }
 }
+
+/* ===== Sidebar Layout (Fixed UI) ===== */
+.app-shell{
+  display:flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar{
+  width: 270px;
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  transition: width .2s ease, transform .2s ease;
+  z-index: 1200;
+}
+
+.sidebar .sb-head{
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.sidebar .sb-brand{
+  font-weight: 900;
+  color: var(--hoa-green);
+  letter-spacing: .2px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.sidebar .sb-user{
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.sidebar .sb-user .sb-avatar{
+  width:44px;height:44px;border-radius:50%;
+  background: linear-gradient(135deg, var(--hoa-green), #0bbf6a);
+  color:#fff; font-weight:900;
+  display:grid; place-items:center;
+  flex:0 0 auto;
+}
+
+.sidebar .sb-user .sb-name{
+  font-weight: 900;
+  margin:0;
+  line-height:1.1;
+}
+.sidebar .sb-user .sb-meta{
+  margin:2px 0 0;
+  font-size:12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.sidebar .sb-nav{
+  padding: 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.sb-link{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background:#fff;
+  text-decoration:none;
+  color:#0f172a;
+  font-weight: 900;
+  transition: background .15s ease, transform .05s ease;
+}
+.sb-link:hover{ background:#f8fafc; }
+.sb-link:active{ transform: scale(.99); }
+.sb-link i{ font-size: 18px; color: var(--hoa-green); }
+
+/* Main content */
+.main-area{
+  flex:1;
+  min-width: 0;
+  padding: 0;
+}
+
+/* Collapsed state (desktop) */
+body.sb-collapsed .sidebar{ width: 78px; }
+body.sb-collapsed .sidebar .sb-brand-text,
+body.sb-collapsed .sidebar .sb-user-text,
+body.sb-collapsed .sidebar .sb-link span{ display:none; }
+body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
+
+/* Backdrop for mobile */
+.sb-backdrop{
+  display:none;
+  position: fixed;
+  inset:0;
+  background: rgba(0,0,0,.35);
+  z-index: 1100;
+}
+
+/* Mobile off-canvas */
+@media (max-width: 991px){
+  .sidebar{
+    position: fixed;
+    left:0; top:0;
+    transform: translateX(-100%);
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  }
+  body.sb-open .sidebar{ transform: translateX(0); }
+  body.sb-open .sb-backdrop{ display:block; }
+}
 </style>
 </head>
 
 <body>
 
-<div class="<?= $mustChange ? 'blur-wrap' : '' ?>">
+<div class="sb-backdrop" id="sbBackdrop"></div>
 
-  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-    <div class="container-xl">
-      <a class="navbar-brand fw-bold text-success" href="#">🏘 HOA Community</a>
+<div class="app-shell">
 
-      <div class="ms-auto d-flex align-items-center gap-3">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <div class="sb-brand">
+        <i class="bi bi-grid-fill"></i>
+        <span class="sb-brand-text">HOA Menu</span>
+      </div>
+    </div>
 
-        <!-- Notifications -->
-        <div class="dropdown position-relative">
-          <button class="notif-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
-            <i class="bi bi-bell fs-5"></i>
+    <div class="sb-user">
+      <div class="sb-avatar"><?= esc($initials) ?></div>
+      <div class="sb-user-text">
+        <p class="sb-name"><?= esc($fullName) ?></p>
+        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <a class="sb-link" href="homeowner_dashboard.php">
+        <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
+      </a>
+
+      <a class="sb-link" href="#composer">
+        <i class="bi bi-pencil-square"></i> <span>Create Post</span>
+      </a>
+
+      <a class="sb-link" href="#announcements">
+        <i class="bi bi-megaphone-fill"></i> <span>Announcements</span>
+      </a>
+
+      <a class="sb-link" href="homeowner_pay_dues.php">
+        <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
+      </a>
+
+      <a class="sb-link" href="logout.php">
+        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+
+    <div class="<?= $mustChange ? 'blur-wrap' : '' ?>">
+
+      <!-- NAVBAR (FIXED UI) -->
+      <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container-xl">
+
+          <!-- Mobile sidebar open -->
+          <button class="btn btn-sm btn-outline-success me-2 d-lg-none" id="btnSidebar" type="button" title="Menu">
+            <i class="bi bi-list fs-5"></i>
           </button>
-          <?php if ($notifCount > 0): ?>
-            <span class="notif-badge"><?= (int)$notifCount ?></span>
-          <?php endif; ?>
 
-          <div class="dropdown-menu dropdown-menu-end p-0" style="width:360px; border-radius:14px; overflow:hidden;">
-            <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-              <div class="fw-bold">Notifications</div>
-              <button class="btn btn-sm btn-outline-success" id="btnMarkAllSeen">Mark all as seen</button>
+          <!-- Desktop collapse -->
+          <button class="btn btn-sm btn-outline-success me-2 d-none d-lg-inline" id="btnCollapse" type="button" title="Collapse sidebar">
+            <i class="bi bi-layout-sidebar-inset"></i>
+          </button>
+
+          <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php">🏘 HOA Community</a>
+
+          <div class="ms-auto d-flex align-items-center gap-3">
+
+            <!-- Notifications -->
+            <div class="dropdown position-relative">
+              <button class="notif-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
+                <i class="bi bi-bell fs-5"></i>
+              </button>
+              <?php if ($notifCount > 0): ?>
+                <span class="notif-badge"><?= (int)$notifCount ?></span>
+              <?php endif; ?>
+
+              <div class="dropdown-menu dropdown-menu-end p-0" style="width:360px; border-radius:14px; overflow:hidden;">
+                <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
+                  <div class="fw-bold">Notifications</div>
+                  <button class="btn btn-sm btn-outline-success" id="btnMarkAllSeen">Mark all as seen</button>
+                </div>
+
+                <div class="p-2" style="max-height:360px; overflow:auto;">
+                  <?php if (empty($notifItems)): ?>
+                    <div class="p-3 text-muted fw-semibold">No new notifications.</div>
+                  <?php else: ?>
+                    <?php foreach($notifItems as $n): ?>
+                      <?php if ($n['kind'] === 'announcement'): ?>
+                        <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
+                          <div class="fw-bold"><i class="bi bi-megaphone-fill text-success me-1"></i> New announcement</div>
+                          <div class="fw-semibold"><?= esc($n['title']) ?></div>
+                          <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+                        </div>
+                      <?php else: ?>
+                        <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
+                          <div class="fw-bold"><i class="bi bi-chat-left-dots-fill me-1"></i> New comment on your post</div>
+                          <div class="fw-semibold"><?= esc($n['actor_name'] ?? 'Someone') ?>:</div>
+                          <div class="text-muted fw-semibold"><?= esc($n['snippet'] ?? '') ?><?= strlen($n['snippet'] ?? '')>=90 ? '…' : '' ?></div>
+                          <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+                        </div>
+                      <?php endif; ?>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
+                </div>
+
+                <div class="p-2 border-top d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenAnn">Seen announcements</button>
+                  <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenCom">Seen comments</button>
+                </div>
+              </div>
             </div>
 
-            <div class="p-2" style="max-height:360px; overflow:auto;">
-              <?php if (empty($notifItems)): ?>
-                <div class="p-3 text-muted fw-semibold">No new notifications.</div>
+            <div class="small text-muted d-none d-md-block">
+              Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
+            </div>
+
+            <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="container-xl my-4">
+
+        <!-- Cover Map -->
+        <div class="fb-cover">
+          <div class="cover-badge">
+            <span>South Meridian Homes Salitran</span>
+            <small>• <?= esc($phase) ?></small>
+          </div>
+
+          <?php if (!empty($lat) && !empty($lng)): ?>
+            <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>"></div>
+          <?php else: ?>
+            <div class="h-100 w-100 d-flex align-items-center justify-content-center">
+              <div class="text-muted fw-semibold">No location saved yet.</div>
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <!-- Profile overlap -->
+        <div class="fb-profile-row">
+          <div class="fb-profile-card">
+            <div class="fb-avatar"><?= esc($initials) ?></div>
+
+            <div>
+              <h2 class="fb-name"><?= esc($fullName) ?></h2>
+              <div class="fb-sub"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></div>
+              <div class="mt-2 d-flex gap-2 flex-wrap">
+                <span class="pill">📍 South Meridian Homes Salitran</span>
+                <span class="pill">🏠 <?= esc($user['house_lot_number'] ?? '') ?></span>
+              </div>
+            </div>
+
+            <div class="fb-actions">
+              <span class="pill"><i class="bi bi-geo-alt-fill"></i> Cover = Map</span>
+              <a class="btn btn-hoa" href="#composer"><i class="bi bi-pencil-square me-1"></i> Post</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mt-2">
+
+          <!-- LEFT -->
+          <div class="col-lg-4">
+            <div class="fb-card mb-4" id="announcements">
+              <div class="fb-card-h">
+                <h6>📢 Announcements & Events</h6>
+                <span class="pill"><?= count($ann) ?> active</span>
+              </div>
+              <div class="fb-card-b">
+                <?php if (empty($ann)): ?>
+                  <div class="text-muted fw-semibold">No announcements right now.</div>
+                <?php else: ?>
+                  <div class="d-flex flex-column gap-3">
+                    <?php foreach($ann as $a): ?>
+                      <?php
+                        $prio = (string)$a['priority'];
+                        $prioIcon = $prio==='urgent' ? 'bi-exclamation-octagon-fill' : ($prio==='important' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill');
+                        $prioColor = $prio==='urgent' ? 'text-danger' : ($prio==='important' ? 'text-warning' : 'text-success');
+                      ?>
+                      <div class="p-3 rounded-4" style="background:#f8fafc;border:1px solid var(--border);">
+                        <div class="d-flex align-items-start justify-content-between gap-2">
+                          <div class="fw-black" style="font-weight:900;">
+                            <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
+                            <?= esc($a['title']) ?>
+                          </div>
+                          <span class="pill"><?= esc(ucfirst($a['category'])) ?></span>
+                        </div>
+                        <div class="text-muted fw-semibold mt-1" style="font-size:13px;">
+                          <?= esc(date('M d, Y', strtotime($a['start_date']))) ?>
+                          <?php if (!empty($a['end_date'])): ?>
+                            – <?= esc(date('M d, Y', strtotime($a['end_date']))) ?>
+                          <?php endif; ?>
+                        </div>
+                        <div class="mt-2" style="white-space:pre-wrap;font-weight:800;">
+                          <?= esc($a['message']) ?>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+
+            <div class="fb-card">
+              <div class="fb-card-h"><h6>🏠 Community</h6></div>
+              <div class="fb-card-b">
+                <div class="d-flex flex-column gap-2">
+                  <div class="pill">Phase: <?= esc($phase) ?></div>
+                  <div class="pill">Subdivision: South Meridian Homes Salitran</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT FEED -->
+          <div class="col-lg-8">
+
+            <!-- Composer -->
+            <div class="post mb-4" id="composer">
+              <div class="post-h">
+                <div class="post-avatar"><?= esc($initials) ?></div>
+                <div>
+                  <div class="post-name"><?= esc($fullName) ?></div>
+                  <div class="post-meta">Post something to <?= esc($phase) ?> neighbors</div>
+                </div>
+              </div>
+              <div class="post-b">
+                <div class="composer-top">
+                  <div class="mini-avatar"><?= esc(substr($user['first_name'] ?? 'H',0,1)) ?></div>
+                  <textarea id="postContent" class="composer-textarea" rows="3" placeholder="What's happening in the neighborhood?"></textarea>
+                </div>
+                <div class="composer-actions">
+                  <div class="text-muted fw-semibold" style="font-size:13px;">
+                    Be respectful. Posts are visible to your phase only.
+                  </div>
+                  <button class="btn btn-hoa px-4" id="btnPost">
+                    <i class="bi bi-send me-1"></i> Post
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-column gap-4" id="feed">
+              <?php if (empty($posts)): ?>
+                <div class="fb-card"><div class="fb-card-b">
+                  <div class="text-muted fw-semibold">No posts yet. Be the first to post in <?= esc($phase) ?>.</div>
+                </div></div>
               <?php else: ?>
-                <?php foreach($notifItems as $n): ?>
-                  <?php if ($n['kind'] === 'announcement'): ?>
-                    <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
-                      <div class="fw-bold"><i class="bi bi-megaphone-fill text-success me-1"></i> New announcement</div>
-                      <div class="fw-semibold"><?= esc($n['title']) ?></div>
-                      <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+                <?php foreach($posts as $p): ?>
+                  <?php
+                    $pid = (int)$p['id'];
+                    $author = trim(($p['first_name'] ?? '').' '.($p['last_name'] ?? ''));
+                    $authorInitial = strtoupper(substr((string)($p['first_name'] ?? 'H'),0,1));
+                    $iLiked = ((int)$p['i_liked'] > 0);
+                    $postLot = (string)($p['house_lot_number'] ?? '');
+
+                    $isShare = !empty($p['shared_post_id']) && !empty($p['orig_id']);
+                    $origAuthor = trim(($p['orig_first_name'] ?? '').' '.($p['orig_last_name'] ?? ''));
+                    $origLot    = (string)($p['orig_house_lot'] ?? '');
+                  ?>
+                  <div class="post" data-post-id="<?= $pid ?>">
+                    <div class="post-h">
+                      <div class="post-avatar"><?= esc($authorInitial) ?></div>
+                      <div>
+                        <div class="post-name"><?= esc($author) ?></div>
+                        <div class="post-meta">
+                          <?= esc($phase) ?> • <?= esc($postLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['created_at']))) ?>
+                          <?php if ($isShare): ?> • <span class="text-success">shared a post</span><?php endif; ?>
+                        </div>
+                      </div>
                     </div>
-                  <?php else: ?>
-                    <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
-                      <div class="fw-bold"><i class="bi bi-chat-left-dots-fill me-1"></i> New comment on your post</div>
-                      <div class="fw-semibold"><?= esc($n['actor_name'] ?? 'Someone') ?>:</div>
-                      <div class="text-muted fw-semibold"><?= esc($n['snippet'] ?? '') ?><?= strlen($n['snippet'] ?? '')>=90 ? '…' : '' ?></div>
-                      <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+
+                    <div class="post-b">
+                      <?php if (trim((string)$p['content']) !== ''): ?>
+                        <div class="post-content"><?= esc($p['content']) ?></div>
+                      <?php endif; ?>
+
+                      <?php if ($isShare): ?>
+                        <div class="shared-box">
+                          <div class="shared-title"><i class="bi bi-reply-fill me-1"></i>Shared post</div>
+                          <div class="shared-meta"><?= esc($origAuthor) ?> • <?= esc($origLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['orig_created_at']))) ?></div>
+                          <div class="shared-content"><?= esc($p['orig_content'] ?? '') ?></div>
+                        </div>
+                      <?php endif; ?>
                     </div>
-                  <?php endif; ?>
+
+                    <div class="post-stats">
+                      <div>
+                        <span class="me-3"><i class="bi bi-hand-thumbs-up-fill me-1 text-success"></i><span class="like-count"><?= (int)$p['like_count'] ?></span></span>
+                        <span class="me-3"><i class="bi bi-chat-left-text-fill me-1"></i><span class="comment-count"><?= (int)$p['comment_count'] ?></span></span>
+                        <span><i class="bi bi-reply-fill me-1"></i><span class="share-count"><?= (int)$p['share_count'] ?></span></span>
+                      </div>
+                      <div class="text-muted fw-semibold">Neighbors</div>
+                    </div>
+
+                    <div class="post-actions">
+                      <button class="action-btn btn-like <?= $iLiked ? 'liked' : '' ?>">
+                        <i class="bi bi-hand-thumbs-up<?= $iLiked ? '-fill' : '' ?> me-1"></i> Like
+                      </button>
+                      <button class="action-btn btn-focus-comment">
+                        <i class="bi bi-chat-left-text me-1"></i> Comment
+                      </button>
+                      <button class="action-btn btn-share">
+                        <i class="bi bi-reply me-1"></i> Share
+                      </button>
+                    </div>
+
+                    <div class="comments">
+                      <?php
+                        $clist = $commentsByPost[$pid] ?? [];
+                        foreach($clist as $c):
+                          $cName = trim(($c['first_name'] ?? '').' '.($c['last_name'] ?? ''));
+                          $cInit = strtoupper(substr((string)($c['first_name'] ?? 'H'),0,1));
+                      ?>
+                        <div class="fb-comment">
+                          <div class="fb-comment-avatar"><?= esc($cInit) ?></div>
+                          <div class="fb-comment-bubble">
+                            <div class="fb-comment-name"><?= esc($cName) ?></div>
+                            <div class="fb-comment-text"><?= esc($c['comment']) ?></div>
+                          </div>
+                        </div>
+                      <?php endforeach; ?>
+
+                      <div class="comment-form">
+                        <input class="comment-input" type="text" placeholder="Write a comment..." maxlength="500">
+                        <button class="btn btn-hoa btn-comment-send"><i class="bi bi-send"></i></button>
+                      </div>
+                    </div>
+
+                  </div>
                 <?php endforeach; ?>
               <?php endif; ?>
             </div>
 
-            <div class="p-2 border-top d-flex gap-2">
-              <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenAnn">Seen announcements</button>
-              <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenCom">Seen comments</button>
-            </div>
           </div>
         </div>
 
-        <div class="small text-muted">
-          Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
-        </div>
-        <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
-      </div>
-    </div>
-  </nav>
+      </div><!-- /container-xl -->
+    </div><!-- /blur-wrap -->
 
-  <div class="container-xl my-4">
-
-    <!-- Cover Map -->
-    <div class="fb-cover">
-      <div class="cover-badge">
-        <span>South Meridian Homes Salitran</span>
-        <small>• <?= esc($phase) ?></small>
-      </div>
-
-      <?php if (!empty($lat) && !empty($lng)): ?>
-        <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>"></div>
-      <?php else: ?>
-        <div class="h-100 w-100 d-flex align-items-center justify-content-center">
-          <div class="text-muted fw-semibold">No location saved yet.</div>
-        </div>
-      <?php endif; ?>
-    </div>
-
-    <!-- Profile overlap -->
-    <div class="fb-profile-row">
-      <div class="fb-profile-card">
-        <div class="fb-avatar"><?= esc($initials) ?></div>
-
-        <div>
-          <h2 class="fb-name"><?= esc($fullName) ?></h2>
-          <div class="fb-sub"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></div>
-          <div class="mt-2 d-flex gap-2 flex-wrap">
-            <span class="pill">📍 South Meridian Homes Salitran</span>
-            <span class="pill">🏠 <?= esc($user['house_lot_number'] ?? '') ?></span>
-          </div>
-        </div>
-
-        <div class="fb-actions">
-          <span class="pill"><i class="bi bi-geo-alt-fill"></i> Cover = Map</span>
-          <a class="btn btn-hoa" href="#composer"><i class="bi bi-pencil-square me-1"></i> Post</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-4 mt-2">
-      <!-- LEFT -->
-      <div class="col-lg-4">
-        <div class="fb-card mb-4">
-          <div class="fb-card-h">
-            <h6>📢 Announcements & Events</h6>
-            <span class="pill"><?= count($ann) ?> active</span>
-          </div>
-          <div class="fb-card-b">
-            <?php if (empty($ann)): ?>
-              <div class="text-muted fw-semibold">No announcements right now.</div>
-            <?php else: ?>
-              <div class="d-flex flex-column gap-3">
-                <?php foreach($ann as $a): ?>
-                  <?php
-                    $prio = (string)$a['priority'];
-                    $prioIcon = $prio==='urgent' ? 'bi-exclamation-octagon-fill' : ($prio==='important' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill');
-                    $prioColor = $prio==='urgent' ? 'text-danger' : ($prio==='important' ? 'text-warning' : 'text-success');
-                  ?>
-                  <div class="p-3 rounded-4" style="background:#f8fafc;border:1px solid var(--border);">
-                    <div class="d-flex align-items-start justify-content-between gap-2">
-                      <div class="fw-black" style="font-weight:900;">
-                        <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
-                        <?= esc($a['title']) ?>
-                      </div>
-                      <span class="pill"><?= esc(ucfirst($a['category'])) ?></span>
-                    </div>
-                    <div class="text-muted fw-semibold mt-1" style="font-size:13px;">
-                      <?= esc(date('M d, Y', strtotime($a['start_date']))) ?>
-                      <?php if (!empty($a['end_date'])): ?>
-                        – <?= esc(date('M d, Y', strtotime($a['end_date']))) ?>
-                      <?php endif; ?>
-                    </div>
-                    <div class="mt-2" style="white-space:pre-wrap;font-weight:800;">
-                      <?= esc($a['message']) ?>
-                    </div>
-                  </div>
-                <?php endforeach; ?>
-              </div>
-            <?php endif; ?>
-          </div>
-        </div>
-
-        <div class="fb-card">
-          <div class="fb-card-h"><h6>🏠 Community</h6></div>
-          <div class="fb-card-b">
-            <div class="d-flex flex-column gap-2">
-              <div class="pill">Phase: <?= esc($phase) ?></div>
-              <div class="pill">Subdivision: South Meridian Homes Salitran</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- RIGHT FEED -->
-      <div class="col-lg-8">
-
-        <!-- Composer -->
-        <div class="post mb-4" id="composer">
-          <div class="post-h">
-            <div class="post-avatar"><?= esc($initials) ?></div>
+    <?php if ($mustChange): ?>
+      <div class="lock-overlay">
+        <div class="lock-modal">
+          <div class="head">
+            <i class="bi bi-shield-lock-fill fs-5"></i>
             <div>
-              <div class="post-name"><?= esc($fullName) ?></div>
-              <div class="post-meta">Post something to <?= esc($phase) ?> neighbors</div>
+              <div class="fw-bold">Change Password Required</div>
+              <div class="small opacity-75">You must change your password before continuing.</div>
             </div>
           </div>
-          <div class="post-b">
-            <div class="composer-top">
-              <div class="mini-avatar"><?= esc(substr($user['first_name'] ?? 'H',0,1)) ?></div>
-              <textarea id="postContent" class="composer-textarea" rows="3" placeholder="What's happening in the neighborhood?"></textarea>
+
+          <div class="body">
+            <div class="lock-note mb-3">
+              <div class="fw-semibold mb-1">Security check</div>
+              <div class="small">This is your first login. Please set a new password (min 8 characters).</div>
             </div>
-            <div class="composer-actions">
-              <div class="text-muted fw-semibold" style="font-size:13px;">
-                Be respectful. Posts are visible to your phase only.
+
+            <?php if ($err): ?>
+              <div class="alert alert-danger"><?= esc($err) ?></div>
+            <?php endif; ?>
+
+            <form method="POST" autocomplete="off">
+              <input type="hidden" name="change_password_submit" value="1">
+              <div class="mb-3">
+                <label class="form-label">New Password</label>
+                <input type="password" name="password" class="form-control" minlength="8" required>
               </div>
-              <button class="btn btn-hoa px-4" id="btnPost">
-                <i class="bi bi-send me-1"></i> Post
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="d-flex flex-column gap-4" id="feed">
-          <?php if (empty($posts)): ?>
-            <div class="fb-card"><div class="fb-card-b">
-              <div class="text-muted fw-semibold">No posts yet. Be the first to post in <?= esc($phase) ?>.</div>
-            </div></div>
-          <?php else: ?>
-            <?php foreach($posts as $p): ?>
-              <?php
-                $pid = (int)$p['id'];
-                $author = trim(($p['first_name'] ?? '').' '.($p['last_name'] ?? ''));
-                $authorInitial = strtoupper(substr((string)($p['first_name'] ?? 'H'),0,1));
-                $iLiked = ((int)$p['i_liked'] > 0);
-                $postLot = (string)($p['house_lot_number'] ?? '');
-
-                $isShare = !empty($p['shared_post_id']) && !empty($p['orig_id']);
-                $origAuthor = trim(($p['orig_first_name'] ?? '').' '.($p['orig_last_name'] ?? ''));
-                $origLot    = (string)($p['orig_house_lot'] ?? '');
-              ?>
-              <div class="post" data-post-id="<?= $pid ?>">
-                <div class="post-h">
-                  <div class="post-avatar"><?= esc($authorInitial) ?></div>
-                  <div>
-                    <div class="post-name"><?= esc($author) ?></div>
-                    <div class="post-meta">
-                      <?= esc($phase) ?> • <?= esc($postLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['created_at']))) ?>
-                      <?php if ($isShare): ?> • <span class="text-success">shared a post</span><?php endif; ?>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="post-b">
-                  <?php if (trim((string)$p['content']) !== ''): ?>
-                    <div class="post-content"><?= esc($p['content']) ?></div>
-                  <?php endif; ?>
-
-                  <?php if ($isShare): ?>
-                    <div class="shared-box">
-                      <div class="shared-title"><i class="bi bi-reply-fill me-1"></i>Shared post</div>
-                      <div class="shared-meta"><?= esc($origAuthor) ?> • <?= esc($origLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['orig_created_at']))) ?></div>
-                      <div class="shared-content"><?= esc($p['orig_content'] ?? '') ?></div>
-                    </div>
-                  <?php endif; ?>
-                </div>
-
-                <div class="post-stats">
-                  <div>
-                    <span class="me-3"><i class="bi bi-hand-thumbs-up-fill me-1 text-success"></i><span class="like-count"><?= (int)$p['like_count'] ?></span></span>
-                    <span class="me-3"><i class="bi bi-chat-left-text-fill me-1"></i><span class="comment-count"><?= (int)$p['comment_count'] ?></span></span>
-                    <span><i class="bi bi-reply-fill me-1"></i><span class="share-count"><?= (int)$p['share_count'] ?></span></span>
-                  </div>
-                  <div class="text-muted fw-semibold">Neighbors</div>
-                </div>
-
-                <div class="post-actions">
-                  <button class="action-btn btn-like <?= $iLiked ? 'liked' : '' ?>">
-                    <i class="bi bi-hand-thumbs-up<?= $iLiked ? '-fill' : '' ?> me-1"></i> Like
-                  </button>
-                  <button class="action-btn btn-focus-comment">
-                    <i class="bi bi-chat-left-text me-1"></i> Comment
-                  </button>
-                  <button class="action-btn btn-share">
-                    <i class="bi bi-reply me-1"></i> Share
-                  </button>
-                </div>
-
-                <div class="comments">
-                  <?php
-                    $clist = $commentsByPost[$pid] ?? [];
-                    foreach($clist as $c):
-                      $cName = trim(($c['first_name'] ?? '').' '.($c['last_name'] ?? ''));
-                      $cInit = strtoupper(substr((string)($c['first_name'] ?? 'H'),0,1));
-                  ?>
-                    <div class="fb-comment">
-                      <div class="fb-comment-avatar"><?= esc($cInit) ?></div>
-                      <div class="fb-comment-bubble">
-                        <div class="fb-comment-name"><?= esc($cName) ?></div>
-                        <div class="fb-comment-text"><?= esc($c['comment']) ?></div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-
-                  <div class="comment-form">
-                    <input class="comment-input" type="text" placeholder="Write a comment..." maxlength="500">
-                    <button class="btn btn-hoa btn-comment-send"><i class="bi bi-send"></i></button>
-                  </div>
-                </div>
-
+              <div class="mb-3">
+                <label class="form-label">Confirm Password</label>
+                <input type="password" name="password2" class="form-control" minlength="8" required>
               </div>
-            <?php endforeach; ?>
-          <?php endif; ?>
-        </div>
+              <button class="btn btn-success w-100 py-2 fw-semibold">Save Password</button>
+            </form>
 
-      </div>
-    </div>
-
-  </div>
-
-</div>
-
-<?php if ($mustChange): ?>
-  <div class="lock-overlay">
-    <div class="lock-modal">
-      <div class="head">
-        <i class="bi bi-shield-lock-fill fs-5"></i>
-        <div>
-          <div class="fw-bold">Change Password Required</div>
-          <div class="small opacity-75">You must change your password before continuing.</div>
-        </div>
-      </div>
-
-      <div class="body">
-        <div class="lock-note mb-3">
-          <div class="fw-semibold mb-1">Security check</div>
-          <div class="small">This is your first login. Please set a new password (min 8 characters).</div>
-        </div>
-
-        <?php if ($err): ?>
-          <div class="alert alert-danger"><?= esc($err) ?></div>
-        <?php endif; ?>
-
-        <form method="POST" autocomplete="off">
-          <input type="hidden" name="change_password_submit" value="1">
-          <div class="mb-3">
-            <label class="form-label">New Password</label>
-            <input type="password" name="password" class="form-control" minlength="8" required>
+            <div class="small text-muted mt-3">Tip: Use a strong password (letters + numbers).</div>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Confirm Password</label>
-            <input type="password" name="password2" class="form-control" minlength="8" required>
-          </div>
-          <button class="btn btn-success w-100 py-2 fw-semibold">Save Password</button>
-        </form>
-
-        <div class="small text-muted mt-3">Tip: Use a strong password (letters + numbers).</div>
+        </div>
       </div>
-    </div>
-  </div>
-<?php endif; ?>
+    <?php endif; ?>
+
+  </div><!-- /main-area -->
+</div><!-- /app-shell -->
 
 <!-- Share Modal -->
 <div class="modal fade" id="shareModal" tabindex="-1" aria-hidden="true">
@@ -1098,7 +1261,6 @@ const shareModal = shareModalEl ? new bootstrap.Modal(shareModalEl) : null;
 document.getElementById('btnConfirmShare')?.addEventListener('click', async () => {
   const postId = parseInt(document.getElementById('sharePostId').value || '0', 10);
   const msg = (document.getElementById('shareMessage').value || '').trim();
-
   if (!postId) return;
 
   const btn = document.getElementById('btnConfirmShare');
@@ -1165,6 +1327,46 @@ document.getElementById('feed')?.addEventListener('click', async (e) => {
     return;
   }
 });
+</script>
+
+<script>
+(function sidebarInit(){
+  const btnSidebar  = document.getElementById('btnSidebar');   // mobile open
+  const btnCollapse = document.getElementById('btnCollapse');  // desktop collapse
+  const backdrop    = document.getElementById('sbBackdrop');
+
+  // restore collapsed state (desktop)
+  const collapsed = localStorage.getItem('sb_collapsed') === '1';
+  if (collapsed) document.body.classList.add('sb-collapsed');
+
+  function closeMobile(){ document.body.classList.remove('sb-open'); }
+  function toggleMobile(){ document.body.classList.toggle('sb-open'); }
+
+  // Mobile open/close
+  btnSidebar?.addEventListener('click', toggleMobile);
+  backdrop?.addEventListener('click', closeMobile);
+
+  // Desktop collapse toggle
+  btnCollapse?.addEventListener('click', () => {
+    document.body.classList.toggle('sb-collapsed');
+    localStorage.setItem('sb_collapsed', document.body.classList.contains('sb-collapsed') ? '1' : '0');
+  });
+
+  // Close mobile sidebar when clicking a link
+  document.querySelectorAll('.sidebar a.sb-link').forEach(a=>{
+    a.addEventListener('click', ()=> closeMobile());
+  });
+
+  // ESC closes mobile sidebar
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape') closeMobile();
+  });
+
+  // If screen resized to desktop, ensure mobile offcanvas is closed
+  window.addEventListener('resize', ()=>{
+    if (window.innerWidth >= 992) closeMobile();
+  });
+})();
 </script>
 
 </body>

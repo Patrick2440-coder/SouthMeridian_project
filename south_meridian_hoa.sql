@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 08, 2026 at 03:15 PM
+-- Generation Time: Feb 09, 2026 at 11:47 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -30,6 +30,7 @@ SET time_zone = "+00:00";
 CREATE TABLE `admins` (
   `id` int(11) NOT NULL,
   `email` varchar(255) NOT NULL,
+  `full_name` varchar(255) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `phase` enum('Phase 1','Phase 2','Phase 3','Superadmin') NOT NULL,
   `role` enum('admin','superadmin') NOT NULL
@@ -39,11 +40,11 @@ CREATE TABLE `admins` (
 -- Dumping data for table `admins`
 --
 
-INSERT INTO `admins` (`id`, `email`, `password`, `phase`, `role`) VALUES
-(1, 'superadmin@gmail.com', 'superadmin', 'Superadmin', 'superadmin'),
-(2, 'admin1@gmail.com', 'admin1', 'Phase 1', 'admin'),
-(3, 'admin2@gmail.com', 'admin2', 'Phase 2', 'admin'),
-(4, 'admin3@gmail.com', 'admin3', 'Phase 3', 'admin');
+INSERT INTO `admins` (`id`, `email`, `full_name`, `password`, `phase`, `role`) VALUES
+(1, 'superadmin@gmail.com', NULL, 'superadmin', 'Superadmin', 'superadmin'),
+(2, 'admin1@gmail.com', NULL, 'admin1', 'Phase 1', 'admin'),
+(3, 'admin2@gmail.com', NULL, 'admin2', 'Phase 2', 'admin'),
+(4, 'admin3@gmail.com', NULL, 'admin3', 'Phase 3', 'admin');
 
 -- --------------------------------------------------------
 
@@ -103,6 +104,126 @@ CREATE TABLE `announcement_recipients` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `finance_donations`
+--
+
+CREATE TABLE `finance_donations` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `donor_name` varchar(255) NOT NULL,
+  `donor_email` varchar(255) DEFAULT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `donation_date` date NOT NULL,
+  `receipt_no` varchar(50) DEFAULT NULL,
+  `message` varchar(255) DEFAULT NULL,
+  `created_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_dues_settings`
+--
+
+CREATE TABLE `finance_dues_settings` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `monthly_dues` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `updated_by_admin_id` int(11) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `finance_dues_settings`
+--
+
+INSERT INTO `finance_dues_settings` (`id`, `phase`, `monthly_dues`, `updated_by_admin_id`, `updated_at`) VALUES
+(1, 'Phase 1', 200.00, 1, '2026-02-09 15:56:25');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_expenses`
+--
+
+CREATE TABLE `finance_expenses` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `category` enum('maintenance','security','utilities','other') NOT NULL DEFAULT 'other',
+  `description` varchar(255) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `expense_date` date NOT NULL,
+  `receipt_path` varchar(255) DEFAULT NULL,
+  `created_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_opening_balance`
+--
+
+CREATE TABLE `finance_opening_balance` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `opening_balance` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `as_of` date NOT NULL,
+  `updated_by_admin_id` int(11) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_payments`
+--
+
+CREATE TABLE `finance_payments` (
+  `id` int(11) NOT NULL,
+  `homeowner_id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `pay_year` int(11) NOT NULL,
+  `pay_month` tinyint(4) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `status` enum('paid','unpaid') NOT NULL DEFAULT 'paid',
+  `paid_at` datetime DEFAULT current_timestamp(),
+  `reference_no` varchar(100) DEFAULT NULL,
+  `notes` varchar(255) DEFAULT NULL,
+  `created_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_report_requests`
+--
+
+CREATE TABLE `finance_report_requests` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `report_year` int(11) NOT NULL,
+  `report_month` tinyint(4) NOT NULL,
+  `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `requested_by_admin_id` int(11) DEFAULT NULL,
+  `requested_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `president_approved_by_email` varchar(255) DEFAULT NULL,
+  `president_action_at` datetime DEFAULT NULL,
+  `president_remarks` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `finance_report_requests`
+--
+
+INSERT INTO `finance_report_requests` (`id`, `phase`, `report_year`, `report_month`, `status`, `requested_by_admin_id`, `requested_at`, `president_approved_by_email`, `president_action_at`, `president_remarks`) VALUES
+(1, 'Phase 1', 2026, 2, 'pending', 1, '2026-02-09 21:07:25', 'superadmin@gmail.com', '2026-02-09 23:45:53', '');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `hoa_officers`
 --
 
@@ -121,7 +242,7 @@ CREATE TABLE `hoa_officers` (
 --
 
 INSERT INTO `hoa_officers` (`id`, `phase`, `position`, `officer_name`, `officer_email`, `is_active`, `updated_at`) VALUES
-(1, 'Phase 1', 'President', NULL, NULL, 1, '2026-02-05 10:22:56'),
+(1, 'Phase 1', 'President', 'Patrick Justin Baculpo', 'baculpopatrick2440@gmail.com', 1, '2026-02-09 21:09:28'),
 (2, 'Phase 1', 'Vice President', NULL, NULL, 1, '2026-02-05 10:21:54'),
 (3, 'Phase 1', 'Secretary', NULL, NULL, 1, '2026-02-05 10:21:54'),
 (4, 'Phase 1', 'Treasurer', NULL, NULL, 1, '2026-02-05 10:21:54'),
@@ -237,7 +358,8 @@ INSERT INTO `homeowners` (`id`, `first_name`, `middle_name`, `last_name`, `conta
 (30, 'Patrick Justin', '', 'Baculpo', '09916963390', 'awdasdwad@gmail.com', '$2y$10$9kBD5B6q/Yk.vIh/M9ny3OM4wlg.UmWt0fgBEOjiLAlrcCzo/F3Gi', 1, 'Phase 1', 'blk 7 lot 9', 'uploads/1769446162_id_', 'uploads/1769446162_proof_', 14.3548655, 120.9460555, 'rejected', 2, '2026-01-26 16:49:22', NULL, NULL),
 (32, 'Patrick Justin', '', 'Baculpo', '09916963390', 'jheannaabigailerolesabella@gmail.com', '$2y$10$RhmUU7W7RqJVCG9MitqV4.SoD9h5x0Rd3QBEMZ3LjoaTf.OygcPfm', 1, 'Phase 1', 'blk 7 lot 9', 'uploads/1769448105_id_', 'uploads/1769448105_proof_', 14.3523646, 120.9467858, 'approved', 2, '2026-01-26 17:21:45', 'b59013804cfc8fa73affdd513e7faa27a8b0f31df9f0163e4c6d6a1557f28e01', '2026-01-26 19:21:50'),
 (34, 'Patrick Justin', '', 'Baculpo', '09916963390', 'awdasdadwa@gmail.com', '$2y$10$YjSgWHHmeNN47bM9MiW/K.JvNTLOSMFpPMXK5NiY5ZdCVV5wRaYb2', 1, 'Phase 1', 'blk 7 lot 9', 'uploads/1769449179_id_', 'uploads/1769449179_proof_', 14.3548655, 120.9460555, 'approved', 2, '2026-01-26 17:39:39', '7667cea63a3edb9e1d6a577783a9a27bf0691f17256ee42896fade541ed0a099', '2026-02-05 12:47:19'),
-(35, 'Patrick Justin', '', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$SLh0iXkpJQBWMgYyK/obROwZTT1TfYIqt.gt1YisN8id.fM9ulG6O', 0, 'Phase 1', 'blk 7 lot 9', 'uploads/1770288743_id_', 'uploads/1770288743_proof_', 14.3548655, 120.9460555, 'approved', 2, '2026-02-05 10:52:23', NULL, NULL);
+(35, 'Patrick Justin', '', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$SLh0iXkpJQBWMgYyK/obROwZTT1TfYIqt.gt1YisN8id.fM9ulG6O', 0, 'Phase 1', 'blk 7 lot 9', 'uploads/1770288743_id_', 'uploads/1770288743_proof_', 14.3548655, 120.9460555, 'approved', 2, '2026-02-05 10:52:23', NULL, NULL),
+(36, 'Patrick Justin', '', 'Baculpo', '09916963390', 'dawdad@gmail.com', '$2y$10$AH3VAR8IHBlYhblcZtz.JOeVbGXj5yBYdpoGbyPzPHRB1LqykRrJW', 1, 'Phase 1', 'blk 7 lot 9', 'uploads/1770670503_id_images (1).png', 'uploads/1770670503_proof_images (2).png', 14.3546149, 120.9466088, 'pending', 2, '2026-02-09 20:55:12', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -287,7 +409,8 @@ INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_nam
 (28, 32, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
 (29, 33, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
 (30, 34, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
-(0, 35, 'Patrick Justin', '', 'Baculpo', 'Child');
+(0, 35, 'Patrick Justin', '', 'Baculpo', 'Child'),
+(0, 36, 'Patrick Justin', '', 'Baculpo', 'Caretaker');
 
 --
 -- Indexes for dumped tables
@@ -325,6 +448,55 @@ ALTER TABLE `announcement_recipients`
   ADD KEY `idx_ar_homeowner_id` (`homeowner_id`),
   ADD KEY `idx_ar_officer_id` (`officer_id`),
   ADD KEY `idx_ar_type` (`recipient_type`);
+
+--
+-- Indexes for table `finance_donations`
+--
+ALTER TABLE `finance_donations`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_phase_date` (`phase`,`donation_date`),
+  ADD KEY `fk_don_admin` (`created_by_admin_id`);
+
+--
+-- Indexes for table `finance_dues_settings`
+--
+ALTER TABLE `finance_dues_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_phase` (`phase`),
+  ADD KEY `fk_dues_admin` (`updated_by_admin_id`);
+
+--
+-- Indexes for table `finance_expenses`
+--
+ALTER TABLE `finance_expenses`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_phase_date` (`phase`,`expense_date`),
+  ADD KEY `fk_exp_admin` (`created_by_admin_id`);
+
+--
+-- Indexes for table `finance_opening_balance`
+--
+ALTER TABLE `finance_opening_balance`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_phase` (`phase`),
+  ADD KEY `fk_open_admin` (`updated_by_admin_id`);
+
+--
+-- Indexes for table `finance_payments`
+--
+ALTER TABLE `finance_payments`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_homeowner_month` (`homeowner_id`,`pay_year`,`pay_month`),
+  ADD KEY `idx_phase_date` (`phase`,`pay_year`,`pay_month`),
+  ADD KEY `fk_pay_admin` (`created_by_admin_id`);
+
+--
+-- Indexes for table `finance_report_requests`
+--
+ALTER TABLE `finance_report_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_phase_month` (`phase`,`report_year`,`report_month`),
+  ADD KEY `fk_rep_admin` (`requested_by_admin_id`);
 
 --
 -- Indexes for table `hoa_officers`
@@ -410,10 +582,46 @@ ALTER TABLE `announcement_recipients`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `finance_donations`
+--
+ALTER TABLE `finance_donations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `finance_dues_settings`
+--
+ALTER TABLE `finance_dues_settings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `finance_expenses`
+--
+ALTER TABLE `finance_expenses`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `finance_opening_balance`
+--
+ALTER TABLE `finance_opening_balance`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `finance_payments`
+--
+ALTER TABLE `finance_payments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `finance_report_requests`
+--
+ALTER TABLE `finance_report_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
 -- AUTO_INCREMENT for table `hoa_officers`
 --
 ALTER TABLE `hoa_officers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=253;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=338;
 
 --
 -- AUTO_INCREMENT for table `hoa_posts`
@@ -443,7 +651,7 @@ ALTER TABLE `hoa_post_shares`
 -- AUTO_INCREMENT for table `homeowners`
 --
 ALTER TABLE `homeowners`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
 
 --
 -- Constraints for dumped tables
@@ -468,6 +676,43 @@ ALTER TABLE `announcement_recipients`
   ADD CONSTRAINT `fk_ar_announcement` FOREIGN KEY (`announcement_id`) REFERENCES `announcements` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_ar_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_ar_officer` FOREIGN KEY (`officer_id`) REFERENCES `hoa_officers` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_donations`
+--
+ALTER TABLE `finance_donations`
+  ADD CONSTRAINT `fk_don_admin` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_dues_settings`
+--
+ALTER TABLE `finance_dues_settings`
+  ADD CONSTRAINT `fk_dues_admin` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_expenses`
+--
+ALTER TABLE `finance_expenses`
+  ADD CONSTRAINT `fk_exp_admin` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_opening_balance`
+--
+ALTER TABLE `finance_opening_balance`
+  ADD CONSTRAINT `fk_open_admin` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_payments`
+--
+ALTER TABLE `finance_payments`
+  ADD CONSTRAINT `fk_pay_admin` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_pay_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `finance_report_requests`
+--
+ALTER TABLE `finance_report_requests`
+  ADD CONSTRAINT `fk_rep_admin` FOREIGN KEY (`requested_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `hoa_posts`

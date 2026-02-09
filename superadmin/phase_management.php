@@ -1,15 +1,5 @@
 <?php
-// phase_management.php
 session_start();
-
-/**
- * OPTIONAL: restrict to superadmin only
- *
- * if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') {
- *   header("Location: ./authentication-login.html");
- *   exit;
- * }
- */
 
 // ===================== DB CONNECTION =====================
 $conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
@@ -94,18 +84,39 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       exit;
     }
 
+    // 1) Update officer assignment
     $stmt = $conn->prepare("
       INSERT INTO hoa_officers (phase, position, officer_name, officer_email, is_active)
       VALUES (?, ?, ?, ?, 1)
       ON DUPLICATE KEY UPDATE
         officer_name=VALUES(officer_name),
-        officer_email=VALUES(officer_email)
+        officer_email=VALUES(officer_email),
+        is_active=1
     ");
     $stmt->bind_param("ssss", $phase, $position, $name, $email);
     $ok = $stmt->execute();
     $stmt->close();
 
-    echo json_encode(['success' => $ok, 'message' => $ok ? 'Assigned successfully' : 'Assign failed']);
+    if (!$ok) {
+      echo json_encode(['success' => false, 'message' => 'Assign failed']);
+      exit;
+    }
+
+    // 2) IMPORTANT: If assigning President, also sync phase admin's full_name
+    // This makes dashboard top-right name readable + consistent with assigned President
+    if ($position === 'President') {
+      $stmt = $conn->prepare("
+        UPDATE admins
+        SET full_name=?
+        WHERE phase=? AND role='admin'
+        LIMIT 1
+      ");
+      $stmt->bind_param("ss", $name, $phase);
+      $stmt->execute();
+      $stmt->close();
+    }
+
+    echo json_encode(['success' => true, 'message' => 'Assigned successfully']);
     exit;
   }
 
@@ -136,13 +147,10 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
 // ===================== PAGE LOAD =====================
 $selectedPhase = $_GET['phase'] ?? 'Phase 1';
 if (!in_array($selectedPhase, ['Phase 1','Phase 2','Phase 3'], true)) $selectedPhase = 'Phase 1';
-
-// NOTE: you MUST add this column in DB. See SQL below.
 ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
 ?>
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -360,10 +368,6 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
   <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
 
   <script>
-    // ✅ IMPORTANT DB CHANGE REQUIRED:
-    // Run this once in phpMyAdmin:
-    // ALTER TABLE hoa_officers ADD COLUMN officer_email VARCHAR(255) NULL AFTER officer_name;
-
     const msgBox = document.getElementById('msgBox');
 
     function showMsg(type, text) {
@@ -473,7 +477,7 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
             showMsg('danger', res.message || 'Assign failed');
             return;
           }
-          showMsg('success', 'Officer assigned');
+          showMsg('success', res.message || 'Officer assigned');
           fetchPhase(phase);
 
           const modalInstance = bootstrap.Modal.getInstance(document.getElementById("assignModal"));

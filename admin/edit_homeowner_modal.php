@@ -28,10 +28,10 @@ function admin_can_access_homeowner(mysqli $conn, string $admin_role, string $ad
 
 function get_admin_phase_role(mysqli $conn): array {
     $admin_id = (int)($_SESSION['admin_id'] ?? 0);
-    $role = (string)($_SESSION['admin_role'] ?? '');
+    $role  = (string)($_SESSION['admin_role'] ?? '');
     $phase = (string)($_SESSION['admin_phase'] ?? '');
 
-    // If session doesn't have phase/role for some reason, try DB
+    // If session doesn't have phase/role, try DB
     if ($admin_id > 0 && ($role === '' || $phase === '')) {
         $stmt = $conn->prepare("SELECT role, phase FROM admins WHERE id=? LIMIT 1");
         $stmt->bind_param("i", $admin_id);
@@ -48,6 +48,19 @@ function json_out($arr){
     header('Content-Type: application/json');
     echo json_encode($arr);
     exit;
+}
+
+/**
+ * Safe dynamic bind_param helper.
+ * Usage: stmt_bind($stmt, "ii", [$a,$b]);
+ */
+function stmt_bind(mysqli_stmt $stmt, string $types, array $values): void {
+    $refs = [];
+    $refs[] = $types;
+    foreach ($values as $k => $v) {
+        $refs[] = &$values[$k];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $refs);
 }
 
 // ======================================================================
@@ -87,6 +100,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
 
     ob_start();
     ?>
+    <head>
+      
+    </head>
     <form id="editHomeownerForm" enctype="multipart/form-data">
       <input type="hidden" name="action" value="save_homeowner">
       <input type="hidden" name="id" value="<?= (int)$home['id'] ?>">
@@ -230,22 +246,21 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
             <?php endif; ?>
           </div>
 
-          <!-- Template row -->
           <template id="editMemberTpl">
             <div class="border rounded-3 p-3 mb-2 memberRow" style="background:#fff;">
               <input type="hidden" name="member_id[]" value="0">
               <div class="row g-2 align-items-end">
                 <div class="col-md-3">
                   <label class="form-label small text-muted">First</label>
-                  <input type="text" class="form-control" name="member_first_name[]" value="" required>
+                  <input type="text" class="form-control" name="member_first_name[]" required>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small text-muted">Middle</label>
-                  <input type="text" class="form-control" name="member_middle_name[]" value="">
+                  <input type="text" class="form-control" name="member_middle_name[]">
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small text-muted">Last</label>
-                  <input type="text" class="form-control" name="member_last_name[]" value="" required>
+                  <input type="text" class="form-control" name="member_last_name[]" required>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label small text-muted">Relation</label>
@@ -285,7 +300,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         json_out(['success'=>false,'message'=>'Not allowed']);
     }
 
-    // Read fields
     $first_name = trim($_POST['first_name'] ?? '');
     $middle_name = trim($_POST['middle_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
@@ -310,7 +324,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         $phase = $row['phase'] ?? $phase;
     }
 
-    // Email uniqueness check (homeowners)
+    // Email uniqueness check
     $stmt = $conn->prepare("SELECT id FROM homeowners WHERE email=? AND id<>? LIMIT 1");
     $stmt->bind_param("si", $email, $id);
     $stmt->execute();
@@ -327,17 +341,26 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     $valid_id_path = $cur['valid_id_path'] ?? '';
     $proof_path = $cur['proof_of_billing_path'] ?? '';
 
-    // Uploads optional
-    $uploadDir = "uploads/";
-    if(!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+    // ✅ FIXED UPLOAD PATH (store DB path as "uploads/...")
+    $fsUploadDir = __DIR__ . "/../uploads/";     // filesystem
+    $dbUploadDir = "uploads/";                  // db/web path
+    if(!is_dir($fsUploadDir)) mkdir($fsUploadDir, 0755, true);
 
     if (!empty($_FILES['valid_id']['name']) && is_uploaded_file($_FILES['valid_id']['tmp_name'])) {
-        $valid_id_path = $uploadDir . time() . "_id_" . preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['valid_id']['name']));
-        move_uploaded_file($_FILES['valid_id']['tmp_name'], $valid_id_path);
+        $safeName = preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['valid_id']['name']));
+        $dbPath = $dbUploadDir . time() . "_id_" . $safeName;
+        $fsPath = $fsUploadDir . basename($dbPath);
+        if (move_uploaded_file($_FILES['valid_id']['tmp_name'], $fsPath)) {
+            $valid_id_path = $dbPath;
+        }
     }
     if (!empty($_FILES['proof_of_billing']['name']) && is_uploaded_file($_FILES['proof_of_billing']['tmp_name'])) {
-        $proof_path = $uploadDir . time() . "_proof_" . preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['proof_of_billing']['name']));
-        move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proof_path);
+        $safeName = preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['proof_of_billing']['name']));
+        $dbPath = $dbUploadDir . time() . "_proof_" . $safeName;
+        $fsPath = $fsUploadDir . basename($dbPath);
+        if (move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $fsPath)) {
+            $proof_path = $dbPath;
+        }
     }
 
     // Update homeowner
@@ -374,9 +397,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     $ml = $_POST['member_last_name'] ?? [];
     $rel= $_POST['member_relation'] ?? [];
 
-    // Build set of keep IDs
     $keepIds = [];
-    for ($i=0; $i<count($member_id); $i++) {
+    $n = count($member_id);
+
+    for ($i=0; $i<$n; $i++) {
         $mid = (int)$member_id[$i];
         $fn = trim((string)($mf[$i] ?? ''));
         $mn = trim((string)($mm[$i] ?? ''));
@@ -386,7 +410,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         if ($fn==='' || $ln==='' || $re==='') continue;
 
         if ($mid > 0) {
-            // update existing (ensure belongs to homeowner)
             $stmt = $conn->prepare("
                 UPDATE household_members
                 SET first_name=?, middle_name=?, last_name=?, relation=?
@@ -398,7 +421,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
             $stmt->close();
             $keepIds[] = $mid;
         } else {
-            // insert new
             $stmt = $conn->prepare("
                 INSERT INTO household_members(homeowner_id, first_name, middle_name, last_name, relation)
                 VALUES(?,?,?,?,?)
@@ -411,22 +433,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         }
     }
 
-    // delete removed members (only those that belong to this homeowner)
+    // ✅ FIXED delete removed members (safe binding)
     if (count($keepIds) > 0) {
         $placeholders = implode(',', array_fill(0, count($keepIds), '?'));
-        $types = str_repeat('i', count($keepIds) + 1);
         $sql = "DELETE FROM household_members WHERE homeowner_id=? AND id NOT IN ($placeholders)";
         $stmt = $conn->prepare($sql);
 
-        $params = array_merge([$id], $keepIds);
-        $bind_names[] = $types;
-        foreach ($params as $k => $v) { $bind_names[] = &$params[$k]; }
-        call_user_func_array([$stmt, 'bind_param'], $bind_names);
+        $types = 'i' . str_repeat('i', count($keepIds));
+        $values = array_merge([$id], $keepIds);
 
+        stmt_bind($stmt, $types, $values);
         $stmt->execute();
         $stmt->close();
     } else {
-        // if no rows submitted, delete all members
         $stmt = $conn->prepare("DELETE FROM household_members WHERE homeowner_id=?");
         $stmt->bind_param("i",$id);
         $stmt->execute();

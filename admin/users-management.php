@@ -232,13 +232,21 @@
                 <span class="mtext">Announcement</span>
             </a>
         </li>
-                    <!-- NEW: Treasurer -->
-            <li>
-            <a href="treasurer.php" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-money-1"></span>
-                <span class="mtext">Treasurer</span>
-            </a>
-            </li>
+<!-- FINANCE (Dropdown) -->
+<li class="dropdown">
+  <a href="javascript:;" class="dropdown-toggle">
+    <span class="micon dw dw-money-1"></span>
+    <span class="mtext">Finance</span>
+  </a>
+  <ul class="submenu">
+    <li><a href="finance.php">Overview</a></li>
+    <li><a href="finance_dues.php">Monthly Dues</a></li>
+    <li><a href="finance_donations.php">Donations</a></li>
+    <li><a href="finance_expenses.php">Expenses</a></li>
+    <li><a href="finance_reports.php">Financial Reports</a></li>
+    <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+  </ul>
+</li>
         <!-- Settings (now pushed down) -->
         <li>
             <a href="#" class="dropdown-toggle no-arrow">
