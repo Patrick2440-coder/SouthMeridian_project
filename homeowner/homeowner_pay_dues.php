@@ -109,7 +109,7 @@ if (!empty($_SESSION['last_paymongo_sync'])) {
 if ($doSync) {
   $_SESSION['last_paymongo_sync'] = time();
 
-  $PAYMONGO_SECRET = getenv('PAYMONGO_SECRET_KEY') ?: 'sk_test_Rxb7X283U4N6dTvWTP4oE81y';
+  $PAYMONGO_SECRET = getenv('PAYMONGO_PUBLIC_KEY') ?: 'pk_test_XPpTJrGNHoL8HBvx7eAWMH3C';
 
   // Get all pending sessions for this homeowner + year
   $stmt = $conn->prepare("

@@ -74,7 +74,7 @@ $stmt->close();
 if ($monthlyDues <= 0) back_err("Monthly dues is not set yet. Please contact HOA.");
 
 // ---- PayMongo keys (SERVER SIDE ONLY) ----
-$PAYMONGO_SECRET = getenv('PAYMONGO_SECRET_KEY') ?: 'sk_test_Rxb7X283U4N6dTvWTP4oE81y';
+$PAYMONGO_SECRET = getenv('PAYMONGO_PUBLIC_KEY') ?: 'pk_test_XPpTJrGNHoL8HBvx7eAWMH3C';
 
 // Build absolute URLs (IMPORTANT: for live webhook + success redirect, use public URL not localhost)
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
