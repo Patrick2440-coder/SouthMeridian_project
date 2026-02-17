@@ -6,7 +6,9 @@ $conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
-function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+if (!function_exists('esc')) {
+  function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+}
 
 $POSITIONS = ["President", "Vice President", "Secretary", "Treasurer", "Auditor", "Board of Director"];
 
@@ -174,6 +176,7 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
     </div>
 
     <!-- Sidebar -->
+    <!-- Sidebar Start -->
     <aside class="left-sidebar">
       <div>
         <div class="brand-logo d-flex align-items-center justify-content-between">
@@ -193,18 +196,40 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
             </li>
 
             <li class="sidebar-item">
-              <a class="sidebar-link" href="./dashboard.html" aria-expanded="false">
+              <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
                 <i class="ti ti-layout-dashboard"></i>
                 <span class="hide-menu">Dashboard</span>
               </a>
             </li>
 
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./user_management.html" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">User Management</span>
-              </a>
-            </li>
+<!-- ✅ User Management Dropdown -->
+<li class="sidebar-item">
+  <a class="sidebar-link has-arrow collapsed"
+     href="#userMgmtMenu"
+     data-bs-toggle="collapse"
+     role="button"
+     aria-expanded="false"
+     aria-controls="userMgmtMenu">
+    <i class="ti ti-users"></i>
+    <span class="hide-menu">User Management</span>
+  </a>
+
+  <ul id="userMgmtMenu" class="collapse first-level">
+    <li class="sidebar-item">
+      <a href="./user_management.php" class="sidebar-link">
+        <i class="ti ti-home"></i>
+        <span class="hide-menu">Homeowners</span>
+      </a>
+    </li>
+
+    <li class="sidebar-item">
+      <a href="./phase_management.php" class="sidebar-link">
+        <i class="ti ti-shield-check"></i>
+        <span class="hide-menu">Officers</span>
+      </a>
+    </li>
+  </ul>
+</li>
 
             <li class="sidebar-item">
               <a class="sidebar-link" href="./voting.html" aria-expanded="false">
@@ -213,18 +238,19 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
               </a>
             </li>
 
+            <!-- ✅ ACTIVE: Announcements -->
             <li class="sidebar-item">
-              <a class="sidebar-link" href="./phase_management.php" aria-expanded="false">
-                <i class="ti ti-settings"></i>
-                <span class="hide-menu">Phase Management</span>
+              <a class="sidebar-link " href="./announcements.php" aria-expanded="false">
+                <i class="ti ti-bell"></i>
+                <span class="hide-menu">Announcements</span>
               </a>
             </li>
 
-          </ul>
-        </nav>
-      </div>
-    </aside>
 
+        <!-- End Sidebar navigation -->
+      </div>
+      <!-- End Sidebar scroll-->
+    </aside>
     <!-- Main -->
     <div class="body-wrapper">
       <header class="app-header">
@@ -485,6 +511,7 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
         }, 'json');
       });
     });
+    
   </script>
 </body>
 </html>

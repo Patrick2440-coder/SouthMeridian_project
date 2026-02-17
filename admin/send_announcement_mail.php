@@ -128,47 +128,6 @@ function send_announcement_mail(mysqli $conn, int $announcement_id, array $smtp)
               . "Start: {$start}" . ($end ? "  End: {$end}" : "") . "\n\n"
               . ($ann['message'] ?? "");
 
-    // 5) Send (INDIVIDUAL emails to avoid leaking addresses)
-    foreach ($recipients as $rec) {
-        $mail = new PHPMailer(true);
-
-        try {
-            // SMTP config
-            $mail->isSMTP();
-            $mail->Host       = $smtp['host'];
-            $mail->SMTPAuth   = true;
-            $mail->Username   = $smtp['username'];
-            $mail->Password   = $smtp['password'];
-            $mail->SMTPSecure = $smtp['encryption']; // PHPMailer::ENCRYPTION_SMTPS or PHPMailer::ENCRYPTION_STARTTLS
-            $mail->Port       = $smtp['port'];
-
-            $mail->CharSet = "UTF-8";
-
-            // Sender
-            $mail->setFrom($smtp['from_email'], $smtp['from_name']);
-
-            // Recipient
-            $mail->addAddress($rec['email'], $rec['name']);
-
-            // Subject & body
-            $mail->Subject = $subject;
-            $mail->isHTML(true);
-            $mail->Body    = $htmlBody;
-            $mail->AltBody = $textBody;
-
-            // Attachments
-            foreach ($attachments as $a) {
-                $mail->addAttachment($a['abs'], $a['name']);
-            }
-
-            $mail->send();
-            $result['sent']++;
-
-        } catch (Exception $e) {
-            $result['failed']++;
-            $result['errors'][] = "Failed to send to {$rec['email']}: " . $mail->ErrorInfo;
-        }
-    }
 
     $result['success'] = ($result['sent'] > 0);
     return $result;

@@ -207,79 +207,77 @@ if ($showMap) {
 		</div>
 	</div>
 
-	<div class="left-side-bar" style="background-color: var(--brand);">
-		<div class="brand-logo">
-			<a href="dashboard.php">
-				<img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-			</a>
-			<div class="close-sidebar" data-toggle="left-sidebar-close">
-				<i class="ion-close-round"></i>
-			</div>
-		</div>
+  <div class="left-side-bar" style="background-color: #077f46;">
+    <div class="brand-logo">
+      <a href="dashboard.php">
+        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
+        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
+      </a>
+      <div class="close-sidebar" data-toggle="left-sidebar-close">
+        <i class="ion-close-round"></i>
+      </div>
+    </div>
 
-		<div class="menu-block customscroll">
-			<div class="sidebar-menu">
-				<ul id="accordion-menu">
-					<li>
-						<a href="dashboard.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-house-1"></span>
-							<span class="mtext">Dashboard</span>
-						</a>
-					</li>
+    <div class="menu-block customscroll">
+      <div class="sidebar-menu">
+        <ul id="accordion-menu">
+          <li>
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
+              <span class="micon dw dw-house-1"></span>
+              <span class="mtext">Dashboard</span>
+            </a>
+          </li>
 
 					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active">
+						<a href="javascript:;" class="dropdown-toggle active ">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>
-						<ul class="submenu" style="display:block;">
-							<li><a href="ho_approval.php">Household Approval</a></li>
-							<li><a class="active" href="ho_register.php">Register Household</a></li>
+						<ul class="submenu">
+							<li><a  href="ho_approval.php">Household Approval</a></li>
+							<li><a href="ho_register.php">Register Household</a></li>
 							<li><a href="ho_approved.php">Approved Households</a></li>
 						</ul>
 					</li>
-
-					<li>
-						<a href="users-management.php" class="dropdown-toggle no-arrow">
+					<!-- ✅ USER MANAGEMENT DROPDOWN -->
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">User Management</span>
 						</a>
-					</li>
-
-					<li>
-						<a href="announcements.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-megaphone"></span>
-							<span class="mtext">Announcement</span>
-						</a>
-					</li>
-
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle">
-							<span class="micon dw dw-money-1"></span>
-							<span class="mtext">Finance</span>
-						</a>
 						<ul class="submenu">
-							<li><a href="finance.php">Overview</a></li>
-							<li><a href="finance_dues.php">Monthly Dues</a></li>
-							<li><a href="finance_donations.php">Donations</a></li>
-							<li><a href="finance_expenses.php">Expenses</a></li>
-							<li><a href="finance_reports.php">Financial Reports</a></li>
-							<li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+							<li>
+								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
+									Homeowners
+								</a>
+							</li>
+							<li>
+								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
+									Officers
+								</a>
+							</li>
 						</ul>
 					</li>
+          
+          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
 
-					<li>
-						<a href="settings.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-settings2"></span>
-							<span class="mtext">Settings</span>
-						</a>
-					</li>
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
+            <ul class="submenu">
+              <li><a href="finance.php">Overview</a></li>
+              <li><a href="finance_dues.php">Monthly Dues</a></li>
+              <li><a href="finance_donations.php">Donations</a></li>
+              <li><a href="finance_expenses.php">Expenses</a></li>
+              <li><a href="finance_reports.php">Financial Reports</a></li>
+              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+            </ul>
+          </li>
 
-				</ul>
-			</div>
-		</div>
-	</div>
-
+          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
 	<div class="mobile-menu-overlay"></div>
 
 	<div class="main-container">

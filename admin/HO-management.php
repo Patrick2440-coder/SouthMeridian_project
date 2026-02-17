@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 // ---------- Admin guard ----------
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
@@ -28,6 +29,15 @@ if ($conn->connect_error) {
 $conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+
+/**
+ * Phase prefix like User Management:
+ * Phase 1 => P1, Phase 2 => P2, Phase 3 => P3
+ */
+function phase_prefix(string $phase): string {
+    $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
+    return $n > 0 ? ('P'.$n) : 'P';
+}
 
 /**
  * Fix paths for uploads when page is inside /admin.
@@ -73,6 +83,7 @@ function get_admin_phase_role(mysqli $conn): array {
 function render_homeowner_profile_html(mysqli $conn, string $admin_role, string $admin_phase, int $id): string {
 
     // Fetch homeowner (respect role/phase)
+    // ✅ Include public_id if your DB has it (won’t break even if missing; SELECT * already gets it)
     if ($admin_role === 'superadmin') {
         $stmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? LIMIT 1");
         $stmt->bind_param("i", $id);
@@ -86,6 +97,15 @@ function render_homeowner_profile_html(mysqli $conn, string $admin_role, string 
 
     if (!$homeowner) {
         return '<div class="p-4"><div class="alert alert-danger mb-0">Homeowner not found or not allowed.</div></div>';
+    }
+
+    // ✅ Formatted Display ID (same as User Management)
+    // If you added homeowners.public_id => use it; else compute using phase + id.
+    $rowPhase   = (string)($homeowner['phase'] ?? '');
+    $prefix     = phase_prefix($rowPhase);
+    $displayId  = trim((string)($homeowner['public_id'] ?? ''));
+    if ($displayId === '') {
+        $displayId = $prefix . (int)$homeowner['id'];
     }
 
     // Members
@@ -170,7 +190,10 @@ function render_homeowner_profile_html(mysqli $conn, string $admin_role, string 
 
           <div class="profile-meta">
             <div>
-              <p class="name"><?= esc(trim(($homeowner['first_name'] ?? '').' '.($homeowner['middle_name'] ?? '').' '.($homeowner['last_name'] ?? ''))) ?></p>
+              <p class="name">
+                <?= esc(trim(($homeowner['first_name'] ?? '').' '.($homeowner['middle_name'] ?? '').' '.($homeowner['last_name'] ?? ''))) ?>
+                <span class="pill" style="margin-left:8px;">ID: <?= esc($displayId) ?></span>
+              </p>
               <p class="subline">
                 <?= esc($homeowner['phase'] ?? '') ?> • <?= esc($homeowner['house_lot_number'] ?? '') ?> •
                 <span class="pill <?= esc($badgeClass) ?>"><?= esc(ucfirst($status)) ?></span>
@@ -194,6 +217,10 @@ function render_homeowner_profile_html(mysqli $conn, string $admin_role, string 
             </div>
             <div class="cardx-body">
               <div class="kv">
+
+                <div class="k">Homeowner ID</div>
+                <div class="v"><?= esc($displayId) ?></div>
+
                 <div class="k">Full Name</div>
                 <div class="v"><?= esc(trim(($homeowner['first_name'] ?? '').' '.($homeowner['middle_name'] ?? '').' '.($homeowner['last_name'] ?? ''))) ?></div>
 

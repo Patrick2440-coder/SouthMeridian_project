@@ -257,65 +257,82 @@ $low_fund = $current_balance < 5000; // you can change threshold
 				<i class="ion-close-round"></i>
 			</div>
 		</div>
-	<div class="menu-block customscroll">
-   <div class="sidebar-menu">
-    <ul id="accordion-menu">
-        <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-house-1"></span>
-                <span class="mtext">Dashboard</span>
-            </a>
-        </li>
 
-        <li>
-            <a href="HO-management.php" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-user1"></span>
-                <span class="mtext">Homeowner Management</span>
-            </a>
-        </li>
+		<div class="menu-block customscroll">
+			<div class="sidebar-menu">
+				<ul id="accordion-menu">
+					<li>
+						<a href="dashboard.php" class="dropdown-toggle no-arrow">
+							<span class="micon dw dw-house-1"></span>
+							<span class="mtext">Dashboard</span>
+						</a>
+					</li>
 
-        <!-- NEW: User Management -->
-        <li>
-            <a href="users-management.php" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-user"></span>
-                <span class="mtext">User Management</span>
-            </a>
-        </li>
 
-        <!-- NEW: Announcement -->
-        <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-megaphone"></span>
-                <span class="mtext">Announcement</span>
-            </a>
-        </li>
-		<!-- FINANCE (Dropdown) -->
-<li class="dropdown">
-  <a href="javascript:;" class="dropdown-toggle">
-    <span class="micon dw dw-money-1"></span>
-    <span class="mtext">Finance</span>
-  </a>
-  <ul class="submenu">
-    <li><a href="finance.php">Overview</a></li>
-    <li><a href="finance_dues.php">Monthly Dues</a></li>
-    <li><a href="finance_donations.php">Donations</a></li>
-    <li><a href="finance_expenses.php">Expenses</a></li>
-    <li><a href="finance_reports.php">Financial Reports</a></li>
-    <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-  </ul>
-</li>
-        <!-- Settings (now pushed down) -->
-        <li>
-            <a href="#" class="dropdown-toggle no-arrow">
-                <span class="micon dw dw-settings2"></span>
-                <span class="mtext">Settings</span>
-            </a>
-        </li>
-    </ul>
-</div>
+					<li class="dropdown show">
+						<a href="javascript:;" class="dropdown-toggle active">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">Homeowner Management</span>
+						</a>
+						<ul class="submenu" >
+							<li><a  href="ho_approval.php">Household Approval</a></li>
+							<li><a href="ho_register.php">Register Household</a></li>
+							<li><a href="ho_approved.php">Approved Households</a></li>
+						</ul>
+					</li>
 
-</div>
+					<!-- ✅ USER MANAGEMENT DROPDOWN -->
+					<li class="dropdown <?= in_array($view, ['homeowners','officers'], true) ? 'active' : '' ?>">
+						<a href="javascript:;" class="dropdown-toggle">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">User Management</span>
+						</a>
+						<ul class="submenu" style="<?= in_array($view, ['homeowners','officers'], true) ? 'display:block;' : '' ?>">
+							<li>
+								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
+									<i class="dw dw-user-2 mr-2"></i> Homeowners
+								</a>
+							</li>
+							<li>
+								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
+									<i class="dw dw-shield1 mr-2"></i> Officers
+								</a>
+							</li>
+						</ul>
+					</li>
 
+					<li>
+						<a href="announcements.php" class="dropdown-toggle no-arrow">
+							<span class="micon dw dw-megaphone"></span>
+							<span class="mtext">Announcement</span>
+						</a>
+					</li>
+
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle">
+							<span class="micon dw dw-money-1"></span>
+							<span class="mtext">Finance</span>
+						</a>
+						<ul class="submenu">
+							<li><a href="finance.php">Overview</a></li>
+							<li><a href="finance_dues.php">Monthly Dues</a></li>
+							<li><a href="finance_donations.php">Donations</a></li>
+							<li><a href="finance_expenses.php">Expenses</a></li>
+							<li><a href="finance_reports.php">Financial Reports</a></li>
+							<li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+						</ul>
+					</li>
+
+					<li>
+						<a href="#" class="dropdown-toggle no-arrow">
+							<span class="micon dw dw-settings2"></span>
+							<span class="mtext">Settings</span>
+						</a>
+					</li>
+
+				</ul>
+			</div>
+		</div>
 	</div>
 
 <div class="main-container">

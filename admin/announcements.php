@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// ===================== ADMIN SESSION CHECK =====================
+if (!isset($_SESSION['user_id'])) {
+  header("Location: index.php");
+  exit;
+}
+
 // ===================== DB =====================
 $conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
@@ -9,22 +15,27 @@ $conn->set_charset("utf8mb4");
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 // ===================== ADMIN CONTEXT =====================
-$admin_id    = $_SESSION['user_id'] ?? null;
+$admin_id = (int)($_SESSION['user_id'] ?? 0);
 $admin_name  = $_SESSION['full_name'] ?? "HOA Admin";
 $admin_phase = $_SESSION['phase'] ?? "Superadmin";
 
-if ($admin_id) {
-  $stmt = $conn->prepare("SELECT phase FROM admins WHERE id=? LIMIT 1");
-  $stmt->bind_param("i", $admin_id);
-  $stmt->execute();
-  $res = $stmt->get_result();
-  if ($row = $res->fetch_assoc()) {
-    if (!empty($row['phase'])) $admin_phase = $row['phase'];
-  }
-  $stmt->close();
+// Validate admin from DB
+$stmt = $conn->prepare("SELECT full_name, email, phase, role FROM admins WHERE id=? LIMIT 1");
+$stmt->bind_param("i", $admin_id);
+$stmt->execute();
+$row = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$row) {
+  session_destroy();
+  header("Location: index.php");
+  exit;
 }
 
-$is_superadmin  = ($admin_phase === 'Superadmin');
+$admin_phase = $row['phase'] ?? $admin_phase;
+$admin_name  = $row['full_name'] ?: ($row['email'] ?? $admin_name);
+$is_superadmin = (($row['role'] ?? '') === 'superadmin' || $admin_phase === 'Superadmin');
+
 $allowed_phases = ['Phase 1','Phase 2','Phase 3'];
 
 // ✅ Determine fixed/selectable phase
@@ -69,39 +80,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'homeowners') {
   exit;
 }
 
-// ===================== AJAX: active officers by phase =====================
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'officers') {
-  header('Content-Type: application/json; charset=utf-8');
-
-  $phase = $is_superadmin ? ($_GET['phase'] ?? $ui_phase) : $ui_phase;
-  if (!in_array($phase, $allowed_phases, true)) $phase = 'Phase 1';
-
-  $stmt = $conn->prepare("
-    SELECT id, position, officer_name, officer_email, is_active
-    FROM hoa_officers
-    WHERE phase=? AND is_active=1
-    ORDER BY FIELD(position,'President','Vice President','Secretary','Treasurer','Auditor','Board of Director')
-  ");
-  $stmt->bind_param("s", $phase);
-  $stmt->execute();
-  $r = $stmt->get_result();
-
-  $out = [];
-  while($o = $r->fetch_assoc()){
-    $out[] = [
-      'id' => (int)$o['id'],
-      'position' => $o['position'],
-      'name' => $o['officer_name'] ?? '',
-      'email' => $o['officer_email'] ?? ''
-    ];
-  }
-  $stmt->close();
-
-  echo json_encode(['success'=>true,'items'=>$out, 'phase'=>$phase]);
-  exit;
-}
-
-// ===================== helper: bulk insert recipients =====================
+// ===================== helper: recipients inserts =====================
 function insert_homeowner_recipients(mysqli $conn, int $announcement_id, string $phase): void {
   $sel = $conn->prepare("
     SELECT id, first_name, middle_name, last_name, email
@@ -129,26 +108,31 @@ function insert_homeowner_recipients(mysqli $conn, int $announcement_id, string 
   $sel->close();
 }
 
-function insert_officer_recipients(mysqli $conn, int $announcement_id, string $phase): void {
+function insert_block_homeowner_recipients(mysqli $conn, int $announcement_id, string $phase, string $blockText): void {
+  // simple matching: house_lot_number contains blockText (case-insensitive)
+  $blockText = trim($blockText);
+  if ($blockText === '') return;
+
+  $like = "%".$blockText."%";
   $sel = $conn->prepare("
-    SELECT id, officer_name, officer_email
-    FROM hoa_officers
-    WHERE phase=? AND is_active=1
+    SELECT id, first_name, middle_name, last_name, email, house_lot_number
+    FROM homeowners
+    WHERE status='approved' AND phase=? AND LOWER(house_lot_number) LIKE LOWER(?)
   ");
-  $sel->bind_param("s", $phase);
+  $sel->bind_param("ss", $phase, $like);
   $sel->execute();
   $res = $sel->get_result();
 
   $ins = $conn->prepare("
-    INSERT INTO announcement_recipients (announcement_id, recipient_type, officer_id, recipient_name, recipient_email)
-    VALUES (?, 'officer', ?, ?, ?)
+    INSERT INTO announcement_recipients (announcement_id, recipient_type, homeowner_id, recipient_name, recipient_email)
+    VALUES (?, 'homeowner', ?, ?, ?)
   ");
 
-  while ($o = $res->fetch_assoc()) {
-    $oid = (int)$o['id'];
-    $nm = $o['officer_name'] ?? '';
-    $em = $o['officer_email'] ?? '';
-    $ins->bind_param("iiss", $announcement_id, $oid, $nm, $em);
+  while ($h = $res->fetch_assoc()) {
+    $hid = (int)$h['id'];
+    $full = trim($h['first_name'].' '.($h['middle_name'] ?? '').' '.$h['last_name']);
+    $email = $h['email'] ?? '';
+    $ins->bind_param("iiss", $announcement_id, $hid, $full, $email);
     $ins->execute();
   }
 
@@ -161,13 +145,11 @@ function ensure_dir(string $path): bool {
   if (is_dir($path)) return true;
   return @mkdir($path, 0775, true);
 }
-
 function sanitize_filename(string $name): string {
   $name = basename($name);
   $name = preg_replace('/[^a-zA-Z0-9._-]+/', '_', $name);
   return trim($name, '_');
 }
-
 function guess_mime(string $tmpPath): string {
   if (function_exists('finfo_open')) {
     $f = finfo_open(FILEINFO_MIME_TYPE);
@@ -185,6 +167,7 @@ $save_ok = null;
 $save_err = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement'])) {
+
   $title     = trim($_POST['title'] ?? '');
   $category  = $_POST['category'] ?? '';
   $audience  = $_POST['audience'] ?? '';
@@ -202,8 +185,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
   }
 
   $valid_categories = ['general','maintenance','meeting','emergency'];
-  $valid_audience   = ['all','block','selected','selected_officer','all_officers'];
+  $valid_audience   = ['all','selected','block'];
   $valid_priority   = ['normal','important','urgent'];
+
+  $selected_homeowners = $_POST['selected_homeowners'] ?? [];
 
   if ($title === '' || $message === '') $save_err = "Title and message are required.";
   else if (!in_array($category, $valid_categories, true)) $save_err = "Invalid category.";
@@ -211,15 +196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
   else if (!in_array($priority, $valid_priority, true)) $save_err = "Invalid priority.";
   else if (!$startDate) $save_err = "Start date is required.";
 
-  $selected_homeowners = $_POST['selected_homeowners'] ?? [];
-  $selected_officers   = $_POST['selected_officers'] ?? [];
-
   if ($save_err === '') {
     if ($audience === 'selected' && (!is_array($selected_homeowners) || count($selected_homeowners) === 0)) {
       $save_err = "Please select at least 1 homeowner.";
     }
-    if ($audience === 'selected_officer' && (!is_array($selected_officers) || count($selected_officers) === 0)) {
-      $save_err = "Please select at least 1 officer.";
+    if ($audience === 'block' && trim((string)$audience_value) === '') {
+      $save_err = "Please enter a block value (e.g. blk 7).";
     }
   }
 
@@ -246,16 +228,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
     );
 
     $ok = $stmt->execute();
-    $announcement_id = $stmt->insert_id;
+    $announcement_id = (int)$stmt->insert_id;
     $stmt->close();
 
-    if (!$ok) {
+    if (!$ok || $announcement_id <= 0) {
       $save_ok = false;
       $save_err = "Failed to save announcement.";
     } else {
 
-      // ✅ recipients
-      if ($audience === 'selected') {
+      // ✅ recipients for emails (and also can be used for selected visibility)
+      if ($audience === 'all') {
+        insert_homeowner_recipients($conn, $announcement_id, $phase_for_announcement);
+      } elseif ($audience === 'selected') {
         $ins = $conn->prepare("
           INSERT INTO announcement_recipients (announcement_id, recipient_type, homeowner_id, recipient_name, recipient_email)
           VALUES (?, 'homeowner', ?, ?, ?)
@@ -263,7 +247,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
 
         foreach ($selected_homeowners as $hid) {
           $hid = (int)$hid;
-          $q = $conn->prepare("SELECT first_name,middle_name,last_name,email FROM homeowners WHERE id=? LIMIT 1");
+
+          $q = $conn->prepare("SELECT first_name,middle_name,last_name,email FROM homeowners WHERE id=? AND status='approved' LIMIT 1");
           $q->bind_param("i", $hid);
           $q->execute();
           $rr = $q->get_result();
@@ -276,36 +261,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
           $q->close();
         }
         $ins->close();
-      }
-
-      if ($audience === 'selected_officer') {
-        $ins = $conn->prepare("
-          INSERT INTO announcement_recipients (announcement_id, recipient_type, officer_id, recipient_name, recipient_email)
-          VALUES (?, 'officer', ?, ?, ?)
-        ");
-        foreach ($selected_officers as $oid) {
-          $oid = (int)$oid;
-          $q = $conn->prepare("SELECT officer_name, officer_email FROM hoa_officers WHERE id=? LIMIT 1");
-          $q->bind_param("i", $oid);
-          $q->execute();
-          $rr = $q->get_result();
-          if ($o = $rr->fetch_assoc()) {
-            $nm = $o['officer_name'] ?? '';
-            $em = $o['officer_email'] ?? '';
-            $ins->bind_param("iiss", $announcement_id, $oid, $nm, $em);
-            $ins->execute();
-          }
-          $q->close();
-        }
-        $ins->close();
-      }
-
-      if ($audience === 'all') {
-        insert_homeowner_recipients($conn, $announcement_id, $phase_for_announcement);
-      }
-
-      if ($audience === 'all_officers') {
-        insert_officer_recipients($conn, $announcement_id, $phase_for_announcement);
+      } elseif ($audience === 'block') {
+        // For email recipients: only homeowners in block match
+        insert_block_homeowner_recipients($conn, $announcement_id, $phase_for_announcement, (string)$audience_value);
       }
 
       // ✅ attachments (multiple)
@@ -344,7 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
             if (@move_uploaded_file($tmp, $dest)) {
               $mime = guess_mime($dest);
               $relPath = "uploads/announcements/" . $stored;
-
               $insA->bind_param("issssi", $announcement_id, $safeOrig, $stored, $relPath, $mime, $size);
               $insA->execute();
             }
@@ -352,37 +309,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
           $insA->close();
         }
       }
-      // ======================================================
-// ✅ SEND ANNOUNCEMENT EMAILS (PHPMailer)
-// ======================================================
-require_once __DIR__ . "/send_announcement_mail.php";
 
-$smtp = [
-  'host'       => 'smtp.gmail.com',
-  'username'   => 'baculpopatrick2440@gmail.com',
-  'password'   => 'vxsx lmtv livx hgtl', // Gmail App Password
-  'port'       => 587,
-  'encryption' => PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS,
-  'from_email' => 'baculpopatrick2440@gmail.com',
-  'from_name'  => 'South Meridian HOA'
-];
+      // ✅ SEND EMAILS (optional, keeps your existing behavior)
+      require_once __DIR__ . "/send_announcement_mail.php";
 
-// send emails to ALL recipients already saved in DB
-$mailRes = send_announcement_mail(
-  $conn,
-  (int)$announcement_id,
-  $smtp
-);
+      $smtp = [
+        'host'       => 'smtp.gmail.com',
+        'username'   => 'baculpopatrick2440@gmail.com',
+        'password'   => 'vxsx lmtv livx hgtl',
+        'port'       => 587,
+        'encryption' => 'tls',
+        'from_email' => 'baculpopatrick2440@gmail.com',
+        'from_name'  => 'South Meridian HOA'
+      ];
 
-// do NOT rollback announcement if email fails
-if (!$mailRes['success']) {
-  $save_ok = false;
-  $save_err = "Announcement saved, but email sending failed: "
-            . implode(" | ", $mailRes['errors']);
-}
+      $mailRes = send_announcement_mail($conn, $announcement_id, $smtp);
 
-
-      if ($save_ok !== false) $save_ok = true;
+      if (!$mailRes['success']) {
+        $save_ok = false;
+        $save_err = "Announcement saved, but email sending failed: " . implode(" | ", $mailRes['errors']);
+      } else {
+        $save_ok = true;
+      }
     }
   } else {
     $save_ok = false;
@@ -403,8 +351,6 @@ if (!$mailRes['success']) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
-  <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
-  <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 
   <style>
@@ -419,7 +365,6 @@ if (!$mailRes['success']) {
 </head>
 <body>
 
-  <!-- ================= HEADER ================= -->
   <div class="header">
     <div class="header-left">
       <div class="menu-icon dw dw-menu"></div>
@@ -427,22 +372,6 @@ if (!$mailRes['success']) {
     </div>
 
     <div class="header-right">
-      <div class="user-notification">
-        <div class="dropdown">
-          <a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-            <i class="icon-copy dw dw-notification"></i>
-            <span class="badge notification-active"></span>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right">
-            <div class="notification-list mx-h-350 customscroll">
-              <ul>
-                <li><a href="#"><img src="vendors/images/img.jpg" alt=""><h3>System</h3><p>Announcement module ready.</p></a></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="user-info-dropdown">
         <div class="dropdown">
           <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
@@ -450,8 +379,6 @@ if (!$mailRes['success']) {
             <span class="user-name"><?= esc($admin_name) ?></span>
           </a>
           <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-            <a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
             <a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
         </div>
@@ -459,27 +386,6 @@ if (!$mailRes['success']) {
     </div>
   </div>
 
-  <!-- ================= RIGHT SIDEBAR ================= -->
-  <div class="right-sidebar">
-    <div class="sidebar-title">
-      <h3 class="weight-600 font-16 text-blue">
-        Layout Settings
-        <span class="btn-block font-weight-400 font-12">User Interface Settings</span>
-      </h3>
-      <div class="close-sidebar" data-toggle="right-sidebar-close">
-        <i class="icon-copy ion-close-round"></i>
-      </div>
-    </div>
-    <div class="right-sidebar-body customscroll">
-      <div class="right-sidebar-body-content">
-        <div class="reset-options pt-30 text-center">
-          <button class="btn btn-danger" id="reset-settings">Reset Settings</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ================= LEFT SIDEBAR ================= -->
   <div class="left-side-bar" style="background-color: #077f46;">
     <div class="brand-logo">
       <a href="dashboard.php">
@@ -501,59 +407,65 @@ if (!$mailRes['success']) {
             </a>
           </li>
 
-          <li>
-            <a href="HO-management.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-user1"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
+					<li class="dropdown show">
+						<a href="javascript:;" class="dropdown-toggle active ">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">Homeowner Management</span>
+						</a>
+						<ul class="submenu">
+							<li><a  href="ho_approval.php">Household Approval</a></li>
+							<li><a href="ho_register.php">Register Household</a></li>
+							<li><a href="ho_approved.php">Approved Households</a></li>
+						</ul>
+					</li>
+					<!-- ✅ USER MANAGEMENT DROPDOWN -->
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">User Management</span>
+						</a>
+						<ul class="submenu">
+							<li>
+								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
+									Homeowners
+								</a>
+							</li>
+							<li>
+								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
+									Officers
+								</a>
+							</li>
+						</ul>
+					</li>
+          
+          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
+
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
+            <ul class="submenu">
+              <li><a href="finance.php">Overview</a></li>
+              <li><a href="finance_dues.php">Monthly Dues</a></li>
+              <li><a href="finance_donations.php">Donations</a></li>
+              <li><a href="finance_expenses.php">Expenses</a></li>
+              <li><a href="finance_reports.php">Financial Reports</a></li>
+              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+            </ul>
           </li>
 
-          <li>
-            <a href="users-management.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow active">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-<!-- FINANCE (Dropdown) -->
-<li class="dropdown">
-  <a href="javascript:;" class="dropdown-toggle">
-    <span class="micon dw dw-money-1"></span>
-    <span class="mtext">Finance</span>
-  </a>
-  <ul class="submenu">
-    <li><a href="finance.php">Overview</a></li>
-    <li><a href="finance_dues.php">Monthly Dues</a></li>
-    <li><a href="finance_donations.php">Donations</a></li>
-    <li><a href="finance_expenses.php">Expenses</a></li>
-    <li><a href="finance_reports.php">Financial Reports</a></li>
-    <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-  </ul>
-</li>
-            <a href="#" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-settings2"></span>
-              <span class="mtext">Settings</span>
-            </a>
-          </li>
+          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
         </ul>
       </div>
     </div>
   </div>
 
+
   <div class="mobile-menu-overlay"></div>
 
-  <!-- ================= MAIN ================= -->
   <div class="main-container">
     <div class="pd-ltr-20">
 
       <?php if ($save_ok === true): ?>
-        <div class="alert alert-success">Announcement saved successfully. (Recipients + attachments saved too)</div>
+        <div class="alert alert-success">Announcement saved successfully.</div>
       <?php elseif ($save_ok === false): ?>
         <div class="alert alert-danger"><?= esc($save_err) ?></div>
       <?php endif; ?>
@@ -566,16 +478,15 @@ if (!$mailRes['success']) {
               <div class="card-header text-white">
                 <h5 class="mb-0 d-flex align-items-center">
                   <i class="dw dw-megaphone me-2"></i>
-                  Create Announcement
+                  Create Announcement (Feed Post)
                 </h5>
               </div>
 
               <div class="card-body">
-                <!-- ✅ enctype needed for file upload -->
                 <form id="announcementForm" method="POST" enctype="multipart/form-data">
                   <input type="hidden" name="save_announcement" value="1">
 
-                  <!-- ✅ STATIC PHASE -->
+                  <!-- PHASE -->
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Phase</label>
 
@@ -589,7 +500,6 @@ if (!$mailRes['success']) {
                     <?php else: ?>
                       <input type="hidden" id="phase_pick" name="phase_pick" value="<?= esc($ui_phase) ?>">
                       <input type="text" class="form-control" value="<?= esc($ui_phase) ?>" readonly>
-
                     <?php endif; ?>
                   </div>
 
@@ -609,23 +519,24 @@ if (!$mailRes['success']) {
                     </select>
                   </div>
 
+                  <!-- ✅ AUDIENCE CHOICE -->
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Target Audience</label>
                     <select id="audience" name="audience" class="form-control" required>
                       <option value="">Select audience</option>
-                      <option value="all">All Homeowners</option>
+                      <option value="all">All Homeowners (Phase)</option>
                       <option value="selected">Selected Homeowners</option>
-                      <option value="all_officers">All Officers</option>
-                      <option value="selected_officer">Selected Officers</option>
                     </select>
                   </div>
 
+                  <!-- BLOCK -->
                   <div id="blockBox" class="mb-3 picker-box">
-                    <label class="form-label fw-semibold">Block</label>
-                    <input type="text" class="form-control" name="block_value" placeholder="e.g. Block 7">
-                    <div class="small-muted mt-1">Note: block filtering is not implemented in DB yet.</div>
+                    <label class="form-label fw-semibold">Block (text match)</label>
+                    <input type="text" class="form-control" name="block_value" placeholder="e.g. blk 7">
+                    <div class="small-muted mt-1">We match inside house_lot_number (example: “blk 7 lot 8”).</div>
                   </div>
 
+                  <!-- SELECTED HOMEOWNERS -->
                   <div id="selectedHomeownersBox" class="mb-3 picker-box">
                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                       <label class="form-label fw-semibold mb-0">Select Approved Homeowners</label>
@@ -638,31 +549,16 @@ if (!$mailRes['success']) {
                     <div class="picker-list" id="homeownersList"></div>
                   </div>
 
-                  <div id="selectedOfficersBox" class="mb-3 picker-box">
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-                      <label class="form-label fw-semibold mb-0">Select Active Officers</label>
-                      <div class="searchbar">
-                        <input type="text" id="officerSearch" class="form-control" style="width:240px;" placeholder="Search name/email...">
-                        <button type="button" id="selectAllOfficers" class="btn btn-sm btn-outline-primary">Select All</button>
-                        <button type="button" id="clearOfficers" class="btn btn-sm btn-outline-secondary">Clear</button>
-                      </div>
-                    </div>
-                    <div class="picker-list" id="officersList"></div>
-                  </div>
-
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Announcement Message</label>
                     <textarea name="message" class="form-control" rows="5" placeholder="Write the announcement details here..." required></textarea>
                   </div>
 
-                  <!-- ✅ NEW: Attachments -->
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Attachments (files / pictures)</label>
                     <input type="file" name="attachments[]" class="form-control" multiple
                       accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar">
-                    <div class="small-muted mt-1">
-                      You can upload multiple files. Max 10MB each (you can change this in PHP code).
-                    </div>
+                    <div class="small-muted mt-1">Max 10MB each.</div>
                   </div>
 
                   <div class="row">
@@ -704,7 +600,6 @@ if (!$mailRes['success']) {
                 </form>
               </div>
 
-
             </div>
           </div>
         </div>
@@ -718,7 +613,6 @@ if (!$mailRes['success']) {
     </div>
   </div>
 
-  <!-- ================= JS ================= -->
   <script src="vendors/scripts/core.js"></script>
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
@@ -730,25 +624,18 @@ if (!$mailRes['success']) {
 
     const blockBox = document.getElementById('blockBox');
     const selectedHomeownersBox = document.getElementById('selectedHomeownersBox');
-    const selectedOfficersBox = document.getElementById('selectedOfficersBox');
 
     const homeownersList = document.getElementById('homeownersList');
-    const officersList = document.getElementById('officersList');
-
     const homeownerSearch = document.getElementById('homeownerSearch');
-    const officerSearch = document.getElementById('officerSearch');
 
     function showBox(el, on) { el.style.display = on ? 'block' : 'none'; }
 
     function updateAudienceUI() {
       const v = audience.value;
-
       showBox(blockBox, v === 'block');
       showBox(selectedHomeownersBox, v === 'selected');
-      showBox(selectedOfficersBox, v === 'selected_officer');
 
       if (v === 'selected') loadHomeowners();
-      if (v === 'selected_officer') loadOfficers();
     }
 
     async function loadHomeowners() {
@@ -772,27 +659,6 @@ if (!$mailRes['success']) {
       `).join('');
     }
 
-    async function loadOfficers() {
-      officersList.innerHTML = '<div class="small-muted">Loading active officers...</div>';
-      const phase = phasePick.value;
-
-      const res = await fetch(`announcements.php?ajax=officers&phase=${encodeURIComponent(phase)}`);
-      const data = await res.json();
-
-      if (!data.success) { officersList.innerHTML = '<div class="small-muted">Failed to load officers.</div>'; return; }
-      if (data.items.length === 0) { officersList.innerHTML = '<div class="small-muted">No active officers found for this phase.</div>'; return; }
-
-      officersList.innerHTML = data.items.map(o => `
-        <label class="picker-item">
-          <input type="checkbox" name="selected_officers[]" value="${o.id}">
-          <div>
-            <div><b>${escapeHtml(o.position)}:</b> ${escapeHtml(o.name || 'N/A')}</div>
-            <div class="small-muted">${escapeHtml(o.email || 'No email')}</div>
-          </div>
-        </label>
-      `).join('');
-    }
-
     function filterList(listEl, query) {
       const q = query.trim().toLowerCase();
       listEl.querySelectorAll('.picker-item').forEach(it => {
@@ -802,7 +668,6 @@ if (!$mailRes['success']) {
     }
 
     homeownerSearch?.addEventListener('input', () => filterList(homeownersList, homeownerSearch.value));
-    officerSearch?.addEventListener('input', () => filterList(officersList, officerSearch.value));
 
     document.getElementById('selectAllHomeowners')?.addEventListener('click', () => {
       homeownersList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
@@ -811,19 +676,11 @@ if (!$mailRes['success']) {
       homeownersList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
     });
 
-    document.getElementById('selectAllOfficers')?.addEventListener('click', () => {
-      officersList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
-    });
-    document.getElementById('clearOfficers')?.addEventListener('click', () => {
-      officersList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
-    });
-
     phasePick?.addEventListener('change', () => {
       if (audience.value === 'selected') loadHomeowners();
-      if (audience.value === 'selected_officer') loadOfficers();
     });
 
-    audience.addEventListener('change', updateAudienceUI);
+    audience?.addEventListener('change', updateAudienceUI);
 
     function escapeHtml(str){
       return String(str ?? '')

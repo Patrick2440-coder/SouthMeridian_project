@@ -51,7 +51,7 @@ if ($mustChange && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change
 }
 
 /**
- * Ensure feed_state exists (notifications)
+ * Ensure feed_state exists
  */
 $stmt = $conn->prepare("INSERT IGNORE INTO homeowner_feed_state (homeowner_id) VALUES (?)");
 $stmt->bind_param("i", $hid);
@@ -59,7 +59,7 @@ $stmt->execute();
 $stmt->close();
 
 /**
- * Handle AJAX actions
+ * AJAX actions (Announcement likes + comments + notifications)
  */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   header('Content-Type: application/json; charset=utf-8');
@@ -71,46 +71,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
   $action = (string)$_POST['action'];
 
-  if ($action === 'create_post') {
-    $content = trim((string)($_POST['content'] ?? ''));
-    if ($content === '') {
-      echo json_encode(['success'=>false,'message'=>'Post cannot be empty.']);
-      exit;
-    }
-    $stmt = $conn->prepare("INSERT INTO hoa_posts (homeowner_id, phase, content) VALUES (?,?,?)");
-    $stmt->bind_param("iss", $hid, $phase, $content);
-    $ok = $stmt->execute();
-    $stmt->close();
-    echo json_encode(['success'=>$ok,'message'=>$ok?'Posted!':'Failed to post.']);
-    exit;
-  }
+  // Like/unlike announcement
+  if ($action === 'toggle_like_ann') {
+    $ann_id = (int)($_POST['announcement_id'] ?? 0);
+    if ($ann_id <= 0) { echo json_encode(['success'=>false,'message'=>'Invalid announcement.']); exit; }
 
-  if ($action === 'toggle_like') {
-    $post_id = (int)($_POST['post_id'] ?? 0);
-    if ($post_id <= 0) { echo json_encode(['success'=>false,'message'=>'Invalid post.']); exit; }
-
-    $stmt = $conn->prepare("SELECT id FROM hoa_post_likes WHERE post_id=? AND homeowner_id=? LIMIT 1");
-    $stmt->bind_param("ii", $post_id, $hid);
+    $stmt = $conn->prepare("SELECT id FROM announcement_likes WHERE announcement_id=? AND homeowner_id=? LIMIT 1");
+    $stmt->bind_param("ii", $ann_id, $hid);
     $stmt->execute();
     $liked = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
     if ($liked) {
-      $stmt = $conn->prepare("DELETE FROM hoa_post_likes WHERE post_id=? AND homeowner_id=?");
-      $stmt->bind_param("ii", $post_id, $hid);
+      $stmt = $conn->prepare("DELETE FROM announcement_likes WHERE announcement_id=? AND homeowner_id=?");
+      $stmt->bind_param("ii", $ann_id, $hid);
       $ok = $stmt->execute();
       $stmt->close();
       $state = false;
     } else {
-      $stmt = $conn->prepare("INSERT IGNORE INTO hoa_post_likes (post_id, homeowner_id) VALUES (?,?)");
-      $stmt->bind_param("ii", $post_id, $hid);
+      $stmt = $conn->prepare("INSERT IGNORE INTO announcement_likes (announcement_id, homeowner_id) VALUES (?,?)");
+      $stmt->bind_param("ii", $ann_id, $hid);
       $ok = $stmt->execute();
       $stmt->close();
       $state = true;
     }
 
-    $stmt = $conn->prepare("SELECT COUNT(*) c FROM hoa_post_likes WHERE post_id=?");
-    $stmt->bind_param("i", $post_id);
+    $stmt = $conn->prepare("SELECT COUNT(*) c FROM announcement_likes WHERE announcement_id=?");
+    $stmt->bind_param("i", $ann_id);
     $stmt->execute();
     $cnt = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
     $stmt->close();
@@ -119,21 +106,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
   }
 
-  if ($action === 'add_comment') {
-    $post_id = (int)($_POST['post_id'] ?? 0);
+  // Add comment on announcement
+  if ($action === 'add_comment_ann') {
+    $ann_id = (int)($_POST['announcement_id'] ?? 0);
     $comment = trim((string)($_POST['comment'] ?? ''));
-    if ($post_id <= 0 || $comment === '') {
+    if ($ann_id <= 0 || $comment === '') {
       echo json_encode(['success'=>false,'message'=>'Comment cannot be empty.']);
       exit;
     }
 
-    $stmt = $conn->prepare("INSERT INTO hoa_post_comments (post_id, homeowner_id, comment) VALUES (?,?,?)");
-    $stmt->bind_param("iis", $post_id, $hid, $comment);
+    $stmt = $conn->prepare("INSERT INTO announcement_comments (announcement_id, homeowner_id, comment) VALUES (?,?,?)");
+    $stmt->bind_param("iis", $ann_id, $hid, $comment);
     $ok = $stmt->execute();
     $stmt->close();
 
-    $stmt = $conn->prepare("SELECT COUNT(*) c FROM hoa_post_comments WHERE post_id=?");
-    $stmt->bind_param("i", $post_id);
+    $stmt = $conn->prepare("SELECT COUNT(*) c FROM announcement_comments WHERE announcement_id=?");
+    $stmt->bind_param("i", $ann_id);
     $stmt->execute();
     $cc = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
     $stmt->close();
@@ -154,40 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
   }
 
-  /**
-   * SHARE (Facebook style)
-   */
-  if ($action === 'share_post_create') {
-    $post_id = (int)($_POST['post_id'] ?? 0);
-    $share_message = trim((string)($_POST['share_message'] ?? ''));
-
-    if ($post_id <= 0) { echo json_encode(['success'=>false,'message'=>'Invalid post.']); exit; }
-
-    $stmt = $conn->prepare("SELECT id FROM hoa_posts WHERE id=? AND phase=? LIMIT 1");
-    $stmt->bind_param("is", $post_id, $phase);
-    $stmt->execute();
-    $okPost = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    if (!$okPost) { echo json_encode(['success'=>false,'message'=>'Post not found.']); exit; }
-
-    $stmt = $conn->prepare("INSERT INTO hoa_posts (homeowner_id, phase, content, shared_post_id) VALUES (?,?,?,?)");
-    $stmt->bind_param("issi", $hid, $phase, $share_message, $post_id);
-    $ok = $stmt->execute();
-    $stmt->close();
-
-    $stmt = $conn->prepare("SELECT COUNT(*) c FROM hoa_posts WHERE shared_post_id=?");
-    $stmt->bind_param("i", $post_id);
-    $stmt->execute();
-    $sc = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
-    $stmt->close();
-
-    echo json_encode(['success'=>$ok,'message'=>$ok?'Shared!':'Failed to share.','share_count'=>$sc]);
-    exit;
-  }
-
-  /**
-   * Notifications: mark as seen
-   */
+  // Notifications: mark as seen
   if ($action === 'mark_seen') {
     $target = (string)($_POST['target'] ?? 'all');
 
@@ -233,26 +188,48 @@ $stmt->close();
 $lastAnnSeen = (string)$state['last_ann_seen'];
 $lastComSeen = (string)$state['last_comment_seen'];
 
+$houseLot = (string)($user['house_lot_number'] ?? '');
+
 /**
- * Announcements list (phase + superadmin, active)
+ * Announcement feed (filtered by audience)
  */
-$ann = [];
+$annFeed = [];
 $stmt = $conn->prepare("
-  SELECT a.id, a.title, a.message, a.category, a.priority, a.start_date, a.end_date, a.created_at
+  SELECT
+    a.id, a.title, a.message, a.category, a.priority, a.start_date, a.end_date, a.created_at,
+    a.audience, a.audience_value,
+
+    (SELECT COUNT(*) FROM announcement_likes al WHERE al.announcement_id=a.id) AS like_count,
+    (SELECT COUNT(*) FROM announcement_comments ac WHERE ac.announcement_id=a.id) AS comment_count,
+    (SELECT COUNT(*) FROM announcement_likes al2 WHERE al2.announcement_id=a.id AND al2.homeowner_id=?) AS i_liked
+
   FROM announcements a
-  WHERE (a.phase = ? OR a.phase = 'Superadmin')
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id = a.id
+   AND ar.recipient_type = 'homeowner'
+   AND ar.homeowner_id = ?
+
+  WHERE
+    (a.phase = ? OR a.phase = 'Superadmin')
     AND a.start_date <= CURDATE()
     AND (a.end_date IS NULL OR a.end_date >= CURDATE())
+    AND (
+      a.audience = 'all'
+      OR (a.audience = 'selected' AND ar.id IS NOT NULL)
+      OR (a.audience = 'block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
+
+  GROUP BY a.id
   ORDER BY
     FIELD(a.priority,'urgent','important','normal'),
     a.start_date DESC,
     a.created_at DESC
-  LIMIT 20
+  LIMIT 25
 ");
-$stmt->bind_param("s", $phase);
+$stmt->bind_param("iiss", $hid, $hid, $phase, $houseLot);
 $stmt->execute();
 $res = $stmt->get_result();
-while($r = $res->fetch_assoc()) $ann[] = $r;
+while($r = $res->fetch_assoc()) $annFeed[] = $r;
 $stmt->close();
 
 /**
@@ -261,26 +238,47 @@ $stmt->close();
 $stmt = $conn->prepare("
   SELECT COUNT(*) c
   FROM announcements a
-  WHERE (a.phase = ? OR a.phase='Superadmin')
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id = a.id
+   AND ar.recipient_type='homeowner'
+   AND ar.homeowner_id=?
+
+  WHERE
+    (a.phase = ? OR a.phase='Superadmin')
     AND a.created_at > ?
     AND a.start_date <= CURDATE()
     AND (a.end_date IS NULL OR a.end_date >= CURDATE())
+    AND (
+      a.audience='all'
+      OR (a.audience='selected' AND ar.id IS NOT NULL)
+      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
 ");
-$stmt->bind_param("ss", $phase, $lastAnnSeen);
+$stmt->bind_param("isss", $hid, $phase, $lastAnnSeen, $houseLot);
 $stmt->execute();
 $newAnnCount = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
 $stmt = $conn->prepare("
   SELECT COUNT(*) c
-  FROM hoa_post_comments c
-  JOIN hoa_posts p ON p.id = c.post_id
-  WHERE p.homeowner_id = ?
-    AND p.phase = ?
-    AND c.homeowner_id <> ?
-    AND c.created_at > ?
+  FROM announcement_comments ac
+  JOIN announcements a ON a.id = ac.announcement_id
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id=a.id
+   AND ar.recipient_type='homeowner'
+   AND ar.homeowner_id=?
+
+  WHERE
+    (a.phase = ? OR a.phase='Superadmin')
+    AND ac.created_at > ?
+    AND (
+      a.audience='all'
+      OR (a.audience='selected' AND ar.id IS NOT NULL)
+      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
+    AND ac.homeowner_id <> ?
 ");
-$stmt->bind_param("isis", $hid, $phase, $hid, $lastComSeen);
+$stmt->bind_param("isssi", $hid, $phase, $lastComSeen, $houseLot, $hid);
 $stmt->execute();
 $newComCount = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
@@ -294,41 +292,92 @@ $notifItems = [];
 
 // latest announcements since last seen
 $stmt = $conn->prepare("
-  SELECT id, title, created_at, 'announcement' AS kind
-  FROM announcements
-  WHERE (phase = ? OR phase='Superadmin')
-    AND created_at > ?
-    AND start_date <= CURDATE()
-    AND (end_date IS NULL OR end_date >= CURDATE())
-  ORDER BY created_at DESC
-  LIMIT 5
+  SELECT a.id, a.title, a.created_at, 'announcement' AS kind
+  FROM announcements a
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id=a.id
+   AND ar.recipient_type='homeowner'
+   AND ar.homeowner_id=?
+
+  WHERE
+    (a.phase = ? OR a.phase='Superadmin')
+    AND a.created_at > ?
+    AND a.start_date <= CURDATE()
+    AND (a.end_date IS NULL OR a.end_date >= CURDATE())
+    AND (
+      a.audience='all'
+      OR (a.audience='selected' AND ar.id IS NOT NULL)
+      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
+  GROUP BY a.id
+  ORDER BY a.created_at DESC
+  LIMIT 6
 ");
-$stmt->bind_param("ss", $phase, $lastAnnSeen);
+$stmt->bind_param("isss", $hid, $phase, $lastAnnSeen, $houseLot);
 $stmt->execute();
 $res = $stmt->get_result();
 while($r = $res->fetch_assoc()) $notifItems[] = $r;
 $stmt->close();
 
-// latest comments on your posts since last seen
+// latest comments since last seen
 $stmt = $conn->prepare("
-  SELECT c.id, c.created_at, 'comment' AS kind,
+  SELECT ac.id, ac.created_at, 'comment' AS kind,
          CONCAT(h.first_name,' ',h.last_name) AS actor_name,
-         LEFT(c.comment, 90) AS snippet
-  FROM hoa_post_comments c
-  JOIN hoa_posts p ON p.id = c.post_id
-  JOIN homeowners h ON h.id = c.homeowner_id
-  WHERE p.homeowner_id = ?
-    AND p.phase = ?
-    AND c.homeowner_id <> ?
-    AND c.created_at > ?
-  ORDER BY c.created_at DESC
-  LIMIT 5
+         LEFT(ac.comment, 90) AS snippet
+  FROM announcement_comments ac
+  JOIN announcements a ON a.id=ac.announcement_id
+  JOIN homeowners h ON h.id=ac.homeowner_id
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id=a.id
+   AND ar.recipient_type='homeowner'
+   AND ar.homeowner_id=?
+
+  WHERE
+    (a.phase = ? OR a.phase='Superadmin')
+    AND ac.created_at > ?
+    AND ac.homeowner_id <> ?
+    AND (
+      a.audience='all'
+      OR (a.audience='selected' AND ar.id IS NOT NULL)
+      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
+  ORDER BY ac.created_at DESC
+  LIMIT 6
 ");
-$stmt->bind_param("isis", $hid, $phase, $hid, $lastComSeen);
+$stmt->bind_param("issis", $hid, $phase, $lastComSeen, $hid, $houseLot);
+$stmt->close();
+// latest comments since last seen (FIXED)
+$stmt = $conn->prepare("
+  SELECT ac.id, ac.created_at, 'comment' AS kind,
+         CONCAT(h.first_name,' ',h.last_name) AS actor_name,
+         LEFT(ac.comment, 90) AS snippet
+  FROM announcement_comments ac
+  JOIN announcements a ON a.id=ac.announcement_id
+  JOIN homeowners h ON h.id=ac.homeowner_id
+  LEFT JOIN announcement_recipients ar
+    ON ar.announcement_id=a.id
+   AND ar.recipient_type='homeowner'
+   AND ar.homeowner_id=?
+
+  WHERE
+    (a.phase = ? OR a.phase='Superadmin')
+    AND ac.created_at > ?
+    AND ac.homeowner_id <> ?
+    AND (
+      a.audience='all'
+      OR (a.audience='selected' AND ar.id IS NOT NULL)
+      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> ''
+          AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
+    )
+  ORDER BY ac.created_at DESC
+  LIMIT 6
+");
+$stmt->bind_param("issis", $hid, $phase, $lastComSeen, $hid, $houseLot);
 $stmt->execute();
 $res = $stmt->get_result();
 while($r = $res->fetch_assoc()) $notifItems[] = $r;
 $stmt->close();
+
 
 usort($notifItems, function($a,$b){
   return strtotime($b['created_at']) <=> strtotime($a['created_at']);
@@ -336,60 +385,30 @@ usort($notifItems, function($a,$b){
 $notifItems = array_slice($notifItems, 0, 8);
 
 /**
- * FEED POSTS (same phase) with SHARE support
+ * COMMENTS for shown announcements (batch)
  */
-$posts = [];
-$stmt = $conn->prepare("
-  SELECT
-    p.id, p.homeowner_id, p.content, p.created_at, p.shared_post_id,
-    h.first_name, h.last_name, h.house_lot_number,
-
-    op.id AS orig_id, op.content AS orig_content, op.created_at AS orig_created_at,
-    oh.first_name AS orig_first_name, oh.last_name AS orig_last_name, oh.house_lot_number AS orig_house_lot,
-
-    (SELECT COUNT(*) FROM hoa_post_likes l WHERE l.post_id=p.id) AS like_count,
-    (SELECT COUNT(*) FROM hoa_post_comments c WHERE c.post_id=p.id) AS comment_count,
-    (SELECT COUNT(*) FROM hoa_posts sp WHERE sp.shared_post_id=p.id) AS share_count,
-    (SELECT COUNT(*) FROM hoa_post_likes l2 WHERE l2.post_id=p.id AND l2.homeowner_id=?) AS i_liked
-  FROM hoa_posts p
-  JOIN homeowners h ON h.id = p.homeowner_id
-  LEFT JOIN hoa_posts op ON op.id = p.shared_post_id
-  LEFT JOIN homeowners oh ON oh.id = op.homeowner_id
-  WHERE p.phase = ?
-  ORDER BY p.created_at DESC
-  LIMIT 25
-");
-$stmt->bind_param("is", $hid, $phase);
-$stmt->execute();
-$res = $stmt->get_result();
-while($r = $res->fetch_assoc()) $posts[] = $r;
-$stmt->close();
-
-/**
- * COMMENTS for shown posts (batch)
- */
-$commentsByPost = [];
-if (!empty($posts)) {
-  $ids = array_map(fn($p)=>(int)$p['id'], $posts);
+$commentsByAnn = [];
+if (!empty($annFeed)) {
+  $ids = array_map(fn($a)=>(int)$a['id'], $annFeed);
   $in  = implode(',', array_fill(0, count($ids), '?'));
   $types = str_repeat('i', count($ids));
 
   $sql = "
-    SELECT c.id, c.post_id, c.homeowner_id, c.comment, c.created_at,
+    SELECT ac.id, ac.announcement_id, ac.homeowner_id, ac.comment, ac.created_at,
            h.first_name, h.last_name
-    FROM hoa_post_comments c
-    JOIN homeowners h ON h.id=c.homeowner_id
-    WHERE c.post_id IN ($in)
-    ORDER BY c.created_at ASC
+    FROM announcement_comments ac
+    JOIN homeowners h ON h.id=ac.homeowner_id
+    WHERE ac.announcement_id IN ($in)
+    ORDER BY ac.created_at ASC
   ";
   $stmt = $conn->prepare($sql);
   $stmt->bind_param($types, ...$ids);
   $stmt->execute();
   $res = $stmt->get_result();
   while($r = $res->fetch_assoc()){
-    $pid = (int)$r['post_id'];
-    if (!isset($commentsByPost[$pid])) $commentsByPost[$pid] = [];
-    $commentsByPost[$pid][] = $r;
+    $aid = (int)$r['announcement_id'];
+    if (!isset($commentsByAnn[$aid])) $commentsByAnn[$aid] = [];
+    $commentsByAnn[$aid][] = $r;
   }
   $stmt->close();
 }
@@ -409,395 +428,13 @@ $lng = $user['longitude'];
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
 
-<style>
-:root{
-  --hoa-green:#2e8b57;
-  --hoa-green-dark:#256f46;
-  --fb-bg:#f0f2f5;
-  --card:#ffffff;
-  --border:#e5e7eb;
-  --muted:#6b7280;
-}
-body{ background:var(--fb-bg); }
 
-/* Navbar */
-.navbar{ border-bottom:4px solid var(--hoa-green); }
-.navbar-brand{ letter-spacing:.2px; }
-.container-xl{ max-width:1180px; }
 
-/* Cover Map */
-.fb-cover{
-  position:relative;
-  height:320px;
-  border-radius:18px;
-  overflow:hidden;
-  border:1px solid var(--border);
-  box-shadow:0 12px 28px rgba(0,0,0,.08);
-  background:#e9eef6;
-  isolation:isolate;
-}
-#coverMap{ position:absolute; inset:0; z-index:0; }
-.fb-cover::after{
-  content:"";
-  position:absolute; inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,.10), rgba(0,0,0,.45));
-  pointer-events:none;
-  z-index:2;
-}
-.cover-badge{
-  position:absolute;
-  left:16px; top:16px;
-  z-index:3;
-  display:flex; gap:10px; align-items:center;
-  background:rgba(255,255,255,.92);
-  border:1px solid rgba(255,255,255,.65);
-  backdrop-filter: blur(8px);
-  border-radius:999px;
-  padding:8px 12px;
-  font-weight:900;
-  color:#0f172a;
-}
-.cover-badge small{ font-weight:800; color:var(--muted); }
-
-/* Profile overlap */
-.fb-profile-row{ position:relative; margin-top:-64px; padding:0 10px; }
-.fb-profile-card{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:18px;
-  box-shadow:0 10px 24px rgba(0,0,0,.06);
-  padding:16px 18px;
-  display:flex;
-  gap:16px;
-  align-items:flex-end;
-}
-.fb-avatar{
-  width:128px;height:128px;border-radius:50%;
-  border:6px solid #fff;
-  background: linear-gradient(135deg, var(--hoa-green), #0bbf6a);
-  display:grid; place-items:center;
-  color:#fff;font-weight:900;font-size:40px;
-  box-shadow:0 10px 25px rgba(0,0,0,.18);
-  flex:0 0 auto;
-}
-.fb-name{ margin:0; font-size:24px; font-weight:900; line-height:1.1; }
-.fb-sub{ color:var(--muted); font-weight:800; margin:6px 0 0; }
-.fb-actions{ margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
-.pill{
-  display:inline-flex; align-items:center; gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  background:#f1f5f9;
-  border:1px solid var(--border);
-  font-weight:900;
-  font-size:13px;
-  color:#0f172a;
-}
-.btn-hoa{ background:var(--hoa-green); border:none; color:#fff; font-weight:900; }
-.btn-hoa:hover{ background:var(--hoa-green-dark); color:#fff; }
-
-/* Cards */
-.fb-card{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:18px;
-  box-shadow:0 10px 24px rgba(0,0,0,.06);
-  overflow:hidden;
-}
-.fb-card-h{ padding:14px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.fb-card-h h6{ margin:0; font-weight:900; color:var(--hoa-green); }
-.fb-card-b{ padding:14px 16px; }
-
-/* Post */
-.post{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:18px;
-  box-shadow:0 10px 24px rgba(0,0,0,.06);
-  overflow:hidden;
-}
-.post-h{ padding:14px 16px; display:flex; gap:12px; align-items:center; }
-.post-avatar{
-  width:44px;height:44px;border-radius:50%;
-  background: linear-gradient(135deg, var(--hoa-green), #0bbf6a);
-  color:#fff;font-weight:900;
-  display:grid;place-items:center;
-}
-.post-name{ font-weight:900; margin:0; }
-.post-meta{ font-size:12px; color:var(--muted); font-weight:800; }
-.post-b{ padding:0 16px 12px; }
-.post-content{ white-space:pre-wrap; font-weight:800; color:#0f172a; }
-
-/* Shared card */
-.shared-box{
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:#f8fafc;
-  padding:12px;
-  margin-top:10px;
-}
-.shared-title{ font-weight:900; font-size:13px; color:#0f172a; margin-bottom:6px; }
-.shared-meta{ font-size:12px; color:var(--muted); font-weight:800; margin-bottom:6px; }
-.shared-content{ white-space:pre-wrap; font-weight:800; color:#0f172a; }
-
-.post-stats{
-  padding:10px 16px;
-  border-top:1px solid var(--border);
-  border-bottom:1px solid var(--border);
-  display:flex; justify-content:space-between; align-items:center;
-  font-size:13px; color:var(--muted); font-weight:900;
-}
-.post-actions{ padding:8px; display:flex; gap:6px; }
-.action-btn{
-  flex:1; border:none; background:transparent;
-  padding:10px 8px; border-radius:12px;
-  font-weight:900; color:#334155;
-}
-.action-btn:hover{ background:#f1f5f9; }
-.action-btn.liked{ color:var(--hoa-green); }
-
-.comments{ padding:12px 16px 16px; }
-.fb-comment{ display:flex; gap:10px; margin-top:10px; }
-.fb-comment-avatar{
-  width:34px;height:34px;border-radius:50%;
-  background:#e2e8f0;
-  display:grid;place-items:center;
-  font-weight:900;color:#0f172a;
-}
-.fb-comment-bubble{
-  background:#f1f5f9;
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:10px 12px;
-  width:100%;
-}
-.fb-comment-name{ font-weight:900; font-size:13px; margin-bottom:2px; }
-.fb-comment-text{ font-weight:800; color:#0f172a; white-space:pre-wrap; }
-.comment-form{ display:flex; gap:10px; margin-top:12px; }
-.comment-input{
-  flex:1;
-  border:1px solid var(--border);
-  border-radius:999px;
-  padding:10px 14px;
-  outline:none;
-  font-weight:800;
-}
-.comment-input:focus{ border-color: rgba(46,139,87,.45); box-shadow:0 0 0 .2rem rgba(46,139,87,.12); }
-
-/* Composer */
-.composer-top{ display:flex; gap:12px; align-items:flex-start; }
-.mini-avatar{
-  width:44px;height:44px;border-radius:50%;
-  background: linear-gradient(135deg, var(--hoa-green), #0bbf6a);
-  color:#fff;font-weight:900;display:grid;place-items:center;
-}
-.composer-textarea{
-  width:100%;
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:12px;
-  resize:none;
-  outline:none;
-  font-weight:800;
-}
-.composer-textarea:focus{ border-color: rgba(46,139,87,.45); box-shadow:0 0 0 .2rem rgba(46,139,87,.15); }
-.composer-actions{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
-
-/* Notification bell */
-.notif-btn{
-  width:42px;height:42px;border-radius:999px;
-  display:inline-flex;align-items:center;justify-content:center;
-  border:1px solid var(--border);
-  background:#fff;
-}
-.notif-badge{
-  position:absolute;
-  top:2px; right:2px;
-  background:#dc2626;
-  color:#fff;
-  font-weight:900;
-  font-size:11px;
-  padding:3px 6px;
-  border-radius:999px;
-  border:2px solid #fff;
-}
-
-/* Password overlay */
-.lock-overlay{
-  position:fixed; inset:0;
-  background: rgba(0,0,0,.35);
-  z-index: 2000;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 16px;
-}
-.lock-modal{
-  width:100%;
-  max-width:520px;
-  border-radius: 18px;
-  overflow:hidden;
-  box-shadow: 0 20px 55px rgba(0,0,0,.35);
-}
-.lock-modal .head{
-  background: var(--hoa-green);
-  color:#fff;
-  padding: 14px 18px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-.lock-modal .body{ background:#fff; padding: 18px; }
-.lock-note{
-  background:#f1f8f4;
-  border: 1px solid #d7efe1;
-  border-radius: 12px;
-  padding: 12px;
-  color:#185c3a;
-}
-.blur-wrap{
-  filter: blur(6px);
-  transform: scale(1.01);
-  pointer-events: none;
-  user-select: none;
-}
-
-@media (max-width:768px){
-  .fb-cover{ height:250px; border-radius:14px; }
-  .fb-profile-card{ flex-direction:column; align-items:center; text-align:center; }
-  .fb-actions{ margin-left:0; justify-content:center; }
-}
-
-/* ===== Sidebar Layout (Fixed UI) ===== */
-.app-shell{
-  display:flex;
-  min-height: 100vh;
-}
-
-/* Sidebar */
-.sidebar{
-  width: 270px;
-  background: #ffffff;
-  border-right: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-  transition: width .2s ease, transform .2s ease;
-  z-index: 1200;
-}
-
-.sidebar .sb-head{
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.sidebar .sb-brand{
-  font-weight: 900;
-  color: var(--hoa-green);
-  letter-spacing: .2px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-
-.sidebar .sb-user{
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  display:flex;
-  gap:12px;
-  align-items:center;
-}
-
-.sidebar .sb-user .sb-avatar{
-  width:44px;height:44px;border-radius:50%;
-  background: linear-gradient(135deg, var(--hoa-green), #0bbf6a);
-  color:#fff; font-weight:900;
-  display:grid; place-items:center;
-  flex:0 0 auto;
-}
-
-.sidebar .sb-user .sb-name{
-  font-weight: 900;
-  margin:0;
-  line-height:1.1;
-}
-.sidebar .sb-user .sb-meta{
-  margin:2px 0 0;
-  font-size:12px;
-  color: var(--muted);
-  font-weight: 800;
-}
-
-.sidebar .sb-nav{
-  padding: 12px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.sb-link{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background:#fff;
-  text-decoration:none;
-  color:#0f172a;
-  font-weight: 900;
-  transition: background .15s ease, transform .05s ease;
-}
-.sb-link:hover{ background:#f8fafc; }
-.sb-link:active{ transform: scale(.99); }
-.sb-link i{ font-size: 18px; color: var(--hoa-green); }
-
-/* Main content */
-.main-area{
-  flex:1;
-  min-width: 0;
-  padding: 0;
-}
-
-/* Collapsed state (desktop) */
-body.sb-collapsed .sidebar{ width: 78px; }
-body.sb-collapsed .sidebar .sb-brand-text,
-body.sb-collapsed .sidebar .sb-user-text,
-body.sb-collapsed .sidebar .sb-link span{ display:none; }
-body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
-
-/* Backdrop for mobile */
-.sb-backdrop{
-  display:none;
-  position: fixed;
-  inset:0;
-  background: rgba(0,0,0,.35);
-  z-index: 1100;
-}
-
-/* Mobile off-canvas */
-@media (max-width: 991px){
-  .sidebar{
-    position: fixed;
-    left:0; top:0;
-    transform: translateX(-100%);
-    box-shadow: 0 20px 60px rgba(0,0,0,.25);
-  }
-  body.sb-open .sidebar{ transform: translateX(0); }
-  body.sb-open .sb-backdrop{ display:block; }
-}
-</style>
 </head>
 
 <body>
-
-<div class="sb-backdrop" id="sbBackdrop"></div>
 
 <div class="app-shell">
 
@@ -823,12 +460,8 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
         <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
       </a>
 
-      <a class="sb-link" href="#composer">
-        <i class="bi bi-pencil-square"></i> <span>Create Post</span>
-      </a>
-
-      <a class="sb-link" href="#announcements">
-        <i class="bi bi-megaphone-fill"></i> <span>Announcements</span>
+      <a class="sb-link" href="#feed">
+        <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
       </a>
 
       <a class="sb-link" href="homeowner_pay_dues.php">
@@ -846,20 +479,9 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
 
     <div class="<?= $mustChange ? 'blur-wrap' : '' ?>">
 
-      <!-- NAVBAR (FIXED UI) -->
+      <!-- NAVBAR -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container-xl">
-
-          <!-- Mobile sidebar open -->
-          <button class="btn btn-sm btn-outline-success me-2 d-lg-none" id="btnSidebar" type="button" title="Menu">
-            <i class="bi bi-list fs-5"></i>
-          </button>
-
-          <!-- Desktop collapse -->
-          <button class="btn btn-sm btn-outline-success me-2 d-none d-lg-inline" id="btnCollapse" type="button" title="Collapse sidebar">
-            <i class="bi bi-layout-sidebar-inset"></i>
-          </button>
-
           <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php">🏘 HOA Community</a>
 
           <div class="ms-auto d-flex align-items-center gap-3">
@@ -892,7 +514,7 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
                         </div>
                       <?php else: ?>
                         <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
-                          <div class="fw-bold"><i class="bi bi-chat-left-dots-fill me-1"></i> New comment on your post</div>
+                          <div class="fw-bold"><i class="bi bi-chat-left-dots-fill me-1"></i> New comment</div>
                           <div class="fw-semibold"><?= esc($n['actor_name'] ?? 'Someone') ?>:</div>
                           <div class="text-muted fw-semibold"><?= esc($n['snippet'] ?? '') ?><?= strlen($n['snippet'] ?? '')>=90 ? '…' : '' ?></div>
                           <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
@@ -936,7 +558,7 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
           <?php endif; ?>
         </div>
 
-        <!-- Profile overlap -->
+        <!-- Profile -->
         <div class="fb-profile-row">
           <div class="fb-profile-card">
             <div class="fb-avatar"><?= esc($initials) ?></div>
@@ -952,7 +574,7 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
 
             <div class="fb-actions">
               <span class="pill"><i class="bi bi-geo-alt-fill"></i> Cover = Map</span>
-              <a class="btn btn-hoa" href="#composer"><i class="bi bi-pencil-square me-1"></i> Post</a>
+              <a class="btn btn-hoa" href="#feed"><i class="bi bi-megaphone-fill me-1"></i> Feed</a>
             </div>
           </div>
         </div>
@@ -961,52 +583,25 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
 
           <!-- LEFT -->
           <div class="col-lg-4">
-            <div class="fb-card mb-4" id="announcements">
+            <div class="fb-card mb-4">
               <div class="fb-card-h">
-                <h6>📢 Announcements & Events</h6>
-                <span class="pill"><?= count($ann) ?> active</span>
+                <h6>🏠 Community</h6>
+                <span class="pill"><?= count($annFeed) ?> posts</span>
               </div>
-              <div class="fb-card-b">
-                <?php if (empty($ann)): ?>
-                  <div class="text-muted fw-semibold">No announcements right now.</div>
-                <?php else: ?>
-                  <div class="d-flex flex-column gap-3">
-                    <?php foreach($ann as $a): ?>
-                      <?php
-                        $prio = (string)$a['priority'];
-                        $prioIcon = $prio==='urgent' ? 'bi-exclamation-octagon-fill' : ($prio==='important' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill');
-                        $prioColor = $prio==='urgent' ? 'text-danger' : ($prio==='important' ? 'text-warning' : 'text-success');
-                      ?>
-                      <div class="p-3 rounded-4" style="background:#f8fafc;border:1px solid var(--border);">
-                        <div class="d-flex align-items-start justify-content-between gap-2">
-                          <div class="fw-black" style="font-weight:900;">
-                            <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
-                            <?= esc($a['title']) ?>
-                          </div>
-                          <span class="pill"><?= esc(ucfirst($a['category'])) ?></span>
-                        </div>
-                        <div class="text-muted fw-semibold mt-1" style="font-size:13px;">
-                          <?= esc(date('M d, Y', strtotime($a['start_date']))) ?>
-                          <?php if (!empty($a['end_date'])): ?>
-                            – <?= esc(date('M d, Y', strtotime($a['end_date']))) ?>
-                          <?php endif; ?>
-                        </div>
-                        <div class="mt-2" style="white-space:pre-wrap;font-weight:800;">
-                          <?= esc($a['message']) ?>
-                        </div>
-                      </div>
-                    <?php endforeach; ?>
-                  </div>
-                <?php endif; ?>
-              </div>
-            </div>
-
-            <div class="fb-card">
-              <div class="fb-card-h"><h6>🏠 Community</h6></div>
               <div class="fb-card-b">
                 <div class="d-flex flex-column gap-2">
                   <div class="pill">Phase: <?= esc($phase) ?></div>
                   <div class="pill">Subdivision: South Meridian Homes Salitran</div>
+                  <div class="pill">Lot: <?= esc($houseLot) ?></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="fb-card">
+              <div class="fb-card-h"><h6>ℹ️ Tip</h6></div>
+              <div class="fb-card-b">
+                <div class="text-muted fw-semibold">
+                  This feed shows official announcements. You can like and comment to interact with your HOA.
                 </div>
               </div>
             </div>
@@ -1015,82 +610,46 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
           <!-- RIGHT FEED -->
           <div class="col-lg-8">
 
-            <!-- Composer -->
-            <div class="post mb-4" id="composer">
-              <div class="post-h">
-                <div class="post-avatar"><?= esc($initials) ?></div>
-                <div>
-                  <div class="post-name"><?= esc($fullName) ?></div>
-                  <div class="post-meta">Post something to <?= esc($phase) ?> neighbors</div>
-                </div>
-              </div>
-              <div class="post-b">
-                <div class="composer-top">
-                  <div class="mini-avatar"><?= esc(substr($user['first_name'] ?? 'H',0,1)) ?></div>
-                  <textarea id="postContent" class="composer-textarea" rows="3" placeholder="What's happening in the neighborhood?"></textarea>
-                </div>
-                <div class="composer-actions">
-                  <div class="text-muted fw-semibold" style="font-size:13px;">
-                    Be respectful. Posts are visible to your phase only.
-                  </div>
-                  <button class="btn btn-hoa px-4" id="btnPost">
-                    <i class="bi bi-send me-1"></i> Post
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div class="d-flex flex-column gap-4" id="feed">
-              <?php if (empty($posts)): ?>
+              <?php if (empty($annFeed)): ?>
                 <div class="fb-card"><div class="fb-card-b">
-                  <div class="text-muted fw-semibold">No posts yet. Be the first to post in <?= esc($phase) ?>.</div>
+                  <div class="text-muted fw-semibold">No announcements visible to you right now.</div>
                 </div></div>
               <?php else: ?>
-                <?php foreach($posts as $p): ?>
+                <?php foreach($annFeed as $a): ?>
                   <?php
-                    $pid = (int)$p['id'];
-                    $author = trim(($p['first_name'] ?? '').' '.($p['last_name'] ?? ''));
-                    $authorInitial = strtoupper(substr((string)($p['first_name'] ?? 'H'),0,1));
-                    $iLiked = ((int)$p['i_liked'] > 0);
-                    $postLot = (string)($p['house_lot_number'] ?? '');
+                    $aid = (int)$a['id'];
+                    $iLiked = ((int)$a['i_liked'] > 0);
 
-                    $isShare = !empty($p['shared_post_id']) && !empty($p['orig_id']);
-                    $origAuthor = trim(($p['orig_first_name'] ?? '').' '.($p['orig_last_name'] ?? ''));
-                    $origLot    = (string)($p['orig_house_lot'] ?? '');
+                    $prio = (string)$a['priority'];
+                    $prioIcon = $prio==='urgent' ? 'bi-exclamation-octagon-fill' : ($prio==='important' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill');
+                    $prioColor = $prio==='urgent' ? 'text-danger' : ($prio==='important' ? 'text-warning' : 'text-success');
                   ?>
-                  <div class="post" data-post-id="<?= $pid ?>">
+                  <div class="post" data-ann-id="<?= $aid ?>">
                     <div class="post-h">
-                      <div class="post-avatar"><?= esc($authorInitial) ?></div>
-                      <div>
-                        <div class="post-name"><?= esc($author) ?></div>
+                      <div class="post-avatar">A</div>
+                      <div style="flex:1">
+                        <div class="post-name">
+                          <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
+                          <?= esc($a['title']) ?>
+                        </div>
                         <div class="post-meta">
-                          <?= esc($phase) ?> • <?= esc($postLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['created_at']))) ?>
-                          <?php if ($isShare): ?> • <span class="text-success">shared a post</span><?php endif; ?>
+                          <?= esc($a['category']) ?> • <?= esc($phase) ?> • <?= esc(date('M d, Y h:i A', strtotime($a['created_at']))) ?>
                         </div>
                       </div>
+                      <span class="badge-soft"><?= esc(strtoupper($a['audience'])) ?></span>
                     </div>
 
                     <div class="post-b">
-                      <?php if (trim((string)$p['content']) !== ''): ?>
-                        <div class="post-content"><?= esc($p['content']) ?></div>
-                      <?php endif; ?>
-
-                      <?php if ($isShare): ?>
-                        <div class="shared-box">
-                          <div class="shared-title"><i class="bi bi-reply-fill me-1"></i>Shared post</div>
-                          <div class="shared-meta"><?= esc($origAuthor) ?> • <?= esc($origLot) ?> • <?= esc(date('M d, Y h:i A', strtotime($p['orig_created_at']))) ?></div>
-                          <div class="shared-content"><?= esc($p['orig_content'] ?? '') ?></div>
-                        </div>
-                      <?php endif; ?>
+                      <div class="post-content"><?= esc($a['message']) ?></div>
                     </div>
 
                     <div class="post-stats">
                       <div>
-                        <span class="me-3"><i class="bi bi-hand-thumbs-up-fill me-1 text-success"></i><span class="like-count"><?= (int)$p['like_count'] ?></span></span>
-                        <span class="me-3"><i class="bi bi-chat-left-text-fill me-1"></i><span class="comment-count"><?= (int)$p['comment_count'] ?></span></span>
-                        <span><i class="bi bi-reply-fill me-1"></i><span class="share-count"><?= (int)$p['share_count'] ?></span></span>
+                        <span class="me-3"><i class="bi bi-hand-thumbs-up-fill me-1 text-success"></i><span class="like-count"><?= (int)$a['like_count'] ?></span></span>
+                        <span class="me-3"><i class="bi bi-chat-left-text-fill me-1"></i><span class="comment-count"><?= (int)$a['comment_count'] ?></span></span>
                       </div>
-                      <div class="text-muted fw-semibold">Neighbors</div>
+                      <div class="text-muted fw-semibold">Official</div>
                     </div>
 
                     <div class="post-actions">
@@ -1100,14 +659,11 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
                       <button class="action-btn btn-focus-comment">
                         <i class="bi bi-chat-left-text me-1"></i> Comment
                       </button>
-                      <button class="action-btn btn-share">
-                        <i class="bi bi-reply me-1"></i> Share
-                      </button>
                     </div>
 
                     <div class="comments">
                       <?php
-                        $clist = $commentsByPost[$pid] ?? [];
+                        $clist = $commentsByAnn[$aid] ?? [];
                         foreach($clist as $c):
                           $cName = trim(($c['first_name'] ?? '').' '.($c['last_name'] ?? ''));
                           $cInit = strtoupper(substr((string)($c['first_name'] ?? 'H'),0,1));
@@ -1135,8 +691,8 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
           </div>
         </div>
 
-      </div><!-- /container-xl -->
-    </div><!-- /blur-wrap -->
+      </div>
+    </div>
 
     <?php if ($mustChange): ?>
       <div class="lock-overlay">
@@ -1178,27 +734,6 @@ body.sb-collapsed .sidebar .sb-link{ justify-content:center; padding: 12px; }
       </div>
     <?php endif; ?>
 
-  </div><!-- /main-area -->
-</div><!-- /app-shell -->
-
-<!-- Share Modal -->
-<div class="modal fade" id="shareModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
-      <div class="modal-header">
-        <h5 class="modal-title fw-bold"><i class="bi bi-reply-fill me-1"></i> Share Post</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="text-muted fw-semibold mb-2">Add a message (optional):</div>
-        <textarea id="shareMessage" class="form-control" rows="3" placeholder="Say something about this..."></textarea>
-        <input type="hidden" id="sharePostId" value="0">
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-success" id="btnConfirmShare">Share</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1229,17 +764,6 @@ async function postJSON(action, payload){
   return await res.json();
 }
 
-// Create post
-document.getElementById('btnPost')?.addEventListener('click', async () => {
-  const ta = document.getElementById('postContent');
-  const content = (ta?.value || '').trim();
-  if (!content) return alert('Post cannot be empty.');
-
-  const r = await postJSON('create_post', { content });
-  if (!r.success) return alert(r.message || 'Failed to post.');
-  location.reload();
-});
-
 // Notification mark seen buttons
 document.getElementById('btnMarkAllSeen')?.addEventListener('click', async () => {
   const r = await postJSON('mark_seen', { target:'all' });
@@ -1254,39 +778,16 @@ document.getElementById('btnSeenCom')?.addEventListener('click', async () => {
   if (r.success) location.reload();
 });
 
-// Share modal control
-const shareModalEl = document.getElementById('shareModal');
-const shareModal = shareModalEl ? new bootstrap.Modal(shareModalEl) : null;
-
-document.getElementById('btnConfirmShare')?.addEventListener('click', async () => {
-  const postId = parseInt(document.getElementById('sharePostId').value || '0', 10);
-  const msg = (document.getElementById('shareMessage').value || '').trim();
-  if (!postId) return;
-
-  const btn = document.getElementById('btnConfirmShare');
-  btn.disabled = true;
-  btn.textContent = 'Sharing...';
-
-  const r = await postJSON('share_post_create', { post_id: postId, share_message: msg });
-
-  btn.disabled = false;
-  btn.textContent = 'Share';
-
-  if (!r.success) return alert(r.message || 'Share failed.');
-  shareModal?.hide();
-  location.reload();
-});
-
 // Feed actions
 document.getElementById('feed')?.addEventListener('click', async (e) => {
   const postEl = e.target.closest('.post');
   if (!postEl) return;
 
-  const postId = postEl.getAttribute('data-post-id');
+  const annId = postEl.getAttribute('data-ann-id');
 
   // Like
   if (e.target.closest('.btn-like')) {
-    const r = await postJSON('toggle_like', { post_id: postId });
+    const r = await postJSON('toggle_like_ann', { announcement_id: annId });
     if (!r.success) return alert(r.message || 'Failed.');
 
     const btn = postEl.querySelector('.btn-like');
@@ -1303,21 +804,13 @@ document.getElementById('feed')?.addEventListener('click', async (e) => {
     return;
   }
 
-  // Open share modal
-  if (e.target.closest('.btn-share')) {
-    document.getElementById('sharePostId').value = postId;
-    document.getElementById('shareMessage').value = '';
-    shareModal?.show();
-    return;
-  }
-
   // Send comment
   if (e.target.closest('.btn-comment-send')) {
     const input = postEl.querySelector('.comment-input');
     const text = (input?.value || '').trim();
     if (!text) return;
 
-    const r = await postJSON('add_comment', { post_id: postId, comment: text });
+    const r = await postJSON('add_comment_ann', { announcement_id: annId, comment: text });
     if (!r.success) return alert(r.message || 'Failed to comment.');
 
     const form = postEl.querySelector('.comment-form');
@@ -1327,46 +820,6 @@ document.getElementById('feed')?.addEventListener('click', async (e) => {
     return;
   }
 });
-</script>
-
-<script>
-(function sidebarInit(){
-  const btnSidebar  = document.getElementById('btnSidebar');   // mobile open
-  const btnCollapse = document.getElementById('btnCollapse');  // desktop collapse
-  const backdrop    = document.getElementById('sbBackdrop');
-
-  // restore collapsed state (desktop)
-  const collapsed = localStorage.getItem('sb_collapsed') === '1';
-  if (collapsed) document.body.classList.add('sb-collapsed');
-
-  function closeMobile(){ document.body.classList.remove('sb-open'); }
-  function toggleMobile(){ document.body.classList.toggle('sb-open'); }
-
-  // Mobile open/close
-  btnSidebar?.addEventListener('click', toggleMobile);
-  backdrop?.addEventListener('click', closeMobile);
-
-  // Desktop collapse toggle
-  btnCollapse?.addEventListener('click', () => {
-    document.body.classList.toggle('sb-collapsed');
-    localStorage.setItem('sb_collapsed', document.body.classList.contains('sb-collapsed') ? '1' : '0');
-  });
-
-  // Close mobile sidebar when clicking a link
-  document.querySelectorAll('.sidebar a.sb-link').forEach(a=>{
-    a.addEventListener('click', ()=> closeMobile());
-  });
-
-  // ESC closes mobile sidebar
-  document.addEventListener('keydown', (e)=>{
-    if (e.key === 'Escape') closeMobile();
-  });
-
-  // If screen resized to desktop, ensure mobile offcanvas is closed
-  window.addEventListener('resize', ()=>{
-    if (window.innerWidth >= 992) closeMobile();
-  });
-})();
 </script>
 
 </body>

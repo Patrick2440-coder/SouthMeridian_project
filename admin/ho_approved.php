@@ -14,12 +14,21 @@ $conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
+// ✅ prevent undefined $view in sidebar
+$view = $_GET['view'] ?? '';
+
+function phase_prefix(string $phase): string {
+  $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
+  return $n > 0 ? ('P'.$n) : 'P';
+}
+
 $admin_id = (int)$_SESSION['admin_id'];
-$stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=?");
+$stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=? LIMIT 1");
 $stmt->bind_param("i", $admin_id);
 $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
 $admin_phase = $admin['phase'] ?? '';
 $admin_role  = $admin['role'] ?? '';
 
@@ -80,6 +89,7 @@ $resultApproved = $sqlApproved->get_result();
 	</style>
 </head>
 
+
 <body>
 
 	<div class="header">
@@ -128,109 +138,69 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<div class="right-sidebar">
-		<div class="sidebar-title">
-			<h3 class="weight-600 font-16 text-blue">
-				Layout Settings
-				<span class="btn-block font-weight-400 font-12">User Interface Settings</span>
-			</h3>
-			<div class="close-sidebar" data-toggle="right-sidebar-close">
-				<i class="icon-copy ion-close-round"></i>
-			</div>
-		</div>
-		<div class="right-sidebar-body customscroll">
-			<div class="right-sidebar-body-content">
-				<h4 class="weight-600 font-18 pb-10">Header Background</h4>
-				<div class="sidebar-btn-group pb-30 mb-10">
-					<a href="javascript:void(0);" class="btn btn-outline-primary header-white active">White</a>
-					<a href="javascript:void(0);" class="btn btn-outline-primary header-dark">Dark</a>
-				</div>
+  <div class="left-side-bar" style="background-color: #077f46;">
+    <div class="brand-logo">
+      <a href="dashboard.php">
+        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
+        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
+      </a>
+      <div class="close-sidebar" data-toggle="left-sidebar-close">
+        <i class="ion-close-round"></i>
+      </div>
+    </div>
 
-				<h4 class="weight-600 font-18 pb-10">Sidebar Background</h4>
-				<div class="sidebar-btn-group pb-30 mb-10">
-					<a href="javascript:void(0);" class="btn btn-outline-primary sidebar-light ">White</a>
-					<a href="javascript:void(0);" class="btn btn-outline-primary sidebar-dark active">Dark</a>
-				</div>
-
-				<div class="reset-options pt-30 text-center">
-					<button class="btn btn-danger" id="reset-settings">Reset Settings</button>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="left-side-bar" style="background-color: var(--brand);">
-		<div class="brand-logo">
-			<a href="dashboard.php">
-				<img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-			</a>
-			<div class="close-sidebar" data-toggle="left-sidebar-close">
-				<i class="ion-close-round"></i>
-			</div>
-		</div>
-
-		<div class="menu-block customscroll">
-			<div class="sidebar-menu">
-				<ul id="accordion-menu">
-					<li>
-						<a href="dashboard.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-house-1"></span>
-							<span class="mtext">Dashboard</span>
-						</a>
-					</li>
+    <div class="menu-block customscroll">
+      <div class="sidebar-menu">
+        <ul id="accordion-menu">
+          <li>
+            <a href="dashboard.php" class="dropdown-toggle no-arrow">
+              <span class="micon dw dw-house-1"></span>
+              <span class="mtext">Dashboard</span>
+            </a>
+          </li>
 
 					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active">
+						<a href="javascript:;" class="dropdown-toggle active ">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>
-						<ul class="submenu" style="display:block;">
+						<ul class="submenu">
 							<li><a href="ho_approval.php">Household Approval</a></li>
 							<li><a href="ho_register.php">Register Household</a></li>
-							<li><a class="active" href="ho_approved.php">Approved Households</a></li>
+							<li><a href="ho_approved.php">Approved Households</a></li>
 						</ul>
-					</li>
-
-					<li>
-						<a href="users-management.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">User Management</span>
-						</a>
-					</li>
-
-					<li>
-						<a href="announcements.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-megaphone"></span>
-							<span class="mtext">Announcement</span>
-						</a>
 					</li>
 
 					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle">
-							<span class="micon dw dw-money-1"></span>
-							<span class="mtext">Finance</span>
+						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">User Management</span>
 						</a>
 						<ul class="submenu">
-							<li><a href="finance.php">Overview</a></li>
-							<li><a href="finance_dues.php">Monthly Dues</a></li>
-							<li><a href="finance_donations.php">Donations</a></li>
-							<li><a href="finance_expenses.php">Expenses</a></li>
-							<li><a href="finance_reports.php">Financial Reports</a></li>
-							<li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+							<li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
+							<li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
 						</ul>
 					</li>
 
-					<li>
-						<a href="settings.php" class="dropdown-toggle no-arrow">
-							<span class="micon dw dw-settings2"></span>
-							<span class="mtext">Settings</span>
-						</a>
-					</li>
+          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
 
-				</ul>
-			</div>
-		</div>
-	</div>
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
+            <ul class="submenu">
+              <li><a href="finance.php">Overview</a></li>
+              <li><a href="finance_dues.php">Monthly Dues</a></li>
+              <li><a href="finance_donations.php">Donations</a></li>
+              <li><a href="finance_expenses.php">Expenses</a></li>
+              <li><a href="finance_reports.php">Financial Reports</a></li>
+              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+            </ul>
+          </li>
+
+          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
 	<div class="mobile-menu-overlay"></div>
 
@@ -258,8 +228,13 @@ $resultApproved = $sqlApproved->get_result();
 						</thead>
 						<tbody>
 							<?php while($row = $resultApproved->fetch_assoc()): ?>
+								<?php
+									$rowPhase = (string)($row['phase'] ?? $admin_phase);
+									$prefix = phase_prefix($rowPhase);
+									$displayId = $prefix . (int)$row['id']; // ✅ SAME FORMAT AS USER MANAGEMENT
+								?>
 								<tr>
-									<td><?= (int)$row['id'] ?></td>
+									<td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
 									<td><?= esc(trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''))) ?></td>
 									<td><?= esc(trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''))) ?></td>
 									<td><span class="badge badge-success">Approved</span></td>
@@ -284,7 +259,7 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<!-- ================= VIEW HOMEOWNER MODAL ================= -->
+	<!-- VIEW MODAL -->
 	<div class="modal fade" id="viewHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
 			<div class="modal-content" style="border-radius: 14px; overflow: hidden;">
@@ -292,7 +267,6 @@ $resultApproved = $sqlApproved->get_result();
 					<h5 class="modal-title fw-bold">Homeowner Profile</h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 				</div>
-
 				<div class="modal-body p-0 position-relative" style="background:#f4f6fb; min-height: 80vh;">
 					<div id="viewHomeownerContent"></div>
 				</div>
@@ -300,7 +274,7 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<!-- ================= EDIT HOMEOWNER MODAL ================= -->
+	<!-- EDIT MODAL -->
 	<div class="modal fade" id="editHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
 			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
@@ -321,7 +295,7 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<!-- ================= TOAST ================= -->
+	<!-- TOAST -->
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="d-flex">
@@ -351,7 +325,7 @@ $resultApproved = $sqlApproved->get_result();
 			const msgEl   = document.getElementById('appToastMsg');
 			msgEl.textContent = message;
 
-			toastEl.classList.remove('text-bg-success','text-bg-danger','text-bg-warning','text-bg-info','text-bg-dark');
+			toastEl.classList.remove('text-bg-success','text-bg-danger');
 			toastEl.classList.add(type==='success' ? 'text-bg-success' : 'text-bg-danger');
 
 			bootstrap.Toast.getOrCreateInstance(toastEl,{delay:2800}).show();
@@ -362,7 +336,7 @@ $resultApproved = $sqlApproved->get_result();
 				$('#approvedTable').DataTable({ responsive:true, columnDefs:[{orderable:false, targets:4}] });
 			}
 
-			// ---------- View Homeowner (AJAX -> HO-management.php) ----------
+			// VIEW modal
 			const modalEl = document.getElementById('viewHomeownerModal');
 			const content = document.getElementById('viewHomeownerContent');
 			const modal = new bootstrap.Modal(modalEl, { backdrop:'static', keyboard:true });
@@ -405,53 +379,136 @@ $resultApproved = $sqlApproved->get_result();
 				content.innerHTML = '';
 			});
 
-			// ---------- Edit modal (kept as-is, uses your edit_homeowner_modal.php) ----------
+			// EDIT modal load + map init (kept your working version)
 			const editModalEl = document.getElementById('editHomeownerModal');
 			const editContent = document.getElementById('editHomeownerContent');
-			const saveEditBtn = document.getElementById('saveEditHomeownerBtn');
 			const editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
+
+			let editMapInstance = null;
+			let editMarker = null;
+			let pendingInit = false;
+
+			function destroyEditMap(){
+				if (editMapInstance) {
+					editMapInstance.remove();
+					editMapInstance = null;
+					editMarker = null;
+				}
+			}
+
+			function initEditMap(){
+				const mapEl = document.getElementById('editMap');
+				if (!mapEl) return;
+
+				let lat = parseFloat(mapEl.dataset.lat || '');
+				let lng = parseFloat(mapEl.dataset.lng || '');
+				if (!isFinite(lat) || !isFinite(lng)) { lat = 14.5995; lng = 120.9842; }
+
+				destroyEditMap();
+
+				editMapInstance = L.map(mapEl, { zoomControl:true }).setView([lat, lng], 18);
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					attribution: '&copy; OpenStreetMap contributors'
+				}).addTo(editMapInstance);
+
+				editMarker = L.marker([lat, lng], { draggable:true }).addTo(editMapInstance);
+
+				function syncInputs(p){
+					$('#edit_lat').val(p.lat.toFixed(6));
+					$('#edit_lng').val(p.lng.toFixed(6));
+				}
+
+				syncInputs({lat, lng});
+				editMarker.on('dragend', function(){ syncInputs(editMarker.getLatLng()); });
+
+				$(document).off('click', '#btnCenterMarker').on('click', '#btnCenterMarker', function(){
+					if (!editMapInstance || !editMarker) return;
+					editMapInstance.setView(editMarker.getLatLng(), editMapInstance.getZoom());
+				});
+
+				$(document).off('click', '#btnUseCurrentMarker').on('click', '#btnUseCurrentMarker', function(){
+					if (!editMarker) return;
+					syncInputs(editMarker.getLatLng());
+				});
+
+				setTimeout(() => { if (editMapInstance) editMapInstance.invalidateSize(true); }, 250);
+			}
 
 			$(document).on('click','.editHomeowner', function(e){
 				e.preventDefault();
 				const id = $(this).data('id');
 				if (!id) return;
 
+				pendingInit = true;
 				editContent.innerHTML = `<div class="p-3 text-muted fw-semibold">Loading edit form...</div>`;
 				editModal.show();
 
 				$.get('edit_homeowner_modal.php', { ajax:'edit_homeowner', id:id, _:Date.now() })
-					.done(function(html){ editContent.innerHTML = html; })
+					.done(function(html){
+						editContent.innerHTML = html;
+						if (editModalEl.classList.contains('show')) {
+							initEditMap();
+							pendingInit = false;
+						}
+					})
 					.fail(function(xhr){
+						pendingInit = false;
 						editContent.innerHTML = `<div class="alert alert-danger">Failed to load. HTTP ${xhr.status}</div>`;
 					});
 			});
 
-			if (saveEditBtn){
-				saveEditBtn.addEventListener('click', function(){
-					const form = document.getElementById('editHomeownerForm');
-					if (!form) return;
-
-					const fd = new FormData(form);
-
-					saveEditBtn.disabled = true;
-					const old = saveEditBtn.textContent;
-					saveEditBtn.textContent = "Saving...";
-
-					fetch('edit_homeowner_modal.php', { method:'POST', body:fd })
-						.then(r => r.json())
-						.then(res => {
-							if (!res.success) { showToast(res.message || "Update failed.", "error"); return; }
-							showToast(res.message || "Updated.", "success");
-							editModal.hide();
-							setTimeout(()=>location.reload(), 500);
-						})
-						.catch(err => { console.error(err); showToast("Request failed.", "error"); })
-						.finally(()=>{ saveEditBtn.disabled=false; saveEditBtn.textContent=old; });
-				});
-			}
+			editModalEl.addEventListener('shown.bs.modal', function(){
+				if (pendingInit) {
+					initEditMap();
+					pendingInit = false;
+				}
+			});
 
 			editModalEl.addEventListener('hidden.bs.modal', function(){
+				destroyEditMap();
 				editContent.innerHTML = '';
+				pendingInit = false;
+			});
+
+			// ✅ SAVE CHANGES
+			document.addEventListener('click', async function(e){
+				if (!e.target.closest('#saveEditHomeownerBtn')) return;
+
+				const btn = e.target.closest('#saveEditHomeownerBtn');
+				const form = document.getElementById('editHomeownerForm');
+				if (!form) { showToast("Edit form not found.", "error"); return; }
+
+				const fd = new FormData(form);
+
+				btn.disabled = true;
+				const oldHTML = btn.innerHTML;
+				btn.innerHTML = 'Saving...';
+
+				try {
+					const resp = await fetch('edit_homeowner_modal.php', { method: 'POST', body: fd });
+					const text = await resp.text();
+
+					let data;
+					try { data = JSON.parse(text); }
+					catch(err){
+						console.error("Not JSON response:", text);
+						showToast("Save failed. Server returned non-JSON.", "error");
+						return;
+					}
+
+					if (!data.success) { showToast(data.message || "Update failed.", "error"); return; }
+
+					showToast(data.message || "Updated!", "success");
+					editModal.hide();
+					setTimeout(()=>location.reload(), 400);
+
+				} catch (err) {
+					console.error(err);
+					showToast("Request failed.", "error");
+				} finally {
+					btn.disabled = false;
+					btn.innerHTML = oldHTML;
+				}
 			});
 		});
 	</script>

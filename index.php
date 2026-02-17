@@ -6,6 +6,24 @@ $conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+// ===================== PUBLIC ANNOUNCEMENTS (Superadmin) =====================
+$public_anns = [];
+$stmt = $conn->prepare("
+  SELECT id, title, category, message, start_date, end_date, priority, created_at
+  FROM announcements
+  WHERE phase='Superadmin'
+    AND start_date <= CURDATE()
+    AND (end_date IS NULL OR end_date >= CURDATE())
+  ORDER BY
+    FIELD(priority,'urgent','important','normal'),
+    created_at DESC
+  LIMIT 6
+");
+$stmt->execute();
+$res = $stmt->get_result();
+while ($row = $res->fetch_assoc()) $public_anns[] = $row;
+$stmt->close();
+
 // ===================== AJAX LOGIN PROCESS =====================
 if (isset($_POST['action']) && $_POST['action'] === 'login') {
     $email    = trim($_POST['email'] ?? '');
@@ -166,9 +184,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
       <nav id="navmenu" class="navmenu">
         <ul>
-          <li><a href="index.php" class="active">Home</a></li>
+          <li><a href="#hero">Home</a></li>
           <li><a href="#about">About</a></li>
-          <li><a href="announcements">Announcements</a></li>
+          <li><a href="#announcements">Announcements</a></li>
 
            <a href="#" data-bs-toggle="modal" data-bs-target="#loginModal" style="color: #077f46;background-color: white;border-radius: 50px;width: 100px;height: 50px;">
            &nbsp;&nbsp; Log in
@@ -269,6 +287,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
               </div>
             </div><!-- End Hero Content -->
 
+            
+
             <div class="col-lg-5">
               <div class="hero-visual" data-aos="fade-left" data-aos-delay="400">
                 <div class="visual-container">
@@ -301,7 +321,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     </section><!-- /Hero Section -->
 
     <!-- Home About Section -->
-    <section id="home-about" class="home-about section" id="about_this">
+    <section id="about" class="home-about section" id="about_this">
 
       <div class="container" data-aos="fade-up" data-aos-delay="100">
 
@@ -363,7 +383,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 </div>
 
 
-         
             </div>
           </div>
 
@@ -371,11 +390,57 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
       </div>
 
+      <section id="announcements" class="section" style="padding:60px 0;">
+  <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+    <div class="section-title mb-4">
+      <h2 class="text-success fw-bold">Announcements</h2>
+      <p class="text-muted">Latest official notices posted by the HOA Superadmin.</p>
+    </div>
+
+    <?php if (empty($public_anns)): ?>
+      <div class="alert alert-light border">
+        No announcements available right now.
+      </div>
+    <?php else: ?>
+      <div class="row g-4">
+        <?php foreach ($public_anns as $a): ?>
+          <?php
+            $badgeClass = 'bg-secondary';
+            if ($a['priority'] === 'urgent') $badgeClass = 'bg-danger';
+            else if ($a['priority'] === 'important') $badgeClass = 'bg-warning text-dark';
+          ?>
+          <div class="col-lg-4 col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge <?= $badgeClass ?>"><?= esc($a['priority']) ?></span>
+                  <small class="text-muted"><?= esc(date("M d, Y", strtotime($a['created_at']))) ?></small>
+                </div>
+
+                <h5 class="card-title mb-1"><?= esc($a['title']) ?></h5>
+                <div class="text-muted small mb-3">Category: <?= esc($a['category']) ?></div>
+
+                <p class="card-text">
+                  <?= nl2br(esc(mb_strimwidth($a['message'], 0, 220, '...'))) ?>
+                </p>
+
+                <div class="mt-3 d-flex justify-content-between text-muted small">
+                  <span>Start: <?= esc($a['start_date']) ?></span>
+                  <span>End: <?= esc($a['end_date'] ?? '-') ?></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+  </div>
+</section>
+
     </section><!-- /Home About Section -->
 
-
- 
-  
 
   </main>
 <footer id="footer" class="footer accent-background">

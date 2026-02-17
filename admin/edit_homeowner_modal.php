@@ -1,5 +1,11 @@
 <?php
 session_start();
+ob_start(); // ✅ prevent accidental whitespace breaking JSON
+
+// Compatibility (if some pages use different session keys)
+if (empty($_SESSION['admin_id']) && !empty($_SESSION['user_id'])) $_SESSION['admin_id'] = $_SESSION['user_id'];
+if (empty($_SESSION['admin_role']) && !empty($_SESSION['role'])) $_SESSION['admin_role'] = $_SESSION['role'];
+if (empty($_SESSION['admin_phase']) && !empty($_SESSION['phase'])) $_SESSION['admin_phase'] = $_SESSION['phase'];
 
 // ---------- Admin guard ----------
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
@@ -31,7 +37,6 @@ function get_admin_phase_role(mysqli $conn): array {
     $role  = (string)($_SESSION['admin_role'] ?? '');
     $phase = (string)($_SESSION['admin_phase'] ?? '');
 
-    // If session doesn't have phase/role, try DB
     if ($admin_id > 0 && ($role === '' || $phase === '')) {
         $stmt = $conn->prepare("SELECT role, phase FROM admins WHERE id=? LIMIT 1");
         $stmt->bind_param("i", $admin_id);
@@ -45,15 +50,12 @@ function get_admin_phase_role(mysqli $conn): array {
 }
 
 function json_out($arr){
+    if (ob_get_length()) ob_clean(); // ✅ ensures pure JSON
     header('Content-Type: application/json');
     echo json_encode($arr);
     exit;
 }
 
-/**
- * Safe dynamic bind_param helper.
- * Usage: stmt_bind($stmt, "ii", [$a,$b]);
- */
 function stmt_bind(mysqli_stmt $stmt, string $types, array $values): void {
     $refs = [];
     $refs[] = $types;
@@ -77,7 +79,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
         exit('<div class="p-4"><div class="alert alert-danger mb-0">Not allowed.</div></div>');
     }
 
-    // homeowner
     $stmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? LIMIT 1");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -86,7 +87,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
 
     if (!$home) exit('<div class="p-4"><div class="alert alert-danger mb-0">Homeowner not found.</div></div>');
 
-    // members
     $stmt = $conn->prepare("SELECT * FROM household_members WHERE homeowner_id=? ORDER BY id ASC");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -98,11 +98,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
     $validId = $home['valid_id_path'] ?? '';
     $proof   = $home['proof_of_billing_path'] ?? '';
 
-    ob_start();
+    ob_clean(); // ✅ clear buffer for HTML output
     ?>
-    <head>
-      
-    </head>
     <form id="editHomeownerForm" enctype="multipart/form-data">
       <input type="hidden" name="action" value="save_homeowner">
       <input type="hidden" name="id" value="<?= (int)$home['id'] ?>">
@@ -179,18 +176,14 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
             <div class="col-md-6">
               <label class="form-label fw-semibold">Valid ID (replace optional)</label>
               <?php if ($validId): ?>
-                <div class="small mb-1">
-                  Current: <a href="<?= esc($validId) ?>" target="_blank">Open</a>
-                </div>
+                <div class="small mb-1">Current: <a href="<?= esc($validId) ?>" target="_blank">Open</a></div>
               <?php endif; ?>
               <input type="file" class="form-control" name="valid_id">
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Proof of Billing (replace optional)</label>
               <?php if ($proof): ?>
-                <div class="small mb-1">
-                  Current: <a href="<?= esc($proof) ?>" target="_blank">Open</a>
-                </div>
+                <div class="small mb-1">Current: <a href="<?= esc($proof) ?>" target="_blank">Open</a></div>
               <?php endif; ?>
               <input type="file" class="form-control" name="proof_of_billing">
             </div>
@@ -282,9 +275,28 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
           </template>
         </div>
       </div>
+
+      <script>
+        (function(){
+          const wrap = document.getElementById('editMembersWrap');
+          const tpl  = document.getElementById('editMemberTpl');
+          const addBtn = document.getElementById('addEditMemberBtn');
+
+          if (addBtn && wrap && tpl){
+            addBtn.addEventListener('click', function(){
+              wrap.insertAdjacentHTML('beforeend', tpl.innerHTML);
+            });
+          }
+          document.addEventListener('click', function(e){
+            if (e.target && e.target.classList.contains('removeMemberBtn')){
+              const row = e.target.closest('.memberRow');
+              if (row) row.remove();
+            }
+          });
+        })();
+      </script>
     </form>
     <?php
-    echo ob_get_clean();
     exit;
 }
 
@@ -314,7 +326,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         json_out(['success'=>false,'message'=>'Please fill in all required fields.']);
     }
 
-    // If not superadmin, force phase unchanged
     if ($admin_role !== 'superadmin') {
         $stmt = $conn->prepare("SELECT phase FROM homeowners WHERE id=? LIMIT 1");
         $stmt->bind_param("i",$id);
@@ -324,7 +335,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         $phase = $row['phase'] ?? $phase;
     }
 
-    // Email uniqueness check
     $stmt = $conn->prepare("SELECT id FROM homeowners WHERE email=? AND id<>? LIMIT 1");
     $stmt->bind_param("si", $email, $id);
     $stmt->execute();
@@ -332,38 +342,33 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     $stmt->close();
     if ($dup) json_out(['success'=>false,'message'=>'Email already exists for another homeowner.']);
 
-    // Existing file paths
     $stmt = $conn->prepare("SELECT valid_id_path, proof_of_billing_path FROM homeowners WHERE id=? LIMIT 1");
     $stmt->bind_param("i",$id);
     $stmt->execute();
     $cur = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+
     $valid_id_path = $cur['valid_id_path'] ?? '';
     $proof_path = $cur['proof_of_billing_path'] ?? '';
 
-    // ✅ FIXED UPLOAD PATH (store DB path as "uploads/...")
-    $fsUploadDir = __DIR__ . "/../uploads/";     // filesystem
-    $dbUploadDir = "uploads/";                  // db/web path
+    $fsUploadDir = __DIR__ . "/../uploads/";
+    $dbUploadDir = "uploads/";
     if(!is_dir($fsUploadDir)) mkdir($fsUploadDir, 0755, true);
 
     if (!empty($_FILES['valid_id']['name']) && is_uploaded_file($_FILES['valid_id']['tmp_name'])) {
         $safeName = preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['valid_id']['name']));
         $dbPath = $dbUploadDir . time() . "_id_" . $safeName;
         $fsPath = $fsUploadDir . basename($dbPath);
-        if (move_uploaded_file($_FILES['valid_id']['tmp_name'], $fsPath)) {
-            $valid_id_path = $dbPath;
-        }
+        if (move_uploaded_file($_FILES['valid_id']['tmp_name'], $fsPath)) $valid_id_path = $dbPath;
     }
+
     if (!empty($_FILES['proof_of_billing']['name']) && is_uploaded_file($_FILES['proof_of_billing']['tmp_name'])) {
         $safeName = preg_replace('/[^A-Za-z0-9._-]/','_', basename($_FILES['proof_of_billing']['name']));
         $dbPath = $dbUploadDir . time() . "_proof_" . $safeName;
         $fsPath = $fsUploadDir . basename($dbPath);
-        if (move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $fsPath)) {
-            $proof_path = $dbPath;
-        }
+        if (move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $fsPath)) $proof_path = $dbPath;
     }
 
-    // Update homeowner
     $stmt = $conn->prepare("
         UPDATE homeowners SET
           first_name=?,
@@ -390,7 +395,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     $stmt->close();
     if (!$ok) json_out(['success'=>false,'message'=>'Failed to update homeowner.']);
 
-    // Members upsert
     $member_id = $_POST['member_id'] ?? [];
     $mf = $_POST['member_first_name'] ?? [];
     $mm = $_POST['member_middle_name'] ?? [];
@@ -433,7 +437,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
         }
     }
 
-    // ✅ FIXED delete removed members (safe binding)
     if (count($keepIds) > 0) {
         $placeholders = implode(',', array_fill(0, count($keepIds), '?'));
         $sql = "DELETE FROM household_members WHERE homeowner_id=? AND id NOT IN ($placeholders)";

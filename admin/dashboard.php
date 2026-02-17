@@ -301,8 +301,37 @@ $stmt->close();
             </a>
           </li>
 
-          <li><a href="HO-management.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-user1"></span><span class="mtext">Homeowner Management</span></a></li>
-          <li><a href="users-management.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-user"></span><span class="mtext">User Management</span></a></li>
+					<li class="dropdown show">
+						<a href="javascript:;" class="dropdown-toggle active ">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">Homeowner Management</span>
+						</a>
+						<ul class="submenu">
+							<li><a  href="ho_approval.php">Household Approval</a></li>
+							<li><a href="ho_register.php">Register Household</a></li>
+							<li><a href="ho_approved.php">Approved Households</a></li>
+						</ul>
+					</li>
+					<!-- ✅ USER MANAGEMENT DROPDOWN -->
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
+							<span class="micon dw dw-user"></span>
+							<span class="mtext">User Management</span>
+						</a>
+						<ul class="submenu">
+							<li>
+								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
+									Homeowners
+								</a>
+							</li>
+							<li>
+								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
+									Officers
+								</a>
+							</li>
+						</ul>
+					</li>
+          
           <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
 
           <li class="dropdown">
@@ -322,7 +351,6 @@ $stmt->close();
       </div>
     </div>
   </div>
-
   <div class="mobile-menu-overlay"></div>
 
   <div class="main-container">
