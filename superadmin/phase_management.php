@@ -238,13 +238,6 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
               </a>
             </li>
 
-            <!-- ✅ ACTIVE: Announcements -->
-            <li class="sidebar-item">
-              <a class="sidebar-link " href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
 
 
         <!-- End Sidebar navigation -->

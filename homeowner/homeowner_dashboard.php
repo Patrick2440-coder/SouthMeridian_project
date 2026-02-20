@@ -190,6 +190,52 @@ $lastComSeen = (string)$state['last_comment_seen'];
 
 $houseLot = (string)($user['house_lot_number'] ?? '');
 
+// ===================== MONTHLY DUES REMINDER =====================
+date_default_timezone_set('Asia/Manila');
+
+$now  = new DateTime('now');
+$curYear  = (int)$now->format('Y');
+$curMonth = (int)$now->format('n');
+
+// Get monthly dues amount for this phase
+$monthlyDues = 0.00;
+$stmt = $conn->prepare("SELECT monthly_dues FROM finance_dues_settings WHERE phase=? LIMIT 1");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$monthlyDues = (float)(($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0) ?: 0);
+$stmt->close();
+
+// Load payments for this homeowner for current year up to current month
+$paidMonths = [];          // [month => true]
+$paidRowsByMonth = [];     // [month => row]
+$stmt = $conn->prepare("
+  SELECT pay_month, status, amount, paid_at, reference_no
+  FROM finance_payments
+  WHERE homeowner_id=? AND phase=? AND pay_year=? AND pay_month BETWEEN 1 AND ?
+");
+$stmt->bind_param("isii", $hid, $phase, $curYear, $curMonth);
+$stmt->execute();
+$res = $stmt->get_result();
+while($r = $res->fetch_assoc()){
+  $m = (int)$r['pay_month'];
+  $paidRowsByMonth[$m] = $r;
+  if (($r['status'] ?? 'paid') === 'paid') $paidMonths[$m] = true;
+}
+$stmt->close();
+
+// Build unpaid months list from Jan..currentMonth
+$unpaidMonths = [];
+for ($m=1; $m <= $curMonth; $m++){
+  if (empty($paidMonths[$m])) $unpaidMonths[] = $m;
+}
+
+$curMonthPaid = empty($unpaidMonths) ? true : !in_array($curMonth, $unpaidMonths, true);
+$nextDueMonth = !empty($unpaidMonths) ? (int)$unpaidMonths[0] : 0;
+
+function month_name($m){
+  return date('F', mktime(0,0,0,(int)$m,1));
+}
+
 /**
  * Announcement feed (filtered by audience)
  */
@@ -431,7 +477,18 @@ $lng = $user['longitude'];
 <link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
 
 
+<style>
+  /* Sidebar dropdown */
+.sb-dd { display:flex; flex-direction:column; gap:6px; }
+.sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+.sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
+.sb-dd.open .sb-dd-menu{ display:block; }
+.sb-dd-caret{ transition: transform .15s ease; }
+.sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
 
+.pillx{ display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#f1f5f9; font-weight:700; }
+.req-list li{ margin-bottom: 6px; }
+</style>
 </head>
 
 <body>
@@ -459,14 +516,31 @@ $lng = $user['longitude'];
       <a class="sb-link" href="homeowner_dashboard.php">
         <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
       </a>
-
-      <a class="sb-link" href="#feed">
+      <a class="sb-link" href="homeowner_dashboard.php#feed">
         <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
       </a>
-
       <a class="sb-link" href="homeowner_pay_dues.php">
         <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
       </a>
+
+      <!-- PARKING DROPDOWN -->
+      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
+        <a class="sb-link sb-dd-toggle <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
+          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
+          <i class="bi bi-chevron-down sb-dd-caret"></i>
+        </a>
+        <div class="sb-dd-menu">
+          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
+            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
+          </a>
+          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
+            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
+          </a>
+          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
+            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
+          </a>
+        </div>
+      </div>
 
       <a class="sb-link" href="logout.php">
         <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
@@ -482,7 +556,7 @@ $lng = $user['longitude'];
       <!-- NAVBAR -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container-xl">
-          <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php">🏘 HOA Community</a>
+          <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php"> HOA Community</a>
 
           <div class="ms-auto d-flex align-items-center gap-3">
 
@@ -609,6 +683,61 @@ $lng = $user['longitude'];
 
           <!-- RIGHT FEED -->
           <div class="col-lg-8">
+
+          <!-- MONTHLY DUES REMINDER CARD -->
+<div class="fb-card mb-4">
+  <div class="fb-card-h">
+    <h6>💳 Monthly Dues Reminder</h6>
+    <span class="pill">₱<?= number_format((float)$monthlyDues, 2) ?>/month</span>
+  </div>
+  <div class="fb-card-b">
+
+    <?php if (empty($unpaidMonths)): ?>
+      <div class="alert alert-success mb-0">
+        ✅ You are fully paid for <?= esc($curYear) ?> (Jan–<?= esc(month_name($curMonth)) ?>). Thank you!
+      </div>
+      <div class="mt-2 text-muted small fw-semibold">
+        Keep it up — dues help fund maintenance, security, and utilities.
+      </div>
+
+    <?php else: ?>
+      <div class="alert alert-danger">
+        <div class="fw-bold mb-1">⚠️ You have unpaid monthly dues.</div>
+        <div class="fw-semibold">
+          Unpaid months (<?= esc($curYear) ?>):
+          <?php foreach($unpaidMonths as $i => $m): ?>
+            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle me-1">
+              <?= esc(month_name($m)) ?>
+            </span>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="mt-2 fw-semibold">
+          Next due: <b><?= esc(month_name($nextDueMonth)) ?> <?= esc($curYear) ?></b>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-success fw-semibold" href="homeowner_pay_dues.php">
+          <i class="bi bi-cash-coin me-1"></i> Pay Monthly Dues
+        </a>
+        <span class="pillx">
+          Current month: <?= esc(month_name($curMonth)) ?> —
+          <?php if ($curMonthPaid): ?>
+            <span class="text-success">PAID ✅</span>
+          <?php else: ?>
+            <span class="text-danger">NOT PAID ❌</span>
+          <?php endif; ?>
+        </span>
+      </div>
+
+      <div class="mt-2 text-muted small fw-semibold">
+        Tip: Paying on time avoids penalties and helps the HOA budget accurately.
+      </div>
+    <?php endif; ?>
+
+  </div>
+</div>
 
             <div class="d-flex flex-column gap-4" id="feed">
               <?php if (empty($annFeed)): ?>
@@ -819,8 +948,16 @@ document.getElementById('feed')?.addEventListener('click', async (e) => {
     postEl.querySelector('.comment-count').textContent = r.comment_count ?? 0;
     return;
   }
+
 });
 </script>
-
+<script>
+  (function(){
+  const wrap = document.getElementById('sbParking');
+  const btn  = document.getElementById('sbParkingToggle');
+  if(!wrap || !btn) return;
+  btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+</script>
 </body>
 </html>

@@ -278,3 +278,28 @@ body{ background:var(--fb-bg); }
 .sb-link:hover{ background:#f8fafc; }
 .sb-link i{ font-size: 18px; color: var(--hoa-green); }
 .main-area{ flex:1; min-width: 0; padding: 0; }
+
+/* Sidebar dropdown */
+.sb-dd { display:flex; flex-direction:column; gap:6px; }
+.sb-dd-toggle{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; width:100%;
+}
+.sb-dd-menu{
+  display:none;
+  padding-left: 12px;
+  margin-top: 2px;
+  border-left: 2px solid rgba(255,255,255,.08);
+}
+.sb-dd.open .sb-dd-menu{ display:block; }
+
+.sb-dd-menu .sb-link{
+  padding-left: 14px;
+  font-size: .95rem;
+  opacity: .95;
+}
+
+.sb-dd-caret{
+  transition: transform .15s ease;
+}
+.sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }

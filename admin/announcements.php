@@ -379,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
             <span class="user-name"><?= esc($admin_name) ?></span>
           </a>
           <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
+            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
         </div>
       </div>
@@ -407,8 +407,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
             </a>
           </li>
 
-					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active ">
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>

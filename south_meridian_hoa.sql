@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 17, 2026 at 12:41 PM
+-- Generation Time: Feb 20, 2026 at 10:59 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -72,7 +72,11 @@ CREATE TABLE `announcements` (
 --
 
 INSERT INTO `announcements` (`id`, `admin_id`, `phase`, `title`, `category`, `audience`, `audience_value`, `message`, `start_date`, `end_date`, `priority`, `created_at`) VALUES
-(9, 2, 'Phase 1', 'atingitng', 'general', 'all', NULL, 'awadwasd', '2026-02-14', '2026-02-21', 'normal', '2026-02-13 21:33:45');
+(9, 2, 'Phase 1', 'atingitng', 'general', 'all', NULL, 'awadwasd', '2026-02-14', '2026-02-21', 'normal', '2026-02-13 21:33:45'),
+(10, 2, 'Phase 1', 'urgent', 'maintenance', 'selected', NULL, 'This announcementad.wad', '2026-02-18', '2026-02-18', 'normal', '2026-02-18 08:37:48'),
+(11, 2, 'Phase 1', 'urgent', 'general', 'selected', NULL, 'awasdawdadawdadada', '2026-02-18', '2026-02-18', 'normal', '2026-02-18 08:40:24'),
+(12, 2, 'Phase 1', 'urgent', 'general', 'selected', NULL, 'awasdawdadawdadada', '2026-02-18', '2026-02-18', 'normal', '2026-02-18 08:42:42'),
+(13, 2, 'Phase 1', 'urgent', 'general', 'selected', NULL, 'awasdawdadawdadada', '2026-02-18', '2026-02-18', 'normal', '2026-02-18 08:45:16');
 
 -- --------------------------------------------------------
 
@@ -105,13 +109,6 @@ CREATE TABLE `announcement_comments` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `announcement_comments`
---
-
-INSERT INTO `announcement_comments` (`id`, `announcement_id`, `homeowner_id`, `comment`, `created_at`) VALUES
-(1, 9, 35, 'awadaw', '2026-02-17 09:19:02');
-
 -- --------------------------------------------------------
 
 --
@@ -124,13 +121,6 @@ CREATE TABLE `announcement_likes` (
   `homeowner_id` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `announcement_likes`
---
-
-INSERT INTO `announcement_likes` (`id`, `announcement_id`, `homeowner_id`, `created_at`) VALUES
-(2, 9, 35, '2026-02-17 09:19:05');
 
 -- --------------------------------------------------------
 
@@ -154,7 +144,7 @@ CREATE TABLE `announcement_recipients` (
 --
 
 INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`, `homeowner_id`, `officer_id`, `recipient_name`, `recipient_email`, `created_at`) VALUES
-(89, 9, 'homeowner', 35, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-13 21:33:45'),
+(89, 9, 'homeowner', NULL, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-13 21:33:45'),
 (90, 9, 'homeowner', 37, NULL, 'Mark A Santos', 'p1_mark.santos@hoa.local', '2026-02-13 21:33:45'),
 (91, 9, 'homeowner', 38, NULL, 'Anne M Reyes', 'p1_anne.reyes@hoa.local', '2026-02-13 21:33:45'),
 (92, 9, 'homeowner', 39, NULL, 'John D Cruz', 'p1_john.cruz@hoa.local', '2026-02-13 21:33:45'),
@@ -164,7 +154,11 @@ INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`
 (96, 9, 'homeowner', 43, NULL, 'Ryan P Navarro', 'p1_ryan.navarro@hoa.local', '2026-02-13 21:33:45'),
 (97, 9, 'homeowner', 44, NULL, 'Mika S Dela Cruz', 'p1_mika.delacruz@hoa.local', '2026-02-13 21:33:45'),
 (98, 9, 'homeowner', 45, NULL, 'Carlo B Lim', 'p1_carlo.lim@hoa.local', '2026-02-13 21:33:45'),
-(99, 9, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-02-13 21:33:45');
+(99, 9, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-02-13 21:33:45'),
+(100, 10, 'homeowner', NULL, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-18 08:37:48'),
+(101, 11, 'homeowner', NULL, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-18 08:40:24'),
+(102, 12, 'homeowner', NULL, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-18 08:42:42'),
+(103, 13, 'homeowner', NULL, NULL, 'Patrick Justin  Baculpo', 'baculpopatrick2440@gmail.com', '2026-02-18 08:45:16');
 
 -- --------------------------------------------------------
 
@@ -294,8 +288,6 @@ CREATE TABLE `finance_payments` (
 --
 
 INSERT INTO `finance_payments` (`id`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `paid_at`, `reference_no`, `notes`, `created_by_admin_id`, `created_at`) VALUES
-(1, 35, 'Phase 1', 2026, 1, 200.00, 'paid', '2026-02-17 18:54:41', 'pay_UpepdNFQgdW6KuDX77pkWviH', 'PayMongo (fallback sync)', NULL, '2026-02-17 10:54:41'),
-(2, 35, 'Phase 1', 2026, 2, 200.00, 'paid', '2026-02-17 18:55:08', 'pay_yhU3yoMSVFdEthBaXwkVRBa9', 'PayMongo (fallback sync)', NULL, '2026-02-17 10:55:08'),
 (3, 39, 'Phase 1', 2026, 2, 200.00, 'paid', '2026-02-17 18:57:10', '', 'cash', 2, '2026-02-17 10:57:10');
 
 -- --------------------------------------------------------
@@ -321,14 +313,6 @@ CREATE TABLE `finance_paymongo_checkouts` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `finance_paymongo_checkouts`
---
-
-INSERT INTO `finance_paymongo_checkouts` (`id`, `checkout_session_id`, `checkout_url`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `payment_id`, `paid_at`, `last_event_type`, `last_event_id`, `created_at`, `updated_at`) VALUES
-(12, 'cs_d05ba16a13282dcf07db7853', 'https://checkout-v2.paymongo.com/d05ba16a13282dcf07db7853', 35, 'Phase 1', 2026, 1, 200.00, 'paid', 'pay_UpepdNFQgdW6KuDX77pkWviH', '2026-02-17 18:54:41', NULL, NULL, '2026-02-17 10:44:28', '2026-02-17 10:54:41'),
-(13, 'cs_301d2d253552bf2f5bcbb727', 'https://checkout-v2.paymongo.com/301d2d253552bf2f5bcbb727', 35, 'Phase 1', 2026, 2, 200.00, 'paid', 'pay_yhU3yoMSVFdEthBaXwkVRBa9', '2026-02-17 18:55:08', NULL, NULL, '2026-02-17 10:54:59', '2026-02-17 10:55:08');
 
 -- --------------------------------------------------------
 
@@ -430,7 +414,6 @@ CREATE TABLE `homeowners` (
 --
 
 INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `password`, `must_change_password`, `phase`, `house_lot_number`, `valid_id_path`, `proof_of_billing_path`, `latitude`, `longitude`, `status`, `admin_id`, `created_at`, `reset_token`, `reset_expires`) VALUES
-(35, 'P135', 'Patrick Justin', '', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$e.tpa4SSqd7Xqrr8IlNlxeUbi8JnIQJNcQt1QQ3RWZr0dPSHrByuW', 0, 'Phase 1', 'blk 7 lot 9', 'uploads/1770288743_id_', 'uploads/1770288743_proof_', 14.3555560, 120.9468340, 'approved', 2, '2026-02-05 10:52:23', NULL, NULL),
 (37, 'P137', 'Mark', 'A', 'Santos', '09170000001', 'p1_mark.santos@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 1', 'uploads/seed/p1_id1.png', 'uploads/seed/p1_bill1.png', 14.3541010, 120.9461010, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
 (38, 'P138', 'Anne', 'M', 'Reyes', '09170000002', 'p1_anne.reyes@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 2', 'uploads/seed/p1_id2.png', 'uploads/seed/p1_bill2.png', 14.3545060, 120.9466140, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
 (39, 'P139', 'John', 'D', 'Cruz', '09170000003', 'p1_john.cruz@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 3', 'uploads/seed/p1_id3.png', 'uploads/seed/p1_bill3.png', 14.3541410, 120.9461410, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
@@ -460,33 +443,21 @@ INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_
 (63, 'P363', 'Drew', 'P', 'Gomez', '09170000027', 'p3_drew.gomez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 2', 'uploads/seed/p3_id7.png', 'uploads/seed/p3_bill7.png', 14.3533210, 120.9473210, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
 (64, 'P364', 'Tina', 'A', 'Sison', '09170000028', 'p3_tina.sison@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 3', 'uploads/seed/p3_id8.png', 'uploads/seed/p3_bill8.png', 14.3533410, 120.9473410, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
 (65, 'P365', 'Cedric', 'M', 'Herrera', '09170000029', 'p3_cedric.herrera@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 4', 'uploads/seed/p3_id9.png', 'uploads/seed/p3_bill9.png', 14.3533610, 120.9473610, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(66, 'P366', 'Aya', 'G', 'Pineda', '09170000030', 'p3_aya.pineda@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 5', 'uploads/seed/p3_id10.png', 'uploads/seed/p3_bill10.png', 14.3533810, 120.9473810, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL);
+(66, 'P366', 'Aya', 'G', 'Pineda', '09170000030', 'p3_aya.pineda@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 5', 'uploads/seed/p3_id10.png', 'uploads/seed/p3_bill10.png', 14.3533810, 120.9473810, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(74, NULL, 'patrick', '', 'baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$oPRnzs5l4cOVrSCHozhyl.yQ8f3IZe0s/Ko4/n5GuMlRLfVkk.P.C', 1, 'Phase 1', 'blk 7 lot 9', 'uploads/1771425978_id_images (1).png', 'uploads/1771425978_proof_images (2).png', 14.3548655, 120.9460555, 'approved', 2, '2026-02-18 14:46:20', '9afde1ee79ff3108ddd9d9b5516d02d7205a107d19551a306a61575d63ac537c', '2026-02-18 16:46:25');
 
 --
 -- Triggers `homeowners`
 --
 DELIMITER $$
-CREATE TRIGGER `trg_homeowners_public_id_ai` AFTER INSERT ON `homeowners` FOR EACH ROW BEGIN
-  UPDATE homeowners
-  SET public_id = CONCAT(
-    'P',
-    CAST(REGEXP_REPLACE(NEW.phase, '[^0-9]', '') AS UNSIGNED),
-    NEW.id
-  )
-  WHERE id = NEW.id;
-END
-$$
-DELIMITER ;
-DELIMITER $$
-CREATE TRIGGER `trg_homeowners_public_id_au` AFTER UPDATE ON `homeowners` FOR EACH ROW BEGIN
-  IF NEW.phase <> OLD.phase THEN
-    UPDATE homeowners
-    SET public_id = CONCAT(
-      'P',
-      CAST(REGEXP_REPLACE(NEW.phase, '[^0-9]', '') AS UNSIGNED),
-      NEW.id
-    )
-    WHERE id = NEW.id;
+CREATE TRIGGER `homeowners_bi` BEFORE INSERT ON `homeowners` FOR EACH ROW BEGIN
+  -- example only
+  IF NEW.status IS NULL THEN
+    SET NEW.status = 'pending';
+  END IF;
+
+  IF NEW.created_at IS NULL THEN
+    SET NEW.created_at = NOW();
   END IF;
 END
 $$
@@ -506,13 +477,6 @@ CREATE TABLE `homeowner_feed_state` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `homeowner_feed_state`
---
-
-INSERT INTO `homeowner_feed_state` (`homeowner_id`, `last_ann_seen`, `last_comment_seen`, `created_at`, `updated_at`) VALUES
-(35, '2026-02-08 15:58:22', '2026-02-08 15:58:22', '2026-02-08 07:58:22', '2026-02-08 07:58:22');
-
 -- --------------------------------------------------------
 
 --
@@ -527,13 +491,6 @@ CREATE TABLE `homeowner_positions` (
   `updated_by_admin_id` int(11) DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `homeowner_positions`
---
-
-INSERT INTO `homeowner_positions` (`id`, `homeowner_id`, `phase`, `position`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 35, 'Phase 1', 'Volunteer', 2, '2026-02-17 02:15:54');
 
 -- --------------------------------------------------------
 
@@ -562,7 +519,72 @@ INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_nam
 (28, 32, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
 (29, 33, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
 (30, 34, 'Patrick Justin', '', 'Baculpo', 'Homeowner'),
-(0, 36, 'Patrick Justin', '', 'Baculpo', 'Caretaker');
+(0, 36, 'Patrick Justin', '', 'Baculpo', 'Caretaker'),
+(0, 72, 'patrick', '', 'baculpo', 'Homeowner'),
+(0, 73, 'patrick', '', 'baculpo', 'Caretaker'),
+(0, 74, 'patrick', '', 'baculpo', 'Caretaker');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `parking_permits`
+--
+
+CREATE TABLE `parking_permits` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `homeowner_id` int(11) NOT NULL,
+  `plate_no` varchar(30) NOT NULL,
+  `vehicle_make` varchar(80) DEFAULT NULL,
+  `vehicle_model` varchar(80) DEFAULT NULL,
+  `vehicle_color` varchar(50) DEFAULT NULL,
+  `permit_no` varchar(30) DEFAULT NULL,
+  `sticker_year` int(11) NOT NULL DEFAULT year(curdate()),
+  `sticker_type` enum('resident','visitor') NOT NULL DEFAULT 'resident',
+  `status` enum('pending','active','expired','revoked','rejected') NOT NULL DEFAULT 'pending',
+  `valid_from` date DEFAULT NULL,
+  `valid_until` date DEFAULT NULL,
+  `requested_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `approved_by_admin_id` int(11) DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `rejected_reason` varchar(255) DEFAULT NULL,
+  `revoked_reason` varchar(255) DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `application_form_path` varchar(255) DEFAULT NULL,
+  `proof_of_residency_path` varchar(255) DEFAULT NULL,
+  `or_cr_path` varchar(255) DEFAULT NULL,
+  `proof_parking_space_path` varchar(255) DEFAULT NULL,
+  `proof_of_payment_path` varchar(255) DEFAULT NULL,
+  `drivers_license_path` varchar(255) DEFAULT NULL,
+  `deed_of_sale_path` varchar(255) DEFAULT NULL,
+  `remarks` varchar(255) DEFAULT NULL,
+  `expires_at` date DEFAULT NULL,
+  `last_reminded_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `parking_violations`
+--
+
+CREATE TABLE `parking_violations` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `permit_id` int(11) DEFAULT NULL,
+  `homeowner_id` int(11) DEFAULT NULL,
+  `plate_no` varchar(30) NOT NULL,
+  `violation_type` varchar(80) NOT NULL,
+  `location` varchar(120) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `fine_amount` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `status` enum('open','paid','cleared','void') NOT NULL DEFAULT 'open',
+  `issued_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `resolved_at` datetime DEFAULT NULL,
+  `resolved_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Indexes for dumped tables
@@ -715,6 +737,28 @@ ALTER TABLE `homeowner_positions`
   ADD KEY `fk_hp_admin` (`updated_by_admin_id`);
 
 --
+-- Indexes for table `parking_permits`
+--
+ALTER TABLE `parking_permits`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_phase_status` (`phase`,`status`),
+  ADD KEY `idx_plate` (`plate_no`),
+  ADD KEY `idx_homeowner` (`homeowner_id`),
+  ADD KEY `fk_pp_admin` (`approved_by_admin_id`),
+  ADD KEY `idx_pp_phase_plate` (`phase`,`plate_no`);
+
+--
+-- Indexes for table `parking_violations`
+--
+ALTER TABLE `parking_violations`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_phase_status` (`phase`,`status`),
+  ADD KEY `idx_plate` (`plate_no`),
+  ADD KEY `idx_permit` (`permit_id`),
+  ADD KEY `idx_homeowner` (`homeowner_id`),
+  ADD KEY `fk_pv_admin` (`resolved_by_admin_id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -728,7 +772,7 @@ ALTER TABLE `admins`
 -- AUTO_INCREMENT for table `announcements`
 --
 ALTER TABLE `announcements`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `announcement_attachments`
@@ -752,7 +796,7 @@ ALTER TABLE `announcement_likes`
 -- AUTO_INCREMENT for table `announcement_recipients`
 --
 ALTER TABLE `announcement_recipients`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=100;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=104;
 
 --
 -- AUTO_INCREMENT for table `election_nominations`
@@ -788,13 +832,13 @@ ALTER TABLE `finance_opening_balance`
 -- AUTO_INCREMENT for table `finance_payments`
 --
 ALTER TABLE `finance_payments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `finance_paymongo_checkouts`
 --
 ALTER TABLE `finance_paymongo_checkouts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `finance_report_requests`
@@ -806,19 +850,31 @@ ALTER TABLE `finance_report_requests`
 -- AUTO_INCREMENT for table `hoa_officers`
 --
 ALTER TABLE `hoa_officers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2053;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2101;
 
 --
 -- AUTO_INCREMENT for table `homeowners`
 --
 ALTER TABLE `homeowners`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=67;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=75;
 
 --
 -- AUTO_INCREMENT for table `homeowner_positions`
 --
 ALTER TABLE `homeowner_positions`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `parking_permits`
+--
+ALTER TABLE `parking_permits`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `parking_violations`
+--
+ALTER TABLE `parking_violations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- Constraints for dumped tables
@@ -920,6 +976,21 @@ ALTER TABLE `homeowner_feed_state`
 ALTER TABLE `homeowner_positions`
   ADD CONSTRAINT `fk_hp_admin` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_hp_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `parking_permits`
+--
+ALTER TABLE `parking_permits`
+  ADD CONSTRAINT `fk_pp_admin` FOREIGN KEY (`approved_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_pp_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `parking_violations`
+--
+ALTER TABLE `parking_violations`
+  ADD CONSTRAINT `fk_pv_admin` FOREIGN KEY (`resolved_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_pv_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_pv_permit` FOREIGN KEY (`permit_id`) REFERENCES `parking_permits` (`id`) ON DELETE SET NULL;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

@@ -1,9 +1,12 @@
 <?php
-
+$autoload = __DIR__ . '/../vendor/autoload.php';
+if (!file_exists($autoload)) {
+  die("Composer autoload not found: " . $autoload . ". Run: composer require phpmailer/phpmailer");
+}
+require_once $autoload;
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-
 require_once __DIR__ . "/../vendor/autoload.php";
 
 /**
@@ -85,7 +88,8 @@ function send_announcement_mail(mysqli $conn, int $announcement_id, array $smtp)
         $rel = $a['file_path'] ?? '';
         if (!$rel) continue;
 
-        // Convert relative path to absolute on server
+        // file_path saved like: uploads/announcements/xxx.ext
+        // announcements.php is in admin/, uploads folder is also in admin/
         $abs = __DIR__ . "/" . ltrim($rel, "/");
         if (is_file($abs)) {
             $attachments[] = [
@@ -102,18 +106,17 @@ function send_announcement_mail(mysqli $conn, int $announcement_id, array $smtp)
     $start = $ann['start_date'] ?? '';
     $end   = $ann['end_date'] ?? '';
 
-    // Basic HTML template
     $htmlBody = '
       <div style="font-family: Arial, sans-serif; line-height:1.5; color:#111;">
-        <h2 style="margin:0 0 10px 0;">' . htmlspecialchars($ann['title']) . '</h2>
+        <h2 style="margin:0 0 10px 0;">' . htmlspecialchars($ann['title'] ?? '') . '</h2>
         <div style="margin:0 0 8px 0;">
-          <b>Phase:</b> ' . htmlspecialchars($ann['phase']) . '<br>
-          <b>Category:</b> ' . htmlspecialchars($ann['category']) . '<br>
+          <b>Phase:</b> ' . htmlspecialchars($ann['phase'] ?? '') . '<br>
+          <b>Category:</b> ' . htmlspecialchars($ann['category'] ?? '') . '<br>
           <b>Priority:</b> ' . htmlspecialchars($priorityLabel) . '<br>
           <b>Start:</b> ' . htmlspecialchars($start) . ($end ? ' &nbsp; <b>End:</b> ' . htmlspecialchars($end) : '') . '
         </div>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0;">
-        <div style="white-space:pre-wrap;">' . nl2br(htmlspecialchars($ann['message'])) . '</div>
+        <div style="white-space:pre-wrap;">' . nl2br(htmlspecialchars($ann['message'] ?? '')) . '</div>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0;">
         <div style="font-size:12px;color:#6b7280;">
           This is an automated announcement from South Meridian Homes HOA System.
@@ -121,13 +124,53 @@ function send_announcement_mail(mysqli $conn, int $announcement_id, array $smtp)
       </div>
     ';
 
-    $textBody = "Announcement: {$ann['title']}\n"
-              . "Phase: {$ann['phase']}\n"
-              . "Category: {$ann['category']}\n"
-              . "Priority: {$priorityLabel}\n"
-              . "Start: {$start}" . ($end ? "  End: {$end}" : "") . "\n\n"
-              . ($ann['message'] ?? "");
 
+    $textBody = "Announcement: " . ($ann['title'] ?? '') . "\n"
+        . "Phase: " . ($ann['phase'] ?? '') . "\n"
+        . "Category: " . ($ann['category'] ?? '') . "\n"
+        . "Priority: {$priorityLabel}\n"
+        . "Start: {$start}" . ($end ? "  End: {$end}" : "") . "\n\n"
+        . ($ann['message'] ?? "");
+
+    // 5) SEND (one email per recipient)
+    foreach ($recipients as $rcpt) {
+        $mail = new PHPMailer(true);
+
+        try {
+            $mail->isSMTP();
+            $mail->Host       = $smtp['host'];
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtp['username'];
+            $mail->Password   = $smtp['password'];
+            $mail->Port       = (int)$smtp['port'];
+
+            // encryption
+            $enc = strtolower((string)($smtp['encryption'] ?? 'tls'));
+            if ($enc === 'tls') $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            elseif ($enc === 'ssl') $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+
+            $mail->CharSet = 'UTF-8';
+
+            $mail->setFrom($smtp['from_email'], $smtp['from_name']);
+            $mail->addAddress($rcpt['email'], $rcpt['name']);
+
+            $mail->Subject = $subject;
+            $mail->isHTML(true);
+            $mail->Body    = $htmlBody;
+            $mail->AltBody = $textBody;
+
+            // attachments
+            foreach ($attachments as $att) {
+                $mail->addAttachment($att['abs'], $att['name']);
+            }
+
+            $mail->send();
+            $result['sent']++;
+        } catch (Exception $e) {
+            $result['failed']++;
+            $result['errors'][] = $rcpt['email'] . " => " . $mail->ErrorInfo;
+        }
+    }
 
     $result['success'] = ($result['sent'] > 0);
     return $result;

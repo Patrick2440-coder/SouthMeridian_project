@@ -185,8 +185,8 @@ $stmt->close();
             </a>
           </li>
 
-					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active ">
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>
@@ -214,7 +214,7 @@ $stmt->close();
 								</a>
 							</li>
 						</ul>
-					</li>
+					</li>	
           
           <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
 

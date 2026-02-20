@@ -48,13 +48,7 @@ $stmt->execute();
 $monthlyDues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
 $stmt->close();
 
-/**
- * ============================
- * ✅ FALLBACK SYNC (NO WEBHOOK NEEDED)
- * ============================
- * Checks PayMongo checkout_session status for pending rows.
- * If paid -> mark paid + insert finance_payments.
- */
+
 function paymongo_get_checkout(string $csId, string $secretKey): ?array {
   $ch = curl_init("https://api.paymongo.com/v1/checkout_sessions/" . rawurlencode($csId));
   curl_setopt_array($ch, [
@@ -181,7 +175,7 @@ if ($doSync) {
   }
 }
 
-// Paid months (finance_payments)
+
 $stmt = $conn->prepare("
   SELECT pay_month, amount, paid_at, reference_no, notes
   FROM finance_payments
@@ -201,7 +195,7 @@ while($r = $res->fetch_assoc()){
 }
 $stmt->close();
 
-// Any pending PayMongo checkouts (display)
+
 $stmt = $conn->prepare("
   SELECT pay_month, checkout_session_id, status, created_at
   FROM finance_paymongo_checkouts
@@ -252,12 +246,25 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 .badge-soft-danger{ background:rgba(220,53,69,.10); color:#dc3545; border:1px solid rgba(220,53,69,.20); }
 .badge-soft-warning{ background:rgba(255,193,7,.14); color:#a06b00; border:1px solid rgba(255,193,7,.28); }
 .small-muted{ color:#6b7280; font-weight:600; }
+
+/* Sidebar dropdown */
+.sb-dd { display:flex; flex-direction:column; gap:6px; }
+.sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+.sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
+.sb-dd.open .sb-dd-menu{ display:block; }
+.sb-dd-caret{ transition: transform .15s ease; }
+.sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
+
+.pillx{ display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#f1f5f9; font-weight:700; }
+.req-list li{ margin-bottom: 6px; }
+
 </style>
 </head>
 
 <body>
 <div class="app-shell">
 
+  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sb-head">
       <div class="sb-brand">
@@ -270,7 +277,7 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
       <div class="sb-avatar"><?= esc($initials) ?></div>
       <div class="sb-user-text">
         <p class="sb-name"><?= esc($fullName) ?></p>
-        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($houseLot) ?></p>
+        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
       </div>
     </div>
 
@@ -283,9 +290,29 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
         <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
       </a>
 
-      <a class="sb-link active" href="homeowner_pay_dues.php">
+      <a class="sb-link" href="homeowner_pay_dues.php">
         <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
       </a>
+
+      <!-- PARKING DROPDOWN -->
+      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
+        <a class="sb-link sb-dd-toggle <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
+          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
+          <i class="bi bi-chevron-down sb-dd-caret"></i>
+        </a>
+
+        <div class="sb-dd-menu">
+          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
+            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
+          </a>
+          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
+            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
+          </a>
+          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
+            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
+          </a>
+        </div>
+      </div>
 
       <a class="sb-link" href="logout.php">
         <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
@@ -440,7 +467,7 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
             <h6 class="mb-2">How PayMongo works</h6>
             <div class="text-muted fw-semibold">
               When you click <b>Pay Now</b>, you’ll be redirected to PayMongo Checkout (GCash/Card/etc).
-              This page can auto-sync PayMongo payment results even if webhook is not reachable.
+              <br><br>
             </div>
           </div>
         </div>
@@ -455,5 +482,13 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  (function(){
+  const wrap = document.getElementById('sbParking');
+  const btn  = document.getElementById('sbParkingToggle');
+  if(!wrap || !btn) return;
+  btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+</script>
 </body>
 </html>

@@ -188,8 +188,8 @@ $defMonth = (int)date('n');
             </a>
           </li>
 
-					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active ">
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>

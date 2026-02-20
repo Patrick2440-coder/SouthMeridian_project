@@ -11,23 +11,52 @@ $conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-// Fetch approved homeowners across all phases
-$stmt = $conn->prepare("
-  SELECT
-    h.id,
-    h.first_name,
-    h.middle_name,
-    h.last_name,
-    h.house_lot_number,
-    h.phase,
-    h.status,
-    COALESCE(hp.position, 'Homeowner') AS position
-  FROM homeowners h
-  LEFT JOIN homeowner_positions hp
-    ON hp.homeowner_id = h.id AND hp.phase = h.phase
-  WHERE h.status = 'approved'
-  ORDER BY h.phase ASC, h.last_name ASC, h.first_name ASC
-");
+// ✅ Phase filter (Phase 1/2/3 or All)
+$selected_phase = trim($_GET['phase'] ?? 'All');
+$allowed_phases = ['All','Phase 1','Phase 2','Phase 3'];
+
+if (!in_array($selected_phase, $allowed_phases, true)) {
+  $selected_phase = 'All';
+}
+
+// Fetch approved homeowners (optionally filtered by phase)
+if ($selected_phase === 'All') {
+  $stmt = $conn->prepare("
+    SELECT
+      h.id,
+      h.first_name,
+      h.middle_name,
+      h.last_name,
+      h.house_lot_number,
+      h.phase,
+      h.status,
+      COALESCE(hp.position, 'Homeowner') AS position
+    FROM homeowners h
+    LEFT JOIN homeowner_positions hp
+      ON hp.homeowner_id = h.id AND hp.phase = h.phase
+    WHERE h.status = 'approved'
+    ORDER BY h.phase ASC, h.last_name ASC, h.first_name ASC
+  ");
+} else {
+  $stmt = $conn->prepare("
+    SELECT
+      h.id,
+      h.first_name,
+      h.middle_name,
+      h.last_name,
+      h.house_lot_number,
+      h.phase,
+      h.status,
+      COALESCE(hp.position, 'Homeowner') AS position
+    FROM homeowners h
+    LEFT JOIN homeowner_positions hp
+      ON hp.homeowner_id = h.id AND hp.phase = h.phase
+    WHERE h.status = 'approved' AND h.phase = ?
+    ORDER BY h.phase ASC, h.last_name ASC, h.first_name ASC
+  ");
+  $stmt->bind_param("s", $selected_phase);
+}
+
 $stmt->execute();
 $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
@@ -55,81 +84,72 @@ $stmt->close();
     </div>
   </div>
 
-    <!-- Sidebar Start -->
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.html" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
-          </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
-          </div>
+  <!-- Sidebar Start -->
+  <aside class="left-sidebar">
+    <div>
+      <div class="brand-logo d-flex align-items-center justify-content-between">
+        <a href="./dashboard.html" class="text-nowrap logo-img">
+          <img src="assets/images/logos/logo.svg" alt="" />
+        </a>
+        <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
+          <i class="ti ti-x fs-6"></i>
         </div>
+      </div>
 
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
+      <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
+        <ul id="sidebarnav">
+          <li class="nav-small-cap">
+            <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
+            <span class="hide-menu">Home</span>
+          </li>
 
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
-              </a>
-            </li>
+          <li class="sidebar-item">
+            <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
+              <i class="ti ti-layout-dashboard"></i>
+              <span class="hide-menu">Dashboard</span>
+            </a>
+          </li>
 
-<!-- ✅ User Management Dropdown -->
-<li class="sidebar-item">
-  <a class="sidebar-link has-arrow collapsed"
-     href="#userMgmtMenu"
-     data-bs-toggle="collapse"
-     role="button"
-     aria-expanded="false"
-     aria-controls="userMgmtMenu">
-    <i class="ti ti-users"></i>
-    <span class="hide-menu">User Management</span>
-  </a>
+          <!-- ✅ User Management Dropdown -->
+          <li class="sidebar-item">
+            <a class="sidebar-link has-arrow collapsed"
+              href="#userMgmtMenu"
+              data-bs-toggle="collapse"
+              role="button"
+              aria-expanded="false"
+              aria-controls="userMgmtMenu">
+              <i class="ti ti-users"></i>
+              <span class="hide-menu">User Management</span>
+            </a>
 
-  <ul id="userMgmtMenu" class="collapse first-level">
-    <li class="sidebar-item">
-      <a href="./user_management.php" class="sidebar-link">
-        <i class="ti ti-home"></i>
-        <span class="hide-menu">Homeowners</span>
-      </a>
-    </li>
+            <ul id="userMgmtMenu" class="collapse first-level">
+              <li class="sidebar-item">
+                <a href="./user_management.php" class="sidebar-link">
+                  <i class="ti ti-home"></i>
+                  <span class="hide-menu">Homeowners</span>
+                </a>
+              </li>
 
-    <li class="sidebar-item">
-      <a href="./phase_management.php" class="sidebar-link">
-        <i class="ti ti-shield-check"></i>
-        <span class="hide-menu">Officers</span>
-      </a>
-    </li>
-  </ul>
-</li>
+              <li class="sidebar-item">
+                <a href="./phase_management.php" class="sidebar-link">
+                  <i class="ti ti-shield-check"></i>
+                  <span class="hide-menu">Officers</span>
+                </a>
+              </li>
+            </ul>
+          </li>
 
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.html" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-
-            <!-- ✅ ACTIVE: Announcements -->
-            <li class="sidebar-item">
-              <a class="sidebar-link " href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
-
+          <li class="sidebar-item">
+            <a class="sidebar-link" href="./voting.html" aria-expanded="false">
+              <i class="ti ti-checkbox"></i>
+              <span class="hide-menu">Voting Management</span>
+            </a>
+          </li>
 
         <!-- End Sidebar navigation -->
-      </div>
-      <!-- End Sidebar scroll-->
-    </aside>
+      </nav>
+    </div>
+  </aside>
 
   <!-- Main -->
   <div class="body-wrapper">
@@ -178,8 +198,26 @@ $stmt->close();
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                   <div>
                     <h5 class="card-title mb-1">Homeowners</h5>
-                    <p class="text-muted mb-0">Approved homeowners across Phase 1, 2, and 3</p>
+                    <p class="text-muted mb-0">
+                      Approved homeowners
+                      <?= ($selected_phase === 'All') ? "across Phase 1, 2, and 3" : "in " . esc($selected_phase) ?>
+                    </p>
                   </div>
+
+                  <!-- ✅ Phase Filter -->
+                  <form method="GET" class="d-flex align-items-center gap-2">
+                    <label class="mb-0 small text-muted">Phase:</label>
+                    <select name="phase" class="form-select form-select-sm" style="min-width: 160px;" onchange="this.form.submit()">
+                      <?php foreach ($allowed_phases as $ph): ?>
+                        <option value="<?= esc($ph) ?>" <?= ($selected_phase === $ph) ? 'selected' : '' ?>>
+                          <?= esc($ph) ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                    <noscript>
+                      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+                    </noscript>
+                  </form>
                 </div>
 
                 <hr class="my-3">

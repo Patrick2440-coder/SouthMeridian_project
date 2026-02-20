@@ -128,7 +128,7 @@ $resultHO = $sqlHO->get_result();
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="index.php"><i class="dw dw-logout"></i> Log Out</a>
+						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
 					</div>
 				</div>
 			</div>
@@ -188,8 +188,8 @@ $resultHO = $sqlHO->get_result();
             </a>
           </li>
 
-					<li class="dropdown show">
-						<a href="javascript:;" class="dropdown-toggle active ">
+					<li class="dropdown">
+						<a href="javascript:;" class="dropdown-toggle">
 							<span class="micon dw dw-user"></span>
 							<span class="mtext">Homeowner Management</span>
 						</a>
