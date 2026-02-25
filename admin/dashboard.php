@@ -1,16 +1,6 @@
 <?php
 session_start();
 
-/*
-  President Dashboard (Student style comments 😅)
-  - This page is only for PHASE admin / president (not superadmin)
-  - Shows KPIs + charts + tables
-  - Shows announcements:
-      1) Superadmin announcements (phase='Superadmin')
-      2) HOA Officers announcements for your phase (audience='all_officers')
-  - Calendar shows those announcements too
-*/
-
 /* =========================
    1) AUTH GUARD (who can access)
    ========================= */
@@ -28,8 +18,6 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
 
 /* =========================
    2) LOCAL DB CONNECTION
-   - Import your DB file: south_meridian_hoa.sql
-   - Database name: south_meridian_hoa
    ========================= */
 $db_host = "localhost";
 $db_user = "root";
@@ -461,6 +449,11 @@ foreach ($annForCalendar as $a) {
       cursor: pointer;
     }
 
+    /* ✅ FIX: prevent left Welcome card from stretching when Calendar gets tall */
+    .top-row-no-stretch {
+      align-items: flex-start !important;
+    }
+
     /* Announcements UI */
     .ann-wrap { display: flex; flex-direction: column; gap: 10px; }
     .ann-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -691,7 +684,8 @@ foreach ($annForCalendar as $a) {
       </div>
 
       <!-- TOP ROW -->
-      <div class="row">
+      <!-- ✅ Updated: added top-row-no-stretch to prevent the Welcome card from stretching -->
+      <div class="row top-row-no-stretch">
         <!-- LEFT -->
         <div class="col-lg-7 col-md-12 mb-30">
           <div class="card-box pd-20 height-100-p mb-20">
