@@ -99,15 +99,12 @@ if (!$ok) {
 }
 
 // ================= BUILD RESET LINK =================
-// IMPORTANT: change this to your real project URL/path
-// Example if your site is http://localhost/soutmeridian/
-// then reset page might be: http://localhost/soutmeridian/reset-password.php
-$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
-         . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
-// ✅ EDIT THIS PATH to match your actual reset password file location
-$resetPath = "http://localhost/soutmeridian/reset-password.php"; // <-- CHANGE if needed
-$resetLink = $baseUrl . $resetPath . "?token=" . urlencode((string)$resetToken);
+$resetPath = "/soutmeridian/admin/reset-password.php"; 
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+$resetLink = $scheme . "://" . $host . $resetPath . "?token=" . urlencode($resetToken);
 
 // ================= EMAIL =================
 try {
