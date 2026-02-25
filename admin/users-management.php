@@ -290,7 +290,7 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 													data-name="<?= esc($fullName) ?>"
 													data-position="<?= esc($position) ?>"
 												>
-													<i class="dw dw-edit2"></i> Edit Position
+													<i class="dw dw-edit2"></i>
 												</button>
 											</td>
 										</tr>

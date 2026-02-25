@@ -84,7 +84,7 @@ $stmt->close();
     </div>
   </div>
 
-  <!-- Sidebar Start -->
+ <!-- Sidebar Start -->
   <aside class="left-sidebar">
     <div>
       <div class="brand-logo d-flex align-items-center justify-content-between">
@@ -138,6 +138,12 @@ $stmt->close();
               </li>
             </ul>
           </li>
+                      <li class="sidebar-item">
+              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
+                <i class="ti ti-bell"></i>
+                <span class="hide-menu">Announcements</span>
+              </a>
+            </li>
 
           <li class="sidebar-item">
             <a class="sidebar-link" href="./voting.html" aria-expanded="false">

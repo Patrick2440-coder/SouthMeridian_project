@@ -270,38 +270,37 @@ $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
             </a>
           </li>
 
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">Homeowner Management</span>
-						</a>
-						<ul class="submenu">
-							<li><a  href="ho_approval.php">Household Approval</a></li>
-							<li><a href="ho_register.php">Register Household</a></li>
-							<li><a href="ho_approved.php">Approved Households</a></li>
-						</ul>
-					</li>
-					<!-- ✅ USER MANAGEMENT DROPDOWN -->
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">User Management</span>
-						</a>
-						<ul class="submenu">
-							<li>
-								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
-									Homeowners
-								</a>
-							</li>
-							<li>
-								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
-									Officers
-								</a>
-							</li>
-						</ul>
-					</li>
-          
-          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle ">
+              <span class="micon dw dw-user"></span>
+              <span class="mtext">Homeowner Management</span>
+            </a>
+            <ul class="submenu">
+              <li><a href="ho_approval.php">Household Approval</a></li>
+              <li><a href="ho_register.php">Register Household</a></li>
+              <li><a href="ho_approved.php">Approved Households</a></li>
+            </ul>
+          </li>
+
+          <!-- ✅ USER MANAGEMENT DROPDOWN -->
+          <?php $view = $_GET['view'] ?? ''; ?>
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
+              <span class="micon dw dw-user"></span>
+              <span class="mtext">User Management</span>
+            </a>
+            <ul class="submenu">
+              <li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
+              <li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
+            </ul>
+          </li>
+
+          <li>
+            <a href="announcements.php" class="dropdown-toggle no-arrow">
+              <span class="micon dw dw-megaphone"></span>
+              <span class="mtext">Announcement</span>
+            </a>
+          </li>
 
           <li class="dropdown">
             <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
@@ -312,6 +311,15 @@ $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
               <li><a href="finance_expenses.php">Expenses</a></li>
               <li><a href="finance_reports.php">Financial Reports</a></li>
               <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
+            </ul>
+          </li>
+
+          <li class="dropdown">
+            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-car"></span><span class="mtext">Parking</span></a>
+            <ul class="submenu">
+              <li><a href="parking.php">Parking Overview</a></li>
+              <li><a href="parking_permits.php">Manage Permits</a></li>
+              <li><a href="parking_violations.php">View Violations</a></li>
             </ul>
           </li>
 

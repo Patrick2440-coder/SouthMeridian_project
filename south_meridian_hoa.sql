@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 20, 2026 at 10:59 AM
+-- Generation Time: Feb 25, 2026 at 07:47 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -850,7 +850,7 @@ ALTER TABLE `finance_report_requests`
 -- AUTO_INCREMENT for table `hoa_officers`
 --
 ALTER TABLE `hoa_officers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2101;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2245;
 
 --
 -- AUTO_INCREMENT for table `homeowners`

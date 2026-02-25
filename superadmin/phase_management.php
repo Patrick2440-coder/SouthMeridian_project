@@ -175,75 +175,78 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
       </div>
     </div>
 
-    <!-- Sidebar -->
-    <!-- Sidebar Start -->
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.html" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
-          </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
-          </div>
+ <!-- Sidebar Start -->
+  <aside class="left-sidebar">
+    <div>
+      <div class="brand-logo d-flex align-items-center justify-content-between">
+        <a href="./dashboard.html" class="text-nowrap logo-img">
+          <img src="assets/images/logos/logo.svg" alt="" />
+        </a>
+        <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
+          <i class="ti ti-x fs-6"></i>
         </div>
+      </div>
 
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
+      <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
+        <ul id="sidebarnav">
+          <li class="nav-small-cap">
+            <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
+            <span class="hide-menu">Home</span>
+          </li>
 
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
+          <li class="sidebar-item">
+            <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
+              <i class="ti ti-layout-dashboard"></i>
+              <span class="hide-menu">Dashboard</span>
+            </a>
+          </li>
+
+          <!-- ✅ User Management Dropdown -->
+          <li class="sidebar-item">
+            <a class="sidebar-link has-arrow collapsed"
+              href="#userMgmtMenu"
+              data-bs-toggle="collapse"
+              role="button"
+              aria-expanded="false"
+              aria-controls="userMgmtMenu">
+              <i class="ti ti-users"></i>
+              <span class="hide-menu">User Management</span>
+            </a>
+
+            <ul id="userMgmtMenu" class="collapse first-level">
+              <li class="sidebar-item">
+                <a href="./user_management.php" class="sidebar-link">
+                  <i class="ti ti-home"></i>
+                  <span class="hide-menu">Homeowners</span>
+                </a>
+              </li>
+
+              <li class="sidebar-item">
+                <a href="./phase_management.php" class="sidebar-link">
+                  <i class="ti ti-shield-check"></i>
+                  <span class="hide-menu">Officers</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+                      <li class="sidebar-item">
+              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
+                <i class="ti ti-bell"></i>
+                <span class="hide-menu">Announcements</span>
               </a>
             </li>
 
-<!-- ✅ User Management Dropdown -->
-<li class="sidebar-item">
-  <a class="sidebar-link has-arrow collapsed"
-     href="#userMgmtMenu"
-     data-bs-toggle="collapse"
-     role="button"
-     aria-expanded="false"
-     aria-controls="userMgmtMenu">
-    <i class="ti ti-users"></i>
-    <span class="hide-menu">User Management</span>
-  </a>
-
-  <ul id="userMgmtMenu" class="collapse first-level">
-    <li class="sidebar-item">
-      <a href="./user_management.php" class="sidebar-link">
-        <i class="ti ti-home"></i>
-        <span class="hide-menu">Homeowners</span>
-      </a>
-    </li>
-
-    <li class="sidebar-item">
-      <a href="./phase_management.php" class="sidebar-link">
-        <i class="ti ti-shield-check"></i>
-        <span class="hide-menu">Officers</span>
-      </a>
-    </li>
-  </ul>
-</li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.html" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-
-
+          <li class="sidebar-item">
+            <a class="sidebar-link" href="./voting.html" aria-expanded="false">
+              <i class="ti ti-checkbox"></i>
+              <span class="hide-menu">Voting Management</span>
+            </a>
+          </li>
 
         <!-- End Sidebar navigation -->
-      </div>
-      <!-- End Sidebar scroll-->
-    </aside>
+      </nav>
+    </div>
+  </aside>
     <!-- Main -->
     <div class="body-wrapper">
       <header class="app-header">
