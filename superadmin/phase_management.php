@@ -2,7 +2,7 @@
 session_start();
 
 // ===================== DB CONNECTION =====================
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -11,17 +11,32 @@ if (!function_exists('esc')) {
 }
 
 $POSITIONS = ["President", "Vice President", "Secretary", "Treasurer", "Auditor", "Board of Director"];
+$SINGLE_POSITIONS = ["President", "Vice President", "Secretary", "Treasurer", "Auditor"];
 
-// Ensure DB has a row for each phase+position
-function ensure_phase_rows(mysqli $conn, string $phase, array $POSITIONS): void {
-  $sql = "INSERT IGNORE INTO hoa_officers (phase, position, officer_name, officer_email, is_active)
-          VALUES (?, ?, NULL, NULL, 1)";
-  $stmt = $conn->prepare($sql);
-  foreach ($POSITIONS as $pos) {
+// Ensure DB has a row for each single-seat phase+position
+function ensure_phase_rows(mysqli $conn, string $phase, array $singlePositions): void {
+  foreach ($singlePositions as $pos) {
+    $stmt = $conn->prepare("
+      SELECT id
+      FROM hoa_officers
+      WHERE phase=? AND position=?
+      LIMIT 1
+    ");
     $stmt->bind_param("ss", $phase, $pos);
     $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+      $stmt = $conn->prepare("
+        INSERT INTO hoa_officers (phase, position, officer_name, officer_email, is_active)
+        VALUES (?, ?, NULL, NULL, 1)
+      ");
+      $stmt->bind_param("ss", $phase, $pos);
+      $stmt->execute();
+      $stmt->close();
+    }
   }
-  $stmt->close();
 }
 
 // ===================== AJAX ENDPOINTS =====================
@@ -36,19 +51,31 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     exit;
   }
 
-  ensure_phase_rows($conn, $phase, $POSITIONS);
+  ensure_phase_rows($conn, $phase, $SINGLE_POSITIONS);
 
+  // ================= FETCH =================
   if ($action === 'fetch') {
-    $stmt = $conn->prepare("SELECT position, officer_name, officer_email, is_active FROM hoa_officers WHERE phase=?");
+    $stmt = $conn->prepare("
+      SELECT id, position, officer_name, officer_email, is_active
+      FROM hoa_officers
+      WHERE phase=?
+      ORDER BY
+        FIELD(position,'President','Vice President','Secretary','Treasurer','Auditor','Board of Director'),
+        officer_name ASC,
+        id ASC
+    ");
     $stmt->bind_param("s", $phase);
     $stmt->execute();
     $res = $stmt->get_result();
 
-    $map = [];
+    $grouped = [];
     while ($row = $res->fetch_assoc()) {
-      $map[$row['position']] = [
-        'name' => $row['officer_name'] ?? '',
-        'email' => $row['officer_email'] ?? '',
+      $pos = (string)$row['position'];
+      if (!isset($grouped[$pos])) $grouped[$pos] = [];
+      $grouped[$pos][] = [
+        'id' => (int)$row['id'],
+        'name' => (string)($row['officer_name'] ?? ''),
+        'email' => (string)($row['officer_email'] ?? ''),
         'active' => (int)$row['is_active']
       ];
     }
@@ -56,18 +83,39 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
 
     $rows = [];
     foreach ($POSITIONS as $pos) {
-      $rows[] = [
-        'position' => $pos,
-        'name' => $map[$pos]['name'] ?? '',
-        'email' => $map[$pos]['email'] ?? '',
-        'active' => $map[$pos]['active'] ?? 1
-      ];
+      if ($pos === 'Board of Director') {
+        $officers = $grouped[$pos] ?? [];
+        if (!$officers) {
+          $rows[] = [
+            'position' => $pos,
+            'is_multi' => 1,
+            'officers' => []
+          ];
+        } else {
+          $rows[] = [
+            'position' => $pos,
+            'is_multi' => 1,
+            'officers' => $officers
+          ];
+        }
+      } else {
+        $officer = $grouped[$pos][0] ?? ['id'=>0,'name'=>'','email'=>'','active'=>1];
+        $rows[] = [
+          'position' => $pos,
+          'is_multi' => 0,
+          'id' => (int)$officer['id'],
+          'name' => (string)$officer['name'],
+          'email' => (string)$officer['email'],
+          'active' => (int)$officer['active']
+        ];
+      }
     }
 
     echo json_encode(['success' => true, 'rows' => $rows]);
     exit;
   }
 
+  // ================= ASSIGN =================
   if ($action === 'assign') {
     $position = $_POST['position'] ?? '';
     $name     = trim($_POST['name'] ?? '');
@@ -86,16 +134,47 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       exit;
     }
 
-    // 1) Update officer assignment
+    if ($position === 'Board of Director') {
+      // prevent exact duplicate
+      $stmt = $conn->prepare("
+        SELECT id
+        FROM hoa_officers
+        WHERE phase=? AND position='Board of Director' AND officer_name=? AND officer_email=?
+        LIMIT 1
+      ");
+      $stmt->bind_param("sss", $phase, $name, $email);
+      $stmt->execute();
+      $exists = $stmt->get_result()->fetch_assoc();
+      $stmt->close();
+
+      if ($exists) {
+        echo json_encode(['success' => false, 'message' => 'This Board of Director is already assigned']);
+        exit;
+      }
+
+      $stmt = $conn->prepare("
+        INSERT INTO hoa_officers (phase, position, officer_name, officer_email, is_active)
+        VALUES (?, 'Board of Director', ?, ?, 1)
+      ");
+      $stmt->bind_param("sss", $phase, $name, $email);
+      $ok = $stmt->execute();
+      $stmt->close();
+
+      echo json_encode([
+        'success' => $ok,
+        'message' => $ok ? 'Board of Director added successfully' : 'Assign failed'
+      ]);
+      exit;
+    }
+
+    // single-seat positions
     $stmt = $conn->prepare("
-      INSERT INTO hoa_officers (phase, position, officer_name, officer_email, is_active)
-      VALUES (?, ?, ?, ?, 1)
-      ON DUPLICATE KEY UPDATE
-        officer_name=VALUES(officer_name),
-        officer_email=VALUES(officer_email),
-        is_active=1
+      UPDATE hoa_officers
+      SET officer_name=?, officer_email=?, is_active=1
+      WHERE phase=? AND position=?
+      LIMIT 1
     ");
-    $stmt->bind_param("ssss", $phase, $position, $name, $email);
+    $stmt->bind_param("ssss", $name, $email, $phase, $position);
     $ok = $stmt->execute();
     $stmt->close();
 
@@ -104,8 +183,7 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       exit;
     }
 
-    // 2) IMPORTANT: If assigning President, also sync phase admin's full_name
-    // This makes dashboard top-right name readable + consistent with assigned President
+    // sync admin full_name if President
     if ($position === 'President') {
       $stmt = $conn->prepare("
         UPDATE admins
@@ -122,10 +200,33 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     exit;
   }
 
+  // ================= TOGGLE =================
   if ($action === 'toggle') {
     $position = $_POST['position'] ?? '';
+    $id = (int)($_POST['id'] ?? 0);
+
     if (!in_array($position, $POSITIONS, true)) {
       echo json_encode(['success' => false, 'message' => 'Invalid position']);
+      exit;
+    }
+
+    if ($position === 'Board of Director') {
+      if ($id <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid Board of Director row']);
+        exit;
+      }
+
+      $stmt = $conn->prepare("
+        UPDATE hoa_officers
+        SET is_active = IF(is_active=1, 0, 1)
+        WHERE id=? AND phase=? AND position='Board of Director'
+        LIMIT 1
+      ");
+      $stmt->bind_param("is", $id, $phase);
+      $ok = $stmt->execute();
+      $stmt->close();
+
+      echo json_encode(['success' => $ok, 'message' => $ok ? 'Status updated' : 'Update failed']);
       exit;
     }
 
@@ -133,12 +234,34 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       UPDATE hoa_officers
       SET is_active = IF(is_active=1, 0, 1)
       WHERE phase=? AND position=?
+      LIMIT 1
     ");
     $stmt->bind_param("ss", $phase, $position);
     $ok = $stmt->execute();
     $stmt->close();
 
     echo json_encode(['success' => $ok, 'message' => $ok ? 'Status updated' : 'Update failed']);
+    exit;
+  }
+
+  // ================= DELETE BOARD DIRECTOR =================
+  if ($action === 'delete_board') {
+    $id = (int)($_POST['id'] ?? 0);
+    if ($id <= 0) {
+      echo json_encode(['success' => false, 'message' => 'Invalid Board of Director row']);
+      exit;
+    }
+
+    $stmt = $conn->prepare("
+      DELETE FROM hoa_officers
+      WHERE id=? AND phase=? AND position='Board of Director'
+      LIMIT 1
+    ");
+    $stmt->bind_param("is", $id, $phase);
+    $ok = $stmt->execute();
+    $stmt->close();
+
+    echo json_encode(['success' => $ok, 'message' => $ok ? 'Board of Director removed' : 'Delete failed']);
     exit;
   }
 
@@ -149,7 +272,7 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
 // ===================== PAGE LOAD =====================
 $selectedPhase = $_GET['phase'] ?? 'Phase 1';
 if (!in_array($selectedPhase, ['Phase 1','Phase 2','Phase 3'], true)) $selectedPhase = 'Phase 1';
-ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
+ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
 ?>
 <!doctype html>
 <html lang="en">
@@ -175,78 +298,86 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
       </div>
     </div>
 
- <!-- Sidebar Start -->
-  <aside class="left-sidebar">
-    <div>
-      <div class="brand-logo d-flex align-items-center justify-content-between">
-        <a href="./dashboard.html" class="text-nowrap logo-img">
-          <img src="assets/images/logos/logo.svg" alt="" />
-        </a>
-        <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-          <i class="ti ti-x fs-6"></i>
+    <!-- Sidebar Start -->
+    <!-- Sidebar Start -->
+    <aside class="left-sidebar">
+      <div>
+        <div class="brand-logo d-flex align-items-center justify-content-between">
+          <a href="./dashboard.php" class="text-nowrap logo-img">
+            <img src="assets/images/logos/logo.svg" alt="" />
+          </a>
+          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
+            <i class="ti ti-x fs-6"></i>
+          </div>
         </div>
-      </div>
 
-      <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-        <ul id="sidebarnav">
-          <li class="nav-small-cap">
-            <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-            <span class="hide-menu">Home</span>
-          </li>
+        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
+          <ul id="sidebarnav">
+            <li class="nav-small-cap">
+              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
+              <span class="hide-menu">Home</span>
+            </li>
 
-          <li class="sidebar-item">
-            <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
-              <i class="ti ti-layout-dashboard"></i>
-              <span class="hide-menu">Dashboard</span>
-            </a>
-          </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link active" href="./dashboard.php" aria-expanded="false">
+                <i class="ti ti-layout-dashboard"></i>
+                <span class="hide-menu">Dashboard</span>
+              </a>
+            </li>
 
-          <!-- ✅ User Management Dropdown -->
-          <li class="sidebar-item">
-            <a class="sidebar-link has-arrow collapsed"
-              href="#userMgmtMenu"
-              data-bs-toggle="collapse"
-              role="button"
-              aria-expanded="false"
-              aria-controls="userMgmtMenu">
-              <i class="ti ti-users"></i>
-              <span class="hide-menu">User Management</span>
-            </a>
+            <li class="sidebar-item">
+              <a class="sidebar-link has-arrow collapsed"
+                href="#userMgmtMenu"
+                data-bs-toggle="collapse"
+                role="button"
+                aria-expanded="false"
+                aria-controls="userMgmtMenu">
+                <i class="ti ti-users"></i>
+                <span class="hide-menu">User Management</span>
+              </a>
 
-            <ul id="userMgmtMenu" class="collapse first-level">
-              <li class="sidebar-item">
-                <a href="./user_management.php" class="sidebar-link">
-                  <i class="ti ti-home"></i>
-                  <span class="hide-menu">Homeowners</span>
-                </a>
-              </li>
+              <ul id="userMgmtMenu" class="collapse first-level">
+                <li class="sidebar-item">
+                  <a href="./user_management.php" class="sidebar-link">
+                    <i class="ti ti-home"></i>
+                    <span class="hide-menu">Homeowners</span>
+                  </a>
+                </li>
 
-              <li class="sidebar-item">
-                <a href="./phase_management.php" class="sidebar-link">
-                  <i class="ti ti-shield-check"></i>
-                  <span class="hide-menu">Officers</span>
-                </a>
-              </li>
-            </ul>
-          </li>
-                      <li class="sidebar-item">
+                <li class="sidebar-item">
+                  <a href="./phase_management.php" class="sidebar-link">
+                    <i class="ti ti-shield-check"></i>
+                    <span class="hide-menu">Officers</span>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="./access_control.php" aria-expanded="false">
+                <i class="ti ti-lock-access"></i>
+                <span class="hide-menu">Access Control</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
               <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
                 <i class="ti ti-bell"></i>
                 <span class="hide-menu">Announcements</span>
               </a>
             </li>
 
-          <li class="sidebar-item">
-            <a class="sidebar-link" href="./voting.html" aria-expanded="false">
-              <i class="ti ti-checkbox"></i>
-              <span class="hide-menu">Voting Management</span>
-            </a>
-          </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
+                <i class="ti ti-checkbox"></i>
+                <span class="hide-menu">Voting Management</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
 
-        <!-- End Sidebar navigation -->
-      </nav>
-    </div>
-  </aside>
     <!-- Main -->
     <div class="body-wrapper">
       <header class="app-header">
@@ -313,11 +444,11 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
                     <table class="table table-bordered align-middle mb-0">
                       <thead class="table-light">
                         <tr>
-                          <th style="width: 20%;">Position</th>
+                          <th style="width: 18%;">Position</th>
                           <th>Assigned Officer</th>
                           <th>Email</th>
                           <th style="width: 12%;">Status</th>
-                          <th style="width: 22%;">Actions</th>
+                          <th style="width: 24%;">Actions</th>
                         </tr>
                       </thead>
                       <tbody id="rolesTbody"></tbody>
@@ -408,6 +539,74 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
       tbody.innerHTML = "";
 
       rows.forEach(r => {
+        if (parseInt(r.is_multi, 10) === 1) {
+          const officers = Array.isArray(r.officers) ? r.officers : [];
+
+          if (officers.length === 0) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="fw-semibold">${r.position}</td>
+              <td><span class="text-muted">No assigned Board of Directors</span></td>
+              <td><span class="text-muted">N/A</span></td>
+              <td><span class="badge bg-secondary">N/A</span></td>
+              <td>
+                <button type="button"
+                  class="btn btn-sm btn-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#assignModal"
+                  data-position="${r.position}"
+                  data-current-name=""
+                  data-current-email="">
+                  Add Director
+                </button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          } else {
+            officers.forEach((officer, idx) => {
+              const name = (officer.name || '').trim();
+              const email = (officer.email || '').trim();
+              const active = parseInt(officer.active, 10) === 1;
+
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+                <td class="fw-semibold">${idx === 0 ? r.position : ''}</td>
+                <td>${name ? name : `<span class="text-muted">Not assigned</span>`}</td>
+                <td>${email ? email : `<span class="text-muted">N/A</span>`}</td>
+                <td>${statusBadge(active)}</td>
+                <td>
+                  <button type="button"
+                    class="btn btn-sm btn-outline-secondary me-1"
+                    onclick="toggleBoardActive('${phase}', ${parseInt(officer.id,10)})">
+                    ${active ? 'Set Not Active' : 'Set Active'}
+                  </button>
+
+                  <button type="button"
+                    class="btn btn-sm btn-outline-danger ${officers.length <= 1 ? 'd-none' : ''}"
+                    onclick="deleteBoard('${phase}', ${parseInt(officer.id,10)})">
+                    Remove
+                  </button>
+
+                  ${idx === officers.length - 1 ? `
+                    <button type="button"
+                      class="btn btn-sm btn-primary ms-1"
+                      data-bs-toggle="modal"
+                      data-bs-target="#assignModal"
+                      data-position="Board of Director"
+                      data-current-name=""
+                      data-current-email="">
+                      Add Director
+                    </button>
+                  ` : ''}
+                </td>
+              `;
+              tbody.appendChild(tr);
+            });
+          }
+
+          return;
+        }
+
         const name = (r.name || '').trim();
         const email = (r.email || '').trim();
         const active = parseInt(r.active, 10) === 1;
@@ -461,6 +660,30 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
       }, 'json');
     };
 
+    window.toggleBoardActive = function(phase, id) {
+      $.post('phase_management.php', { ajax: '1', action: 'toggle', phase, position: 'Board of Director', id }, function(res) {
+        if (!res.success) {
+          showMsg('danger', res.message || 'Failed to update');
+          return;
+        }
+        showMsg('success', 'Director status updated');
+        fetchPhase(phase);
+      }, 'json');
+    };
+
+    window.deleteBoard = function(phase, id) {
+      if (!confirm('Remove this Board of Director from the phase officers list?')) return;
+
+      $.post('phase_management.php', { ajax: '1', action: 'delete_board', phase, id }, function(res) {
+        if (!res.success) {
+          showMsg('danger', res.message || 'Delete failed');
+          return;
+        }
+        showMsg('success', res.message || 'Removed successfully');
+        fetchPhase(phase);
+      }, 'json');
+    };
+
     document.addEventListener("DOMContentLoaded", function () {
       const phaseSelect = document.getElementById("phaseSelect");
       fetchPhase(phaseSelect.value);
@@ -507,7 +730,6 @@ ensure_phase_rows($conn, $selectedPhase, $POSITIONS);
         }, 'json');
       });
     });
-    
   </script>
 </body>
 </html>

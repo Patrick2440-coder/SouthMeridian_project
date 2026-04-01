@@ -6,7 +6,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SE
   exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -26,11 +26,17 @@ if (empty($_SESSION['csrf_pay_dues']) || !hash_equals($_SESSION['csrf_pay_dues']
 
 $year  = (int)($_POST['year'] ?? 0);
 $month = (int)($_POST['month'] ?? 0);
+
 if ($year < 2000 || $year > ((int)date('Y') + 1)) back_err("Invalid year.");
 if ($month < 1 || $month > 12) back_err("Invalid month.");
 
 // Load homeowner
-$stmt = $conn->prepare("SELECT id, status, first_name, last_name, email, contact_number, phase, house_lot_number FROM homeowners WHERE id=? LIMIT 1");
+$stmt = $conn->prepare("
+  SELECT id, status, first_name, last_name, email, contact_number, phase, house_lot_number
+  FROM homeowners
+  WHERE id=?
+  LIMIT 1
+");
 $stmt->bind_param("i", $hid);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
@@ -42,53 +48,72 @@ if (!$user || $user['status'] !== 'approved') {
   exit;
 }
 
-$phase = (string)$user['phase'];
-$fullName = trim($user['first_name'].' '.$user['last_name']);
-$email = (string)($user['email'] ?? '');
-$phone = (string)($user['contact_number'] ?? '');
+$phase    = (string)$user['phase'];
+$fullName = trim($user['first_name'] . ' ' . $user['last_name']);
+$email    = (string)($user['email'] ?? '');
+$phone    = (string)($user['contact_number'] ?? '');
 $houseLot = (string)($user['house_lot_number'] ?? '');
 
 // If already paid, block
-$stmt = $conn->prepare("SELECT id FROM finance_payments WHERE homeowner_id=? AND pay_year=? AND pay_month=? AND status='paid' LIMIT 1");
+$stmt = $conn->prepare("
+  SELECT id
+  FROM finance_payments
+  WHERE homeowner_id=? AND pay_year=? AND pay_month=? AND status='paid'
+  LIMIT 1
+");
 $stmt->bind_param("iii", $hid, $year, $month);
 $stmt->execute();
 $already = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-if ($already) back_err("This month is already marked as PAID.");
 
-// Optional: block if there is already pending checkout for same month
-$stmt = $conn->prepare("SELECT id FROM finance_paymongo_checkouts WHERE homeowner_id=? AND pay_year=? AND pay_month=? AND status='pending' LIMIT 1");
-$stmt->bind_param("iii", $hid, $year, $month);
-$stmt->execute();
-$pendingExists = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-if ($pendingExists) back_err("You already have a PENDING checkout for this month. Please wait or refresh.");
+if ($already) {
+  back_err("This month is already marked as PAID.");
+}
 
 // Get dues
-$stmt = $conn->prepare("SELECT monthly_dues FROM finance_dues_settings WHERE phase=? LIMIT 1");
+$stmt = $conn->prepare("
+  SELECT monthly_dues
+  FROM finance_dues_settings
+  WHERE phase=?
+  LIMIT 1
+");
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $monthlyDues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
 $stmt->close();
 
-if ($monthlyDues <= 0) back_err("Monthly dues is not set yet. Please contact HOA.");
+if ($monthlyDues <= 0) {
+  back_err("Monthly dues is not set yet. Please contact HOA.");
+}
+
+// Mark old pending checkouts for same month as cancelled
+// so the user can create a fresh checkout if they previously opened PayMongo but did not pay.
+$stmt = $conn->prepare("
+  UPDATE finance_paymongo_checkouts
+  SET status='cancelled',
+      updated_at=CURRENT_TIMESTAMP
+  WHERE homeowner_id=? AND pay_year=? AND pay_month=? AND status='pending'
+");
+$stmt->bind_param("iii", $hid, $year, $month);
+$stmt->execute();
+$stmt->close();
 
 // ---- PayMongo keys (SERVER SIDE ONLY) ----
 $PAYMONGO_SECRET = getenv('PAYMONGO_SECRET_KEY') ?: 'sk_test_Rxb7X283U4N6dTvWTP4oE81y';
 
-// Build absolute URLs (IMPORTANT: for live webhook + success redirect, use public URL not localhost)
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$baseDir = rtrim(str_replace('\\','/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
-$base = $scheme . '://' . $host . $baseDir;
+// Build absolute URLs
+$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$baseDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+$base    = $scheme . '://' . $host . $baseDir;
 
 $successUrl = $base . '/homeowner_pay_dues.php?paid=1&year=' . urlencode((string)$year);
 $cancelUrl  = $base . '/homeowner_pay_dues.php?cancel=1&year=' . urlencode((string)$year);
 
-$desc = "South Meridian HOA Monthly Dues - {$phase} - {$houseLot} - {$year}-" . str_pad((string)$month,2,'0',STR_PAD_LEFT);
+$desc = "South Meridian HOA Monthly Dues - {$phase} - {$houseLot} - {$year}-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT);
 $amountCentavos = (int)round($monthlyDues * 100);
 
-$paymentMethodTypes = ["gcash","card","paymaya","grab_pay"];
+$paymentMethodTypes = ["gcash"];
 
 $payload = [
   "data" => [
@@ -100,7 +125,7 @@ $payload = [
           "quantity" => 1,
           "amount" => $amountCentavos,
           "currency" => "PHP",
-          "description" => "{$year}-" . str_pad((string)$month,2,'0',STR_PAD_LEFT) . " dues"
+          "description" => "{$year}-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT) . " dues"
         ]
       ],
       "payment_method_types" => $paymentMethodTypes,
@@ -138,6 +163,7 @@ if ($response === false) {
 }
 
 $body = json_decode($response, true);
+
 if ($http < 200 || $http >= 300 || empty($body['data']['id'])) {
   $msg = $body['errors'][0]['detail'] ?? ($body['errors'][0]['code'] ?? 'Unable to create checkout session.');
   back_err("PayMongo: " . $msg);
@@ -150,24 +176,14 @@ if ($checkoutUrl === '') {
   back_err("PayMongo did not return checkout_url.");
 }
 
-// ✅ FIXED: correct bind_param types so phase is stored properly
+// Save new checkout as pending
 $stmt = $conn->prepare("
   INSERT INTO finance_paymongo_checkouts
     (checkout_session_id, checkout_url, homeowner_id, phase, pay_year, pay_month, amount, status)
   VALUES (?,?,?,?,?,?,?,'pending')
-  ON DUPLICATE KEY UPDATE
-    checkout_url=VALUES(checkout_url),
-    status='pending',
-    amount=VALUES(amount),
-    phase=VALUES(phase),
-    pay_year=VALUES(pay_year),
-    pay_month=VALUES(pay_month),
-    updated_at=CURRENT_TIMESTAMP
 ");
 
-// checkout_session_id (s), checkout_url (s), homeowner_id (i), phase (s), year (i), month (i), amount (d)
 $stmt->bind_param("ssisiid", $csId, $checkoutUrl, $hid, $phase, $year, $month, $monthlyDues);
-
 $stmt->execute();
 $stmt->close();
 

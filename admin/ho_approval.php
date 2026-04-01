@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once 'admin_access.php';
+requireAccess('homeowner_management');
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
@@ -7,12 +9,21 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-$host="localhost"; $db="south_meridian_hoa"; $user="root"; $pass="";
+$host="localhost"; 
+$db="u972459197_south_meridian"; 
+$user="u972459197_patrick"; 
+$pass="Idle2440";
+
 $conn = new mysqli($host,$user,$pass,$db);
 if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);
 $conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+
+function phase_prefix(string $phase): string {
+  $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
+  return $n > 0 ? ('P'.$n) : 'P';
+}
 
 // admin info (always read from DB)
 $admin_id = (int)$_SESSION['admin_id'];
@@ -21,10 +32,15 @@ $stmt->bind_param("i", $admin_id);
 $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
 $admin_phase = $admin['phase'] ?? '';
 $admin_role  = $admin['role'] ?? '';
 
 $isHOSection = true;
+
+if (!isset($permissions) || !is_array($permissions)) {
+  $permissions = [];
+}
 
 // pending homeowners
 if ($admin_role === 'superadmin') {
@@ -39,40 +55,31 @@ $resultHO = $sqlHO->get_result();
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- Basic Page Info -->
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<!-- Site favicon -->
 	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
 
-	<!-- Mobile Specific Metas -->
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<!-- Google Font -->
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<!-- CSS -->
 	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-	<!-- Global site tag (gtag.js) - Google Analytics -->
-	 <!-- Include CSS for DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
-    <!-- ================= MAPS ================= -->
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 	<style>
 		:root{--brand:#077f46;}
@@ -83,6 +90,49 @@ $resultHO = $sqlHO->get_result();
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
+		
+		.access-toast {
+		  position: fixed;
+		  top: 20px;
+		  right: 20px;
+		  background: #ef4444;
+		  color: #fff;
+		  padding: 12px 18px;
+		  border-radius: 8px;
+		  font-weight: 600;
+		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+		  z-index: 99999;
+		  opacity: 0;
+		  transform: translateY(-10px);
+		  transition: all .3s ease;
+		}
+
+		.access-toast.show {
+		  opacity: 1;
+		  transform: translateY(0);
+		}
+		
+		#viewHomeownerModal #coverMap{
+			min-height:320px;
+			background:#e9eef6;
+		}
+
+		#viewHomeownerModal{
+			z-index: 1055;
+		}
+		#actionConfirmModal{
+			z-index: 1080;
+		}
+		.modal-backdrop.show{
+			opacity: .5;
+		}
+		.modal-backdrop + .modal-backdrop{
+			z-index: 1070 !important;
+		}
+		#actionConfirmModal + .modal-backdrop,
+		.modal-backdrop.confirm-top{
+			z-index: 1070 !important;
+		}
 	</style>
 </head>
 
@@ -123,7 +173,6 @@ $resultHO = $sqlHO->get_result();
 						<span class="user-icon">
 							<img src="vendors/images/photo1.jpg" alt="">
 						</span>
-						<span class="user-name"><?= esc(strtoupper($admin_role)) ?></span>
 					</a>
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
@@ -167,85 +216,7 @@ $resultHO = $sqlHO->get_result();
 		</div>
 	</div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle ">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="ho_approval.php">Household Approval</a></li>
-              <li><a href="ho_register.php">Register Household</a></li>
-              <li><a href="ho_approved.php">Approved Households</a></li>
-            </ul>
-          </li>
-
-          <!-- ✅ USER MANAGEMENT DROPDOWN -->
-          <?php $view = $_GET['view'] ?? ''; ?>
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
-              <li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-car"></span><span class="mtext">Parking</span></a>
-            <ul class="submenu">
-              <li><a href="parking.php">Parking Overview</a></li>
-              <li><a href="parking_permits.php">Manage Permits</a></li>
-              <li><a href="parking_violations.php">View Violations</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
+	<?php include 'sidebar.php'; ?>
 
 	<div class="mobile-menu-overlay"></div>
 
@@ -276,19 +247,20 @@ $resultHO = $sqlHO->get_result();
 								<?php
 									$status = (string)($row['status'] ?? 'pending');
 									$badgeClass = ($status==='pending') ? 'badge-warning' : (($status==='approved') ? 'badge-success' : 'badge-danger');
+
+									$displayId = trim((string)($row['public_id'] ?? ''));
+									if ($displayId === '') {
+										$rowPhase = (string)($row['phase'] ?? $admin_phase);
+										$prefix = phase_prefix($rowPhase);
+										$displayId = $prefix . (int)$row['id'];
+									}
 								?>
 								<tr>
-									<td><?= (int)$row['id'] ?></td>
+									<td><?= esc($displayId) ?></td>
 									<td><?= esc(trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''))) ?></td>
 									<td><?= esc(trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''))) ?></td>
 									<td><span class="badge <?= $badgeClass ?>"><?= esc(ucfirst($status)) ?></span></td>
 									<td>
-										<button class="btn btn-sm btn-success approveHomeowner" data-id="<?= (int)$row['id'] ?>" title="Approve">
-											<i class="dw dw-checked"></i>
-										</button>
-										<button class="btn btn-sm btn-danger rejectHomeowner" data-id="<?= (int)$row['id'] ?>" title="Reject">
-											<i class="dw dw-cancel-1"></i>
-										</button>
 										<button type="button" class="btn btn-sm btn-info viewHomeownerBtn" data-id="<?= (int)$row['id'] ?>" title="View">
 											<i class="dw dw-eye"></i>
 										</button>
@@ -306,7 +278,6 @@ $resultHO = $sqlHO->get_result();
 		</div>
 	</div>
 
-	<!-- ================= ACTION CONFIRM MODAL ================= -->
 	<div class="modal fade" id="actionConfirmModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
@@ -335,7 +306,6 @@ $resultHO = $sqlHO->get_result();
 		</div>
 	</div>
 
-	<!-- ================= VIEW HOMEOWNER MODAL (AJAX) ================= -->
 	<div class="modal fade" id="viewHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
 			<div class="modal-content" style="border-radius: 14px; overflow: hidden;">
@@ -351,7 +321,6 @@ $resultHO = $sqlHO->get_result();
 		</div>
 	</div>
 
-	<!-- ================= TOAST ================= -->
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="d-flex">
@@ -361,8 +330,11 @@ $resultHO = $sqlHO->get_result();
 		</div>
 	</div>
 
-	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+	<div id="accessToast" class="access-toast">
+	  🚫 You do not have access to that part.
+	</div>
 
+	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 	<script src="vendors/scripts/core.js"></script>
 	<script src="vendors/scripts/script.min.js"></script>
 	<script src="vendors/scripts/process.js"></script>
@@ -375,164 +347,268 @@ $resultHO = $sqlHO->get_result();
 
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-	<script>
-		function showToast(message, type='success') {
-			const toastEl = document.getElementById('appToast');
-			const msgEl = document.getElementById('appToastMsg');
-			msgEl.textContent = message;
+<script>
+	function showToast(message, type='success') {
+		const toastEl = document.getElementById('appToast');
+		const msgEl = document.getElementById('appToastMsg');
+		msgEl.textContent = message;
 
-			toastEl.classList.remove('text-bg-success','text-bg-danger','text-bg-warning','text-bg-info','text-bg-dark');
-			toastEl.classList.add(type === 'success' ? 'text-bg-success' : 'text-bg-danger');
+		toastEl.classList.remove('text-bg-success','text-bg-danger','text-bg-warning','text-bg-info','text-bg-dark');
+		toastEl.classList.add(type === 'success' ? 'text-bg-success' : 'text-bg-danger');
 
-			bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2800 }).show();
+		bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2800 }).show();
+	}
+
+	$(function () {
+		if ($.fn.DataTable && $('#approvalTable').length && !$.fn.DataTable.isDataTable('#approvalTable')) {
+			$('#approvalTable').DataTable({
+				responsive: true,
+				columnDefs: [{ orderable: false, targets: 4 }]
+			});
 		}
 
-		$(function () {
-			// DataTable safe init
-			if ($.fn.DataTable && $('#approvalTable').length && !$.fn.DataTable.isDataTable('#approvalTable')) {
-				$('#approvalTable').DataTable({ responsive: true, columnDefs: [{ orderable: false, targets: 4 }] });
-			}
+		const confirmModalEl = document.getElementById('actionConfirmModal');
+		const confirmTitleEl = document.getElementById('actionConfirmTitle');
+		const confirmTextEl  = document.getElementById('actionConfirmText');
+		const confirmBtnEl   = document.getElementById('actionConfirmBtn');
+		const reasonWrapEl   = document.getElementById('rejectReasonWrap');
+		const reasonInputEl  = document.getElementById('rejectReasonInput');
+		const reasonErrorEl  = document.getElementById('rejectReasonError');
 
-			// ---------- Approve/Reject confirm modal ----------
-			const confirmModalEl = document.getElementById('actionConfirmModal');
-			const confirmTitleEl = document.getElementById('actionConfirmTitle');
-			const confirmTextEl  = document.getElementById('actionConfirmText');
-			const confirmBtnEl   = document.getElementById('actionConfirmBtn');
-			const reasonWrapEl   = document.getElementById('rejectReasonWrap');
-			const reasonInputEl  = document.getElementById('rejectReasonInput');
-			const reasonErrorEl  = document.getElementById('rejectReasonError');
+		let pendingAction = { id: null, status: null };
 
-			let pendingAction = { id: null, status: null };
+		const confirmModal = new bootstrap.Modal(confirmModalEl, {
+			backdrop: true,
+			keyboard: false,
+			focus: true
+		});
 
-			const confirmModal = new bootstrap.Modal(confirmModalEl, { backdrop:'static', keyboard:false });
+		$(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
+			e.preventDefault();
 
-			$(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
-				e.preventDefault();
+			const id = $(this).data('id');
+			const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
+			if (!id) return;
 
-				const id = $(this).data('id');
-				const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
-				if (!id) return;
+			pendingAction = { id, status };
 
-				pendingAction = { id, status };
-
-				if (status === 'approved') {
-					confirmTitleEl.textContent = 'Approve Homeowner';
-					confirmTextEl.textContent  = 'This will approve the homeowner. Continue?';
-					confirmBtnEl.classList.remove('btn-danger');
-					confirmBtnEl.classList.add('btn-success');
-					confirmBtnEl.textContent = 'Approve';
-					reasonWrapEl.style.display = 'none';
-					reasonErrorEl.style.display = 'none';
-					reasonInputEl.value = '';
-				} else {
-					confirmTitleEl.textContent = 'Reject Homeowner';
-					confirmTextEl.textContent  = 'Please provide a rejection reason. This will be saved and sent.';
-					confirmBtnEl.classList.remove('btn-success');
-					confirmBtnEl.classList.add('btn-danger');
-					confirmBtnEl.textContent = 'Reject';
-					reasonWrapEl.style.display = 'block';
-					reasonErrorEl.style.display = 'none';
-					reasonInputEl.value = '';
-					setTimeout(() => reasonInputEl.focus(), 250);
-				}
-
-				confirmModal.show();
-			});
-
-			confirmBtnEl.addEventListener('click', function () {
-				const { id, status } = pendingAction;
-				if (!id || !status) return;
-
-				let reason = '';
-				if (status === 'rejected') {
-					reason = (reasonInputEl.value || '').trim();
-					if (!reason) {
-						reasonErrorEl.style.display = 'block';
-						reasonInputEl.focus();
-						return;
-					}
-				}
-
-				confirmBtnEl.disabled = true;
-				const oldText = confirmBtnEl.textContent;
-				confirmBtnEl.textContent = status === 'approved' ? 'Approving...' : 'Rejecting...';
-
-				$.post('update_homeowner_status_email.php', { id, status, reason }, function (res) {
-					if (!res || !res.success) {
-						showToast(res?.message || 'Action failed.', 'error');
-						confirmBtnEl.disabled = false;
-						confirmBtnEl.textContent = oldText;
-						return;
-					}
-					showToast(res.message || 'Updated successfully.', 'success');
-					confirmModal.hide();
-					setTimeout(() => location.reload(), 600);
-				}, 'json').fail(function (xhr) {
-					console.error(xhr.responseText);
-					showToast('Request failed. Please try again.', 'error');
-					confirmBtnEl.disabled = false;
-					confirmBtnEl.textContent = oldText;
-				});
-			});
-
-			confirmModalEl.addEventListener('hidden.bs.modal', function () {
-				pendingAction = { id: null, status: null };
-				confirmBtnEl.disabled = false;
-				confirmBtnEl.textContent = 'Confirm';
+			if (status === 'approved') {
+				confirmTitleEl.textContent = 'Approve Homeowner';
+				confirmTextEl.textContent  = 'This will approve the homeowner. Continue?';
+				confirmBtnEl.classList.remove('btn-danger');
+				confirmBtnEl.classList.add('btn-success');
+				confirmBtnEl.textContent = 'Approve';
+				reasonWrapEl.style.display = 'none';
 				reasonErrorEl.style.display = 'none';
 				reasonInputEl.value = '';
-			});
-
-			// ---------- View Homeowner (AJAX -> HO-management.php) ----------
-			const modalEl = document.getElementById('viewHomeownerModal');
-			const content = document.getElementById('viewHomeownerContent');
-			const modal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: true });
-
-			let coverMapInstance = null;
-
-			function initCoverMapIfAny() {
-				const mapEl = document.getElementById('coverMap');
-				if (!mapEl) return;
-
-				const lat = parseFloat(mapEl.dataset.lat || '');
-				const lng = parseFloat(mapEl.dataset.lng || '');
-				if (!isFinite(lat) || !isFinite(lng)) return;
-
-				if (coverMapInstance) { coverMapInstance.remove(); coverMapInstance = null; }
-
-				coverMapInstance = L.map('coverMap', { zoomControl: false }).setView([lat, lng], 18);
-				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-					attribution: '&copy; OpenStreetMap contributors'
-				}).addTo(coverMapInstance);
-
-				L.marker([lat, lng]).addTo(coverMapInstance);
-				setTimeout(() => coverMapInstance.invalidateSize(), 250);
+			} else {
+				confirmTitleEl.textContent = 'Reject Homeowner';
+				confirmTextEl.textContent  = 'Please provide a rejection reason. This will be saved and sent.';
+				confirmBtnEl.classList.remove('btn-success');
+				confirmBtnEl.classList.add('btn-danger');
+				confirmBtnEl.textContent = 'Reject';
+				reasonWrapEl.style.display = 'block';
+				reasonErrorEl.style.display = 'none';
+				reasonInputEl.value = '';
 			}
 
-			$(document).on('click', '.viewHomeownerBtn', function (e) {
-				e.preventDefault();
-				const id = $(this).data('id');
-				if (!id) return;
+			confirmModal.show();
 
-				content.innerHTML = `<div class="p-4 text-muted fw-semibold">Loading...</div>`;
-				modal.show();
+			setTimeout(function () {
+				const backdrops = document.querySelectorAll('.modal-backdrop');
+				if (backdrops.length > 1) {
+					backdrops[backdrops.length - 1].classList.add('confirm-top');
+				}
+				if (status === 'rejected') {
+					reasonInputEl.focus();
+				} else {
+					confirmBtnEl.focus();
+				}
+			}, 120);
+		});
 
-				$.get('HO-management.php', { ajax: 'homeowner_profile', id: id, _: Date.now() })
-					.done(function (html) {
-						content.innerHTML = html;
-						initCoverMapIfAny();
-					})
-					.fail(function (xhr) {
-						content.innerHTML = `<div class="p-4"><div class="alert alert-danger mb-0">Failed to load profile. HTTP ${xhr.status}</div></div>`;
-					});
-			});
+		confirmBtnEl.addEventListener('click', function () {
+			const { id, status } = pendingAction;
+			if (!id || !status) return;
 
-			modalEl.addEventListener('hidden.bs.modal', function () {
-				if (coverMapInstance) { coverMapInstance.remove(); coverMapInstance = null; }
-				content.innerHTML = '';
+			let reason = '';
+			if (status === 'rejected') {
+				reason = (reasonInputEl.value || '').trim();
+				if (!reason) {
+					reasonErrorEl.style.display = 'block';
+					reasonInputEl.focus();
+					return;
+				}
+			}
+
+			confirmBtnEl.disabled = true;
+			const oldText = confirmBtnEl.textContent;
+			confirmBtnEl.textContent = status === 'approved' ? 'Approving...' : 'Rejecting...';
+
+			$.post('update_homeowner_status_email.php', { id, status, reason }, function (res) {
+				if (!res || !res.success) {
+					showToast((res && res.message) ? res.message : 'Action failed.', 'error');
+					confirmBtnEl.disabled = false;
+					confirmBtnEl.textContent = oldText;
+					return;
+				}
+
+				showToast(res.message || 'Updated successfully.', 'success');
+				confirmModal.hide();
+
+				const viewModalEl = document.getElementById('viewHomeownerModal');
+				const viewModalInstance = bootstrap.Modal.getInstance(viewModalEl);
+				if (viewModalInstance) {
+					viewModalInstance.hide();
+				}
+
+				setTimeout(() => location.reload(), 600);
+			}, 'json').fail(function (xhr) {
+				console.error(xhr.responseText);
+				showToast('Request failed. Please try again.', 'error');
+				confirmBtnEl.disabled = false;
+				confirmBtnEl.textContent = oldText;
 			});
 		});
-	</script>
 
+		confirmModalEl.addEventListener('hidden.bs.modal', function () {
+			pendingAction = { id: null, status: null };
+			confirmBtnEl.disabled = false;
+			confirmBtnEl.textContent = 'Confirm';
+			reasonErrorEl.style.display = 'none';
+			reasonInputEl.value = '';
+
+			document.querySelectorAll('.modal-backdrop.confirm-top').forEach(function(el){
+				el.classList.remove('confirm-top');
+			});
+		});
+
+		const modalEl = document.getElementById('viewHomeownerModal');
+		const content = document.getElementById('viewHomeownerContent');
+		const modal = new bootstrap.Modal(modalEl, {
+			backdrop: 'static',
+			keyboard: true
+		});
+
+		let coverMapInstance = null;
+		let pendingProfileHtml = '';
+
+		function destroyCoverMap() {
+			if (coverMapInstance) {
+				coverMapInstance.remove();
+				coverMapInstance = null;
+			}
+		}
+
+function initCoverMapIfAny() {
+	const mapEl = document.getElementById('coverMap');
+	if (!mapEl || typeof L === 'undefined') return;
+
+	const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
+	const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
+	if (!isFinite(lat) || !isFinite(lng)) return;
+
+	destroyCoverMap();
+
+	coverMapInstance = L.map(mapEl, {
+		center: [lat, lng],
+		zoom: 18,
+		zoomControl: true,
+		attributionControl: true
+	});
+
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		maxZoom: 19,
+		subdomains: ['a', 'b', 'c'],
+		attribution: '&copy; OpenStreetMap contributors'
+	}).addTo(coverMapInstance);
+
+	L.marker([lat, lng]).addTo(coverMapInstance);
+
+	setTimeout(function () {
+		if (coverMapInstance) {
+			coverMapInstance.invalidateSize(true);
+			coverMapInstance.setView([lat, lng], 18);
+		}
+	}, 300);
+
+	setTimeout(function () {
+		if (coverMapInstance) {
+			coverMapInstance.invalidateSize(true);
+		}
+	}, 800);
+}
+
+		$(document).on('click', '.viewHomeownerBtn', function (e) {
+			e.preventDefault();
+			const id = $(this).data('id');
+			if (!id) return;
+
+			pendingProfileHtml = '';
+			destroyCoverMap();
+			content.innerHTML = '<div class="p-4 text-muted fw-semibold">Loading...</div>';
+			modal.show();
+
+			$.get('HO-management.php', { ajax: 'homeowner_profile', id: id, _: Date.now() })
+				.done(function (html) {
+					pendingProfileHtml = html;
+
+					if (modalEl.classList.contains('show')) {
+						content.innerHTML = pendingProfileHtml;
+						initCoverMapIfAny();
+					}
+				})
+				.fail(function (xhr) {
+					content.innerHTML = '<div class="p-4"><div class="alert alert-danger mb-0">Failed to load profile. HTTP ' + xhr.status + '</div></div>';
+				});
+		});
+
+		modalEl.addEventListener('shown.bs.modal', function () {
+			if (pendingProfileHtml) {
+				content.innerHTML = pendingProfileHtml;
+				initCoverMapIfAny();
+			} else {
+				setTimeout(function () {
+					initCoverMapIfAny();
+				}, 200);
+			}
+		});
+
+		modalEl.addEventListener('hidden.bs.modal', function () {
+			destroyCoverMap();
+			pendingProfileHtml = '';
+			content.innerHTML = '';
+		});
+	});
+</script>
+
+	<script>
+	window.userPermissions = <?= json_encode($permissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+	document.addEventListener('DOMContentLoaded', function () {
+	  const toast = document.getElementById('accessToast');
+
+	  function showAccessToast() {
+	    toast.classList.add('show');
+
+	    setTimeout(() => {
+	      toast.classList.remove('show');
+	    }, 2500);
+	  }
+
+	  document.querySelectorAll('.menu-access-link').forEach(function(link){
+	    link.addEventListener('click', function(e){
+	      const moduleKey = this.dataset.module || '';
+	      const allowed = !!window.userPermissions[moduleKey];
+
+	      if(!allowed){
+	        e.preventDefault();
+	        showAccessToast();
+	      }
+	    });
+	  });
+
+	});
+	</script>
 </body>
 </html>

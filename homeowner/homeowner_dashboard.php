@@ -6,7 +6,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SE
   exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -31,6 +31,25 @@ $fullName   = trim($user['first_name'].' '.$user['last_name']);
 $mustChange = ((int)$user['must_change_password'] === 1);
 $initials   = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
 $pageTitle  = "South Meridian Homes Salitran • ".$phase;
+
+/* =========================
+   ACTIVE SIDEBAR STATES
+   ========================= */
+$activePage = basename($_SERVER['PHP_SELF'] ?? 'homeowner_dashboard.php');
+
+$parkingPages = [
+  'homeowner_parking.php',
+  'homeowner_parking_permit.php',
+  'homeowner_parking_violations.php'
+];
+
+$complaintPages = [
+  'homeowner_complaints.php',
+  'homeowner_complaint_chat.php'
+];
+
+$parkingOpen    = in_array($activePage, $parkingPages, true);
+$complaintsOpen = in_array($activePage, $complaintPages, true);
 
 $err = "";
 if ($mustChange && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password_submit'])) {
@@ -206,8 +225,8 @@ $monthlyDues = (float)(($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0)
 $stmt->close();
 
 // Load payments for this homeowner for current year up to current month
-$paidMonths = [];          // [month => true]
-$paidRowsByMonth = [];     // [month => row]
+$paidMonths = [];
+$paidRowsByMonth = [];
 $stmt = $conn->prepare("
   SELECT pay_month, status, amount, paid_at, reference_no
   FROM finance_payments
@@ -385,33 +404,6 @@ $stmt = $conn->prepare("
     AND (
       a.audience='all'
       OR (a.audience='selected' AND ar.id IS NOT NULL)
-      OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> '' AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
-    )
-  ORDER BY ac.created_at DESC
-  LIMIT 6
-");
-$stmt->bind_param("issis", $hid, $phase, $lastComSeen, $hid, $houseLot);
-$stmt->close();
-// latest comments since last seen (FIXED)
-$stmt = $conn->prepare("
-  SELECT ac.id, ac.created_at, 'comment' AS kind,
-         CONCAT(h.first_name,' ',h.last_name) AS actor_name,
-         LEFT(ac.comment, 90) AS snippet
-  FROM announcement_comments ac
-  JOIN announcements a ON a.id=ac.announcement_id
-  JOIN homeowners h ON h.id=ac.homeowner_id
-  LEFT JOIN announcement_recipients ar
-    ON ar.announcement_id=a.id
-   AND ar.recipient_type='homeowner'
-   AND ar.homeowner_id=?
-
-  WHERE
-    (a.phase = ? OR a.phase='Superadmin')
-    AND ac.created_at > ?
-    AND ac.homeowner_id <> ?
-    AND (
-      a.audience='all'
-      OR (a.audience='selected' AND ar.id IS NOT NULL)
       OR (a.audience='block' AND a.audience_value IS NOT NULL AND a.audience_value <> ''
           AND LOWER(?) LIKE CONCAT('%', LOWER(a.audience_value), '%'))
     )
@@ -423,7 +415,6 @@ $stmt->execute();
 $res = $stmt->get_result();
 while($r = $res->fetch_assoc()) $notifItems[] = $r;
 $stmt->close();
-
 
 usort($notifItems, function($a,$b){
   return strtotime($b['created_at']) <=> strtotime($a['created_at']);
@@ -461,6 +452,11 @@ if (!empty($annFeed)) {
 
 $lat = $user['latitude'];
 $lng = $user['longitude'];
+
+$chatPages = [
+  'homeowner_public_chat.php'
+];
+$chatOpen = in_array($activePage, $chatPages, true);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -471,31 +467,269 @@ $lng = $user['longitude'];
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
 
-
 <style>
-  /* Sidebar dropdown */
-.sb-dd { display:flex; flex-direction:column; gap:6px; }
-.sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
-.sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
-.sb-dd.open .sb-dd-menu{ display:block; }
-.sb-dd-caret{ transition: transform .15s ease; }
-.sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 
-.pillx{ display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#f1f5f9; font-weight:700; }
-.req-list li{ margin-bottom: 6px; }
+  .app-shell{
+    position: relative;
+  }
+
+  .sidebar-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .45);
+    z-index: 1040;
+    opacity: 0;
+    visibility: hidden;
+    transition: .25s ease;
+  }
+  .sidebar-overlay.show{
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .sb-dd { display:flex; flex-direction:column; gap:6px; }
+  .sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+  .sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
+  .sb-dd.open .sb-dd-menu{ display:block; }
+  .sb-dd-caret{ transition: transform .15s ease; }
+  .sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
+
+  .pillx{
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+    padding:8px 12px;
+    border-radius:999px;
+    background:#f1f5f9;
+    font-weight:700;
+    flex-wrap: wrap;
+  }
+
+  .req-list li{ margin-bottom: 6px; }
+
+  .topbar-mobile-btn{
+    border: 1px solid #dbe3ea;
+    background: #fff;
+    color: #0f5132;
+    border-radius: 10px;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .notif-btn{
+    position: relative;
+  }
+
+  .notif-badge{
+    position:absolute;
+    top:-5px;
+    right:-5px;
+    min-width:18px;
+    height:18px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#dc3545;
+    color:#fff;
+    padding:0 5px;
+    line-height:1;
+  }
+
+  .notif-menu{
+    width:min(360px, 95vw);
+    border-radius:14px;
+    overflow:hidden;
+  }
+
+  #coverMap{
+    width:100%;
+    min-height:260px;
+  }
+
+  .fb-cover{
+    overflow:hidden;
+  }
+
+  .fb-profile-card,
+  .fb-actions,
+  .post-h,
+  .post-stats,
+  .comment-form{
+    min-width:0;
+  }
+
+  .comment-form{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+
+  .comment-input{
+    flex:1;
+    min-width:0;
+  }
+
+  .post-content,
+  .fb-comment-text,
+  .fb-sub,
+  .sb-name,
+  .sb-meta{
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-user-strip{
+    display:none;
+  }
+
+  @media (max-width: 991.98px){
+    .sidebar{
+      position: fixed !important;
+      top: 0;
+      left: -290px;
+      width: 280px !important;
+      max-width: 85vw;
+      height: 100vh;
+      z-index: 1050;
+      transition: left .25s ease;
+      overflow-y: auto;
+    }
+
+    .sidebar.show{
+      left: 0;
+    }
+
+    .main-area{
+      width: 100% !important;
+      margin-left: 0 !important;
+    }
+
+    .container-xl{
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .fb-profile-card{
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 14px;
+    }
+
+    .fb-actions{
+      width: 100%;
+      display:flex;
+      flex-wrap: wrap;
+      gap:10px;
+    }
+
+    .post-h,
+    .post-stats{
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill,
+    .pillx{
+      max-width: 100%;
+    }
+
+    .mobile-user-strip{
+      display:block;
+      margin-bottom: 14px;
+    }
+
+    .desktop-user-text{
+      display:none !important;
+    }
+
+    #coverMap{
+      min-height:190px;
+    }
+  }
+
+  @media (max-width: 767.98px){
+    body{
+      font-size: 14px;
+    }
+
+    .navbar .container-xl{
+      gap: 10px;
+    }
+
+    .navbar-brand{
+      font-size: 1rem;
+      max-width: 140px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .fb-name{
+      font-size: 1.4rem;
+    }
+
+    .fb-avatar{
+      width: 64px !important;
+      height: 64px !important;
+      font-size: 1.1rem !important;
+    }
+
+    .post-avatar,
+    .fb-comment-avatar{
+      flex: 0 0 auto;
+    }
+
+    .comment-form{
+      align-items: stretch;
+    }
+
+    .btn-comment-send{
+      flex: 0 0 auto;
+    }
+
+    .notif-menu{
+      width:min(340px, 94vw);
+    }
+
+    .fb-card-h,
+    .fb-card-b{
+      padding-left: 14px !important;
+      padding-right: 14px !important;
+    }
+
+    .alert,
+    .pill,
+    .pillx{
+      font-size: 13px;
+    }
+
+    .lock-modal{
+      width: calc(100% - 20px) !important;
+      margin: 10px auto;
+    }
+  }
 </style>
 </head>
 
 <body>
 
 <div class="app-shell">
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sb-head">
       <div class="sb-brand">
@@ -513,19 +747,24 @@ $lng = $user['longitude'];
     </div>
 
     <nav class="sb-nav">
-      <a class="sb-link" href="homeowner_dashboard.php">
+      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
         <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
       </a>
+
       <a class="sb-link" href="homeowner_dashboard.php#feed">
         <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
       </a>
-      <a class="sb-link" href="homeowner_pay_dues.php">
+      <a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
+  <i class="bi bi-people-fill"></i> <span>Public Chat</span>
+</a>
+
+      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
         <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
       </a>
 
       <!-- PARKING DROPDOWN -->
       <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
+        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
           <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
           <i class="bi bi-chevron-down sb-dd-caret"></i>
         </a>
@@ -542,6 +781,19 @@ $lng = $user['longitude'];
         </div>
       </div>
 
+      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
+        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
+      </a>
+
+      <!-- COMPLAINTS -->
+      <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
+        <i class="bi bi-chat-left-text-fill"></i> <span>File a Complaint</span>
+      </a>
+      
+      <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
+  <i class="bi bi-check2-square"></i> <span>Voting</span>
+</a>
+
       <a class="sb-link" href="logout.php">
         <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
       </a>
@@ -556,21 +808,26 @@ $lng = $user['longitude'];
       <!-- NAVBAR -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container-xl">
-          <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php"> HOA Community</a>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="topbar-mobile-btn d-inline-flex d-lg-none" id="sidebarToggle" aria-label="Open menu">
+              <i class="bi bi-list fs-4"></i>
+            </button>
+            <a class="navbar-brand fw-bold text-success m-0" href="homeowner_dashboard.php">HOA Community</a>
+          </div>
 
-          <div class="ms-auto d-flex align-items-center gap-3">
+          <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
 
             <!-- Notifications -->
             <div class="dropdown position-relative">
-              <button class="notif-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
+              <button class="notif-btn topbar-mobile-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
                 <i class="bi bi-bell fs-5"></i>
               </button>
               <?php if ($notifCount > 0): ?>
                 <span class="notif-badge"><?= (int)$notifCount ?></span>
               <?php endif; ?>
 
-              <div class="dropdown-menu dropdown-menu-end p-0" style="width:360px; border-radius:14px; overflow:hidden;">
-                <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
+              <div class="dropdown-menu dropdown-menu-end p-0 notif-menu">
+                <div class="p-3 border-bottom d-flex align-items-center justify-content-between gap-2">
                   <div class="fw-bold">Notifications</div>
                   <button class="btn btn-sm btn-outline-success" id="btnMarkAllSeen">Mark all as seen</button>
                 </div>
@@ -598,14 +855,14 @@ $lng = $user['longitude'];
                   <?php endif; ?>
                 </div>
 
-                <div class="p-2 border-top d-flex gap-2">
+                <div class="p-2 border-top d-flex gap-2 flex-wrap">
                   <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenAnn">Seen announcements</button>
                   <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenCom">Seen comments</button>
                 </div>
               </div>
             </div>
 
-            <div class="small text-muted d-none d-md-block">
+            <div class="small text-muted desktop-user-text">
               Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
             </div>
 
@@ -615,6 +872,13 @@ $lng = $user['longitude'];
       </nav>
 
       <div class="container-xl my-4">
+
+        <div class="mobile-user-strip">
+          <div class="alert alert-light border shadow-sm mb-3">
+            <div class="fw-bold"><?= esc($fullName) ?></div>
+            <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></div>
+          </div>
+        </div>
 
         <!-- Cover Map -->
         <div class="fb-cover">
@@ -626,7 +890,7 @@ $lng = $user['longitude'];
           <?php if (!empty($lat) && !empty($lng)): ?>
             <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>"></div>
           <?php else: ?>
-            <div class="h-100 w-100 d-flex align-items-center justify-content-center">
+            <div class="h-100 w-100 d-flex align-items-center justify-content-center" style="min-height:190px;">
               <div class="text-muted fw-semibold">No location saved yet.</div>
             </div>
           <?php endif; ?>
@@ -684,60 +948,60 @@ $lng = $user['longitude'];
           <!-- RIGHT FEED -->
           <div class="col-lg-8">
 
-          <!-- MONTHLY DUES REMINDER CARD -->
-<div class="fb-card mb-4">
-  <div class="fb-card-h">
-    <h6>💳 Monthly Dues Reminder</h6>
-    <span class="pill">₱<?= number_format((float)$monthlyDues, 2) ?>/month</span>
-  </div>
-  <div class="fb-card-b">
+            <!-- MONTHLY DUES REMINDER CARD -->
+            <div class="fb-card mb-4">
+              <div class="fb-card-h">
+                <h6>💳 Monthly Dues Reminder</h6>
+                <span class="pill">₱<?= number_format((float)$monthlyDues, 2) ?>/month</span>
+              </div>
+              <div class="fb-card-b">
 
-    <?php if (empty($unpaidMonths)): ?>
-      <div class="alert alert-success mb-0">
-        ✅ You are fully paid for <?= esc($curYear) ?> (Jan–<?= esc(month_name($curMonth)) ?>). Thank you!
-      </div>
-      <div class="mt-2 text-muted small fw-semibold">
-        Keep it up — dues help fund maintenance, security, and utilities.
-      </div>
+                <?php if (empty($unpaidMonths)): ?>
+                  <div class="alert alert-success mb-0">
+                    ✅ You are fully paid for <?= esc($curYear) ?> (Jan–<?= esc(month_name($curMonth)) ?>). Thank you!
+                  </div>
+                  <div class="mt-2 text-muted small fw-semibold">
+                    Keep it up — dues help fund maintenance, security, and utilities.
+                  </div>
 
-    <?php else: ?>
-      <div class="alert alert-danger">
-        <div class="fw-bold mb-1">⚠️ You have unpaid monthly dues.</div>
-        <div class="fw-semibold">
-          Unpaid months (<?= esc($curYear) ?>):
-          <?php foreach($unpaidMonths as $i => $m): ?>
-            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle me-1">
-              <?= esc(month_name($m)) ?>
-            </span>
-          <?php endforeach; ?>
-        </div>
+                <?php else: ?>
+                  <div class="alert alert-danger">
+                    <div class="fw-bold mb-1">⚠️ You have unpaid monthly dues.</div>
+                    <div class="fw-semibold">
+                      Unpaid months (<?= esc($curYear) ?>):
+                      <?php foreach($unpaidMonths as $i => $m): ?>
+                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle me-1">
+                          <?= esc(month_name($m)) ?>
+                        </span>
+                      <?php endforeach; ?>
+                    </div>
 
-        <div class="mt-2 fw-semibold">
-          Next due: <b><?= esc(month_name($nextDueMonth)) ?> <?= esc($curYear) ?></b>
-        </div>
-      </div>
+                    <div class="mt-2 fw-semibold">
+                      Next due: <b><?= esc(month_name($nextDueMonth)) ?> <?= esc($curYear) ?></b>
+                    </div>
+                  </div>
 
-      <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-success fw-semibold" href="homeowner_pay_dues.php">
-          <i class="bi bi-cash-coin me-1"></i> Pay Monthly Dues
-        </a>
-        <span class="pillx">
-          Current month: <?= esc(month_name($curMonth)) ?> —
-          <?php if ($curMonthPaid): ?>
-            <span class="text-success">PAID ✅</span>
-          <?php else: ?>
-            <span class="text-danger">NOT PAID ❌</span>
-          <?php endif; ?>
-        </span>
-      </div>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <a class="btn btn-success fw-semibold" href="homeowner_pay_dues.php">
+                      <i class="bi bi-cash-coin me-1"></i> Pay Monthly Dues
+                    </a>
+                    <span class="pillx">
+                      Current month: <?= esc(month_name($curMonth)) ?> —
+                      <?php if ($curMonthPaid): ?>
+                        <span class="text-success">PAID ✅</span>
+                      <?php else: ?>
+                        <span class="text-danger">NOT PAID ❌</span>
+                      <?php endif; ?>
+                    </span>
+                  </div>
 
-      <div class="mt-2 text-muted small fw-semibold">
-        Tip: Paying on time avoids penalties and helps the HOA budget accurately.
-      </div>
-    <?php endif; ?>
+                  <div class="mt-2 text-muted small fw-semibold">
+                    Tip: Paying on time avoids penalties and helps the HOA budget accurately.
+                  </div>
+                <?php endif; ?>
 
-  </div>
-</div>
+              </div>
+            </div>
 
             <div class="d-flex flex-column gap-4" id="feed">
               <?php if (empty($annFeed)): ?>
@@ -757,7 +1021,7 @@ $lng = $user['longitude'];
                   <div class="post" data-ann-id="<?= $aid ?>">
                     <div class="post-h">
                       <div class="post-avatar">A</div>
-                      <div style="flex:1">
+                      <div style="flex:1; min-width:0;">
                         <div class="post-name">
                           <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
                           <?= esc($a['title']) ?>
@@ -808,7 +1072,7 @@ $lng = $user['longitude'];
 
                       <div class="comment-form">
                         <input class="comment-input" type="text" placeholder="Write a comment..." maxlength="500">
-                        <button class="btn btn-hoa btn-comment-send"><i class="bi bi-send"></i></button>
+                        <button class="btn btn-hoa btn-comment-send" type="button"><i class="bi bi-send"></i></button>
                       </div>
                     </div>
 
@@ -882,6 +1146,7 @@ $lng = $user['longitude'];
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20 }).addTo(map);
   L.marker([lat, lng]).addTo(map);
   setTimeout(() => map.invalidateSize(), 250);
+  window.addEventListener('resize', () => setTimeout(() => map.invalidateSize(), 200));
 })();
 
 async function postJSON(action, payload){
@@ -948,15 +1213,50 @@ document.getElementById('feed')?.addEventListener('click', async (e) => {
     postEl.querySelector('.comment-count').textContent = r.comment_count ?? 0;
     return;
   }
-
 });
-</script>
-<script>
-  (function(){
+
+// Parking dropdown
+(function(){
   const wrap = document.getElementById('sbParking');
   const btn  = document.getElementById('sbParkingToggle');
   if(!wrap || !btn) return;
   btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+
+// Mobile sidebar
+(function(){
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const toggle  = document.getElementById('sidebarToggle');
+
+  if (!sidebar || !overlay || !toggle) return;
+
+  function openSidebar(){
+    sidebar.classList.add('show');
+    overlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSidebar(){
+    sidebar.classList.remove('show');
+    overlay.classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  toggle.addEventListener('click', openSidebar);
+  overlay.addEventListener('click', closeSidebar);
+
+  window.addEventListener('resize', function(){
+    if (window.innerWidth >= 992) {
+      closeSidebar();
+    }
+  });
+
+  sidebar.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', function(){
+      if (window.innerWidth < 992) closeSidebar();
+    });
+  });
 })();
 </script>
 </body>

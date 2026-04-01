@@ -1,106 +1,14 @@
 <?php
 session_start();
+require_once 'admin_access.php';
+requireAccess('dashboard');
 
 /* =========================
-   1) AUTH GUARD (who can access)
-   ========================= */
-if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
-    !in_array($_SESSION['admin_role'], ['admin', 'superadmin'], true)) {
-  echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
-  exit;
-}
-
-/* Superadmin is not allowed here (separate dashboard) */
-if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
-  echo "<script>alert('Superadmin cannot access President Dashboard.'); window.location='index.php';</script>";
-  exit;
-}
-
-/* =========================
-   2) LOCAL DB CONNECTION
-   ========================= */
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "south_meridian_hoa";
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
-
-function esc($v) {
-  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-}
-
-function nfmt($n) {
-  return number_format((float)$n, 0);
-}
-
-function money($n) {
-  return number_format((float)$n, 2);
-}
-
-/* =========================
-   3) ADMIN INFO (from session)
-   ========================= */
-$adminId   = (int)($_SESSION['admin_id'] ?? 0);
-$adminRole = (string)($_SESSION['admin_role'] ?? 'admin');
-
-/* Get admin info (email / name / phase) */
-$stmt = $conn->prepare("SELECT email, full_name, phase, role FROM admins WHERE id=? LIMIT 1");
-$stmt->bind_param("i", $adminId);
-$stmt->execute();
-$me = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if (!$me) {
-  // if admin not found, kick out
-  session_destroy();
-  echo "<script>alert('Session error. Please login again.'); window.location='index.php';</script>";
-  exit;
-}
-
-$adminEmail = (string)($me['email'] ?? '');
-$adminName  = trim((string)($me['full_name'] ?? ''));
-$myPhase    = (string)($me['phase'] ?? 'Phase 1');
-
-/* =========================
-   4) PHASE (LOCKED)
-   - This dashboard is for 1 phase only
+   PHASE (LOCKED)
    ========================= */
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
 $phase = in_array($myPhase, $allowedPhases, true) ? $myPhase : 'Phase 1';
 
-/* =========================
-   5) PRESIDENT NAME (DYNAMIC)
-   - pulled from hoa_officers table
-   ========================= */
-$presidentName  = 'Not assigned';
-$presidentEmail = '';
-
-$stmt = $conn->prepare("
-  SELECT officer_name, officer_email
-  FROM hoa_officers
-  WHERE phase=? AND position='President' AND is_active=1
-  LIMIT 1
-");
-$stmt->bind_param("s", $phase);
-$stmt->execute();
-$pres = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if ($pres && trim((string)$pres['officer_name']) !== '') {
-  $presidentName  = trim((string)$pres['officer_name']);
-  $presidentEmail = trim((string)($pres['officer_email'] ?? ''));
-} else {
-  // fallback: show logged-in admin name
-  if ($adminName !== '') $presidentName = $adminName;
-}
-
-/* Your workflow: admin is president of their phase */
-$isPresident = true;
 
 /* =========================
    6) KPI QUERIES
@@ -154,10 +62,43 @@ $thisMonthExpenses = (float)($stmt->get_result()->fetch_assoc()['s'] ?? 0);
 $stmt->close();
 
 /* =========================
+   6B) COMPLAINT KPI QUERIES
+   ========================= */
+$stmt = $conn->prepare("SELECT COUNT(*) c FROM complaints WHERE phase=?");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$complaintTotal = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
+$stmt->close();
+
+$stmt = $conn->prepare("SELECT COUNT(*) c FROM complaints WHERE phase=? AND status='open'");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$complaintOpen = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
+$stmt->close();
+
+$stmt = $conn->prepare("SELECT COUNT(*) c FROM complaints WHERE phase=? AND status='in_progress'");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$complaintInProgress = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
+$stmt->close();
+
+$stmt = $conn->prepare("SELECT COUNT(*) c FROM complaints WHERE phase=? AND status='resolved'");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$complaintResolved = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
+$stmt->close();
+
+$stmt = $conn->prepare("SELECT COUNT(*) c FROM complaints WHERE phase=? AND status='closed'");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$complaintClosed = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
+$stmt->close();
+
+/* =========================
    7) CHART DATA (LAST 6 MONTHS)
    ========================= */
 $labels = [];
-$keys   = []; // YYYY-MM
+$keys   = [];
 
 for ($i = 5; $i >= 0; $i--) {
   $ts = strtotime(date('Y-m-01') . " -$i months");
@@ -166,7 +107,7 @@ for ($i = 5; $i >= 0; $i--) {
 }
 
 $fromDate = date('Y-m-01', strtotime(date('Y-m-01') . " -5 months"));
-$toDate   = date('Y-m-t'); // end of current month
+$toDate   = date('Y-m-t');
 
 /* Monthly collections */
 $collectionsByKey = array_fill_keys($keys, 0.0);
@@ -260,13 +201,28 @@ $stmt->execute();
 $pendingReports = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
+/* =========================
+   9B) TABLE: RECENT COMPLAINTS
+   ========================= */
+$stmt = $conn->prepare("
+  SELECT c.id, c.subject, c.category, c.status, c.priority, c.created_at, c.updated_at,
+         h.first_name, h.middle_name, h.last_name, h.house_lot_number
+  FROM complaints c
+  LEFT JOIN homeowners h ON h.id = c.homeowner_id
+  WHERE c.phase=?
+  ORDER BY c.updated_at DESC, c.id DESC
+  LIMIT 20
+");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$recentComplaints = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
 /* ============================================================
-   10) ANNOUNCEMENTS (for President dashboard)
-   - Superadmin posts: phase='Superadmin'
-   - HOA officer posts: phase=$phase AND audience='all_officers'
+   10) ANNOUNCEMENTS
    ============================================================ */
 
-/* ACTIVE (visible today) */
+/* ACTIVE */
 $annActive = [];
 $stmt = $conn->prepare("
   SELECT a.id, a.phase, a.audience, a.title, a.category, a.message, a.start_date, a.end_date, a.priority, a.created_at,
@@ -289,7 +245,7 @@ $res = $stmt->get_result();
 while ($r = $res->fetch_assoc()) $annActive[] = $r;
 $stmt->close();
 
-/* ENDED (already finished) */
+/* ENDED */
 $annEnded = [];
 $stmt = $conn->prepare("
   SELECT a.id, a.phase, a.audience, a.title, a.category, a.message, a.start_date, a.end_date, a.priority, a.created_at,
@@ -312,7 +268,7 @@ $res = $stmt->get_result();
 while ($r = $res->fetch_assoc()) $annEnded[] = $r;
 $stmt->close();
 
-/* Calendar range: last 60 days to next 30 days */
+/* Calendar range */
 $calFrom = date('Y-m-d', strtotime('-60 days'));
 $calTo   = date('Y-m-d', strtotime('+30 days'));
 
@@ -377,6 +333,24 @@ foreach ($annForCalendar as $a) {
     ]
   ];
 }
+
+/* complaint helpers */
+function complaintStatusBadge($s){
+  $s = (string)$s;
+  if ($s === 'open') return 'badge-soft-warning';
+  if ($s === 'in_progress') return 'badge-soft-info';
+  if ($s === 'resolved') return 'badge-soft-success';
+  if ($s === 'closed') return 'badge-soft-secondary';
+  return 'badge-soft-warning';
+}
+
+function complaintPriorityBadge($p){
+  $p = (string)$p;
+  if ($p === 'urgent') return 'ann-badge urgent';
+  if ($p === 'high') return 'ann-badge important';
+  if ($p === 'normal') return 'ann-badge normal';
+  return 'ann-badge';
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -399,7 +373,6 @@ foreach ($annForCalendar as $a) {
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- FullCalendar -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 
@@ -412,6 +385,7 @@ foreach ($annForCalendar as $a) {
     .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
     .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
     .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+    .badge-soft-secondary { background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; }
 
     .modalx {
       display: none;
@@ -449,12 +423,10 @@ foreach ($annForCalendar as $a) {
       cursor: pointer;
     }
 
-    /* ✅ FIX: prevent left Welcome card from stretching when Calendar gets tall */
     .top-row-no-stretch {
       align-items: flex-start !important;
     }
 
-    /* Announcements UI */
     .ann-wrap { display: flex; flex-direction: column; gap: 10px; }
     .ann-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -516,7 +488,6 @@ foreach ($annForCalendar as $a) {
     .ann-list { display: none; }
     .ann-list.show { display: block; }
 
-    /* Calendar container */
     #annCalendar {
       border: 1px solid #e5e7eb;
       border-radius: 14px;
@@ -532,18 +503,38 @@ foreach ($annForCalendar as $a) {
       border-width: 1px;
     }
 
-    /* Priority via classNames */
     .fc .prio-urgent { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
     .fc .prio-important { background:#fffbeb; border-color:#fed7aa; color:#9a3412; }
     .fc .prio-normal { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
 
-    /* Ended events muted */
     .fc .cal-ended { opacity: .75; }
 
     .mini-muted { color: #64748b; font-size: 12px; }
     .kv { display: flex; flex-wrap: wrap; gap: 10px; }
     .kv > div { min-width: 160px; }
     .kv b { font-weight: 900; }
+    /* ACCESS TOAST */
+.access-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  z-index: 99999;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all .3s ease;
+}
+
+.access-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+  
+
   </style>
 </head>
 
@@ -552,7 +543,6 @@ foreach ($annForCalendar as $a) {
   <div class="header">
     <div class="header-left">
       <div class="menu-icon dw dw-menu"></div>
-      <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
     </div>
 
     <div class="header-right">
@@ -560,7 +550,6 @@ foreach ($annForCalendar as $a) {
         <div class="dropdown">
           <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
             <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
-            <span class="user-name"><?= esc(strtoupper($adminName !== '' ? $adminName : ($adminEmail ?: 'ADMIN'))) ?></span>
           </a>
           <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
             <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
@@ -570,97 +559,8 @@ foreach ($annForCalendar as $a) {
     </div>
   </div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle ">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="ho_approval.php">Household Approval</a></li>
-              <li><a href="ho_register.php">Register Household</a></li>
-              <li><a href="ho_approved.php">Approved Households</a></li>
-            </ul>
-          </li>
-
-          <!-- USER MANAGEMENT -->
-          <?php $view = $_GET['view'] ?? ''; ?>
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle <?= ($view === 'homeowners' || $view === 'officers') ? 'active' : '' ?>">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="users-management.php?view=homeowners" class="<?= $view === 'homeowners' ? 'active' : '' ?>">Homeowners</a></li>
-              <li><a href="users-management.php?view=officers" class="<?= $view === 'officers' ? 'active' : '' ?>">Officers</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle">
-              <span class="micon dw dw-money-1"></span>
-              <span class="mtext">Finance</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle">
-              <span class="micon dw dw-car"></span>
-              <span class="mtext">Parking</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="parking.php">Parking Overview</a></li>
-              <li><a href="parking_permits.php">Manage Permits</a></li>
-              <li><a href="parking_violations.php">View Violations</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="#" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-settings2"></span>
-              <span class="mtext">Settings</span>
-            </a>
-          </li>
-
-        </ul>
-      </div>
-    </div>
-  </div>
+  <!-- SIDEBAR -->
+<?php include 'sidebar.php'; ?>
 
   <div class="mobile-menu-overlay"></div>
 
@@ -670,21 +570,19 @@ foreach ($annForCalendar as $a) {
       <div class="page-header mb-20">
         <div class="row">
           <div class="col-md-12 col-sm-12">
-            <div class="title"><h4>President Dashboard</h4></div>
-            <div class="text-secondary">
-              Phase: <b><?= esc($phase) ?></b> |
-              President: <b><?= esc($presidentName) ?></b>
-              <?php if ($presidentEmail !== ''): ?>
-                <span class="text-muted">(<?= esc($presidentEmail) ?>)</span>
-              <?php endif; ?>
-              | <span class="badge-soft badge-soft-success">YOU</span>
-            </div>
+<div class="title"><h4>Officer Dashboard</h4></div>
+<div class="text-secondary">
+  Phase: <b><?= esc($phase) ?></b> |
+  Logged in as: <b><?= esc($adminName !== '' ? $adminName : $adminEmail) ?></b>
+  <?php if ($adminPosition !== ''): ?>
+    <span class="text-muted">(<?= esc($adminPosition) ?>)</span>
+  <?php endif; ?>
+</div>
           </div>
         </div>
       </div>
 
       <!-- TOP ROW -->
-      <!-- ✅ Updated: added top-row-no-stretch to prevent the Welcome card from stretching -->
       <div class="row top-row-no-stretch">
         <!-- LEFT -->
         <div class="col-lg-7 col-md-12 mb-30">
@@ -693,10 +591,10 @@ foreach ($annForCalendar as $a) {
               <div class="col-md-4"><img src="vendors/images/banner-img.png" alt=""></div>
               <div class="col-md-8">
                 <h4 class="font-20 weight-500 mb-10 text-capitalize">
-                  <div class="weight-600 font-30 text-blue">Welcome, President!</div>
+                  <div class="weight-600 font-30 text-blue">Welcome, <?= esc($adminName !== '' ? $adminName : 'Officer') ?>!</div>
                 </h4>
                 <p class="font-18 max-width-600">
-                  Live view of key HOA operations for <b><?= esc($phase) ?></b> — registrations, finance health, and items waiting for approval.
+                  Live view of key HOA operations for <b><?= esc($phase) ?></b> — registrations, finance health, items waiting for approval, and homeowner complaints.
                 </p>
               </div>
             </div>
@@ -867,8 +765,8 @@ foreach ($annForCalendar as $a) {
           <div class="card-box pd-20 kpi-card">
             <div class="d-flex justify-content-between align-items-start">
               <div>
-                <div class="kpi-label">This Month Net</div>
                 <?php $net = $thisMonthCollections - $thisMonthExpenses; ?>
+                <div class="kpi-label">This Month Net</div>
                 <div class="kpi-value"><?= money($net) ?></div>
               </div>
               <div class="icon text-info"><i class="dw dw-money"></i></div>
@@ -876,6 +774,61 @@ foreach ($annForCalendar as $a) {
             <div class="mt-2 text-secondary">
               Collections: <?= money($thisMonthCollections) ?> • Expenses: <?= money($thisMonthExpenses) ?>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPLAINT KPI CARDS -->
+      <div class="row">
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Total Complaints</div>
+                <div class="kpi-value"><?= nfmt($complaintTotal) ?></div>
+              </div>
+              <div class="icon text-primary"><i class="dw dw-chat3"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">All complaint records</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Open Complaints</div>
+                <div class="kpi-value"><?= nfmt($complaintOpen) ?></div>
+              </div>
+              <div class="icon text-warning"><i class="dw dw-warning"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">New concerns to review</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">In Progress</div>
+                <div class="kpi-value"><?= nfmt($complaintInProgress) ?></div>
+              </div>
+              <div class="icon text-info"><i class="dw dw-checked"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Being handled by admin</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Resolved / Closed</div>
+                <div class="kpi-value"><?= nfmt($complaintResolved + $complaintClosed) ?></div>
+              </div>
+              <div class="icon text-success"><i class="dw dw-check"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Finished complaint cases</div>
           </div>
         </div>
       </div>
@@ -927,6 +880,70 @@ foreach ($annForCalendar as $a) {
                 <?php endforeach; ?>
               <?php else: ?>
                 <tr><td colspan="4" class="text-center text-secondary">No pending report approvals.</td></tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RECENT COMPLAINTS TABLE -->
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">Recent Complaints</h5>
+          <a class="btn btn-sm btn-outline-success" href="admin_complaints.php">Open Complaints Module</a>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Homeowner</th>
+                <th>Blk/Lot</th>
+                <th>Subject</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Updated</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!empty($recentComplaints)): ?>
+                <?php foreach ($recentComplaints as $c): ?>
+                  <?php
+                    $cName = trim(
+                      (string)($c['first_name'] ?? '') . ' ' .
+                      (string)($c['middle_name'] ?? '') . ' ' .
+                      (string)($c['last_name'] ?? '')
+                    );
+                  ?>
+                  <tr>
+                    <td><?= (int)$c['id'] ?></td>
+                    <td><?= esc($cName !== '' ? $cName : 'Unknown') ?></td>
+                    <td><?= esc((string)($c['house_lot_number'] ?? '')) ?></td>
+                    <td><?= esc((string)($c['subject'] ?? '')) ?></td>
+                    <td><?= esc(ucwords(str_replace('_', ' ', (string)($c['category'] ?? 'general')))) ?></td>
+                    <td>
+                      <span class="badge-soft <?= esc(complaintStatusBadge((string)$c['status'])) ?>">
+                        <?= esc(strtoupper(str_replace('_', ' ', (string)$c['status']))) ?>
+                      </span>
+                    </td>
+                    <td>
+                      <span class="<?= esc(complaintPriorityBadge((string)$c['priority'])) ?>">
+                        <?= esc(strtoupper((string)$c['priority'])) ?>
+                      </span>
+                    </td>
+                    <td><?= esc((string)($c['updated_at'] ?? '')) ?></td>
+                    <td class="text-center">
+                      <a href="admin_complaints.php?complaint_id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-primary" title="View Complaint">
+                        <i class="dw dw-eye"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <tr><td colspan="9" class="text-center text-secondary">No complaints found for this phase.</td></tr>
               <?php endif; ?>
             </tbody>
           </table>
@@ -1012,7 +1029,7 @@ foreach ($annForCalendar as $a) {
       </div>
     </div>
   </div>
-
+ 
   <script src="vendors/scripts/core.js"></script>
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
@@ -1034,7 +1051,7 @@ foreach ($annForCalendar as $a) {
       });
     });
 
-    // View modal (loads profile from HO-management.php)
+    // View modal
     const viewModal = document.getElementById('viewModal');
     const viewBody  = document.getElementById('viewModalBody');
 
@@ -1215,7 +1232,7 @@ foreach ($annForCalendar as $a) {
         labels,
         datasets: [
           { type: 'bar',  label: 'Collections (Paid)', data: collections, borderWidth: 1 },
-          { type: 'bar',  label: 'Expenses',           data: expenses,    borderWidth: 1 },
+          { type: 'bar',  label: 'Expenses', data: expenses, borderWidth: 1 },
           { type: 'line', label: 'New Homeowners (Registrations)', data: newHO, borderWidth: 2, tension: 0.25, yAxisID: 'y2' }
         ]
       },
@@ -1230,5 +1247,42 @@ foreach ($annForCalendar as $a) {
       }
     });
   </script>
+   <div id="accessToast" class="access-toast">
+  🚫 You do not have access to that part.
+</div>
+
+<script>
+window.userPermissions = <?= json_encode($permissions) ?>;
+
+document.addEventListener('DOMContentLoaded', function () {
+
+  const toast = document.getElementById('accessToast');
+
+  function showAccessToast() {
+    toast.classList.add('show');
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2500);
+  }
+
+  document.querySelectorAll('.menu-access-link').forEach(function(link){
+
+    link.addEventListener('click', function(e){
+
+      const moduleKey = this.dataset.module || '';
+      const allowed = !!window.userPermissions[moduleKey];
+
+      if(!allowed){
+        e.preventDefault();
+        showAccessToast();
+      }
+
+    });
+
+  });
+
+});
+</script>
 </body>
 </html>

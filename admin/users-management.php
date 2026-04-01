@@ -1,12 +1,13 @@
 <?php
 session_start();
-
+require_once 'admin_access.php';
+requireAccess('user_management');
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin','superadmin'], true) || empty($_SESSION['user_id'])) {
 	header("Location: index.php");
 	exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -103,6 +104,27 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 		.table thead th { border-bottom: 1px solid #e9ecef !important; }
 		.table td, .table th { vertical-align: middle !important; }
 		.badge { border-radius: 999px; }
+		/* ACCESS TOAST */
+.access-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  z-index: 99999;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all .3s ease;
+}
+
+.access-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
 	</style>
 </head>
 
@@ -141,7 +163,6 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 						<span class="user-icon">
 							<img src="vendors/images/photo1.jpg" alt="">
 						</span>
-						<span class="user-name"><?= esc($adminDisplayName) ?></span>
 					</a>
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
@@ -154,77 +175,8 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 		</div>
 	</div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">Homeowner Management</span>
-						</a>
-						<ul class="submenu">
-							<li><a  href="ho_approval.php">Household Approval</a></li>
-							<li><a href="ho_register.php">Register Household</a></li>
-							<li><a href="ho_approved.php">Approved Households</a></li>
-						</ul>
-					</li>
-					<!-- ✅ USER MANAGEMENT DROPDOWN -->
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">User Management</span>
-						</a>
-						<ul class="submenu">
-							<li>
-								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
-									Homeowners
-								</a>
-							</li>
-							<li>
-								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
-									Officers
-								</a>
-							</li>
-						</ul>
-					</li>
-          
-          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
+  <!-- SIDEBAR -->
+<?php include 'sidebar.php'; ?>
 
 	<div class="mobile-menu-overlay"></div>
 
@@ -560,6 +512,41 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 
 	});
 	</script>
+<div id="accessToast" class="access-toast">
+  🚫 You do not have access to that part.
+</div>
+<script>
+window.userPermissions = <?= json_encode($permissions) ?>;
 
+document.addEventListener('DOMContentLoaded', function () {
+
+  const toast = document.getElementById('accessToast');
+
+  function showAccessToast() {
+    toast.classList.add('show');
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2500);
+  }
+
+  document.querySelectorAll('.menu-access-link').forEach(function(link){
+
+    link.addEventListener('click', function(e){
+
+      const moduleKey = this.dataset.module || '';
+      const allowed = !!window.userPermissions[moduleKey];
+
+      if(!allowed){
+        e.preventDefault();
+        showAccessToast();
+      }
+
+    });
+
+  });
+
+});
+</script>
 </body>
 </html>

@@ -32,7 +32,7 @@ if ($status === 'rejected' && $reason === '') {
 }
 
 // ================= DB =================
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) {
     echo json_encode(['success'=>false,'message'=>'DB error']);
     exit;
@@ -100,7 +100,7 @@ if (!$ok) {
 
 // ================= BUILD RESET LINK =================
 
-$resetPath = "/soutmeridian/admin/reset-password.php"; 
+$resetPath = "/admin/reset-password.php"; 
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
 

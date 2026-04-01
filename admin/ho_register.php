@@ -1,110 +1,280 @@
 <?php
 session_start();
+require_once 'admin_access.php';
+requireAccess('homeowner_management');
+
+function esc($v){
+  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+function redirect_with_message(string $type, string $message, string $location = 'ho_register.php'){
+  $_SESSION['flash_type'] = $type;
+  $_SESSION['flash_message'] = $message;
+  header("Location: " . $location);
+  exit;
+}
+
+function normalizePhase($phase){
+  $phase = trim((string)$phase);
+  $allowed = ['Phase 1','Phase 2','Phase 3'];
+  return in_array($phase, $allowed, true) ? $phase : '';
+}
+
+function phase_prefix(string $phase): string {
+  $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
+  return $n > 0 ? ('P'.$n) : 'P';
+}
+
+/*
+ * Generate public ID like:
+ * Phase 1 + sequence 37 = P137
+ * Phase 2 + sequence 5  = P25
+ * Phase 3 + sequence 12 = P312
+ */
+function generatePublicId(mysqli $conn, string $phase): string {
+  $phaseNumber = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
+  if ($phaseNumber <= 0) {
+    $phaseNumber = 1;
+  }
+
+  // Count homeowners in the same phase, then add 1
+  $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM homeowners WHERE phase = ?");
+  $stmt->bind_param("s", $phase);
+  $stmt->execute();
+  $result = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  $sequence = (int)($result['total'] ?? 0) + 1;
+
+  do {
+    $candidate = 'P' . $phaseNumber . $sequence;
+
+    $stmt = $conn->prepare("SELECT id FROM homeowners WHERE public_id = ? LIMIT 1");
+    $stmt->bind_param("s", $candidate);
+    $stmt->execute();
+    $exists = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($exists) {
+      $sequence++;
+    }
+  } while ($exists);
+
+  return $candidate;
+}
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
-  echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
+  $_SESSION['flash_type'] = 'danger';
+  $_SESSION['flash_message'] = 'Access denied. Please login as admin.';
+  header("Location: index.php");
   exit();
 }
 
-$host="localhost"; $db="south_meridian_hoa"; $user="root"; $pass="";
-$conn = new mysqli($host,$user,$pass,$db);
-if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);
-$conn->set_charset("utf8mb4");
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+$host = "localhost";
+$db   = "u972459197_south_meridian";
+$user = "u972459197_patrick";
+$pass = "Idle2440";
+
+$conn = new mysqli($host, $user, $pass, $db);
+if ($conn->connect_error) {
+  die("Connection failed: " . $conn->connect_error);
+}
+$conn->set_charset("utf8mb4");
 
 // admin info from DB
 $admin_id = (int)$_SESSION['admin_id'];
-$stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=?");
+$stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=? LIMIT 1");
 $stmt->bind_param("i", $admin_id);
 $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
 $admin_phase = $admin['phase'] ?? '';
 $admin_role  = $admin['role'] ?? '';
-
 $isHOSection = true;
+
+if (!isset($permissions) || !is_array($permissions)) {
+  $permissions = [];
+}
 
 // ---- STEP 2: Final submission with pinned map ----
 if (isset($_POST['submit_location'])) {
+  try {
+    $first_name         = trim($_POST['first_name'] ?? '');
+    $middle_name        = trim($_POST['middle_name'] ?? '');
+    $last_name          = trim($_POST['last_name'] ?? '');
+    $contact_number     = trim($_POST['contact_number'] ?? '');
+    $email              = trim($_POST['email'] ?? '');
+    $password_raw       = (string)($_POST['password'] ?? '');
+    $confirm_password   = (string)($_POST['confirm_password'] ?? '');
+    $phase              = normalizePhase($_POST['phase'] ?? '');
+    $house_lot_number   = trim($_POST['house_lot_number'] ?? '');
+    $latitude           = trim((string)($_POST['latitude'] ?? ''));
+    $longitude          = trim((string)($_POST['longitude'] ?? ''));
 
-  $first_name       = trim($_POST['first_name'] ?? '');
-  $middle_name      = trim($_POST['middle_name'] ?? '');
-  $last_name        = trim($_POST['last_name'] ?? '');
-  $contact_number   = trim($_POST['contact_number'] ?? '');
-  $email            = trim($_POST['email'] ?? '');
-  $password_raw     = (string)($_POST['password'] ?? '');
-  $phase            = trim($_POST['phase'] ?? '');
-  $house_lot_number = trim($_POST['house_lot_number'] ?? '');
-  $latitude         = (string)($_POST['latitude'] ?? '');
-  $longitude        = (string)($_POST['longitude'] ?? '');
+    if ($first_name === '' || $last_name === '' || $contact_number === '' || $email === '' ||
+        $password_raw === '' || $phase === '' || $house_lot_number === '') {
+      redirect_with_message('danger', 'Missing required fields.');
+    }
 
-  if ($first_name==='' || $last_name==='' || $email==='' || $password_raw==='' || $phase==='' || $house_lot_number==='') {
-    echo "<script>alert('Missing required fields.'); history.back();</script>";
-    exit;
-  }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      redirect_with_message('danger', 'Invalid email address.');
+    }
 
-  // assign admin based on phase
-  $stmtAdmin = $conn->prepare("SELECT id FROM admins WHERE phase=? LIMIT 1");
-  $stmtAdmin->bind_param("s", $phase);
-  $stmtAdmin->execute();
-  $resAdmin = $stmtAdmin->get_result()->fetch_assoc();
-  $assigned_admin_id = $resAdmin['id'] ?? null;
-  $stmtAdmin->close();
+    if (strlen($password_raw) < 8) {
+      redirect_with_message('danger', 'Password must be at least 8 characters.');
+    }
 
-  // carried from step1
-  $valid_id_path = (string)($_POST['valid_id_tmp'] ?? '');
-  $proof_path    = (string)($_POST['proof_tmp'] ?? '');
+    if ($password_raw !== $confirm_password) {
+      redirect_with_message('danger', 'Password and Confirm Password do not match.');
+    }
 
-  if ($valid_id_path==='' || $proof_path==='') {
-    echo "<script>alert('Missing uploaded documents. Please re-submit registration.'); window.location='ho_register.php';</script>";
-    exit;
-  }
+    if ($latitude === '' || $longitude === '' || !is_numeric($latitude) || !is_numeric($longitude)) {
+      redirect_with_message('danger', 'Please pin the homeowner location on the map.');
+    }
 
-  $password = password_hash($password_raw, PASSWORD_DEFAULT);
-  $status = 'pending';
+    $latitudeF  = (float)$latitude;
+    $longitudeF = (float)$longitude;
 
-  $stmtHome = $conn->prepare("
-    INSERT INTO homeowners
-      (first_name,middle_name,last_name,contact_number,email,password,phase,house_lot_number,valid_id_path,proof_of_billing_path,latitude,longitude,admin_id,status)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-  ");
+    // carried from step1
+    $valid_id_path = (string)($_POST['valid_id_tmp'] ?? '');
+    $proof_path    = (string)($_POST['proof_tmp'] ?? '');
 
-  $stmtHome->bind_param(
-    "ssssssssssssis",
-    $first_name, $middle_name, $last_name, $contact_number, $email, $password, $phase, $house_lot_number,
-    $valid_id_path, $proof_path, $latitude, $longitude, $assigned_admin_id, $status
-  );
+    if ($valid_id_path === '' || $proof_path === '') {
+      redirect_with_message('danger', 'Missing uploaded documents. Please re-submit registration.');
+    }
 
-  if (!$stmtHome->execute()) {
-    echo "<script>alert('Insert failed: ".esc($stmtHome->error)."'); history.back();</script>";
-    exit;
-  }
-  $homeowner_id = $stmtHome->insert_id;
-  $stmtHome->close();
+    // check duplicate email first
+    $stmtCheck = $conn->prepare("SELECT id FROM homeowners WHERE email = ? LIMIT 1");
+    $stmtCheck->bind_param("s", $email);
+    $stmtCheck->execute();
+    $exists = $stmtCheck->get_result()->fetch_assoc();
+    $stmtCheck->close();
 
-  if (isset($_POST['member_first_name']) && is_array($_POST['member_first_name'])) {
-    foreach ($_POST['member_first_name'] as $i => $mfname) {
-      $mfname = trim((string)$mfname);
-      $mmname = trim((string)($_POST['member_middle_name'][$i] ?? ''));
-      $mlname = trim((string)($_POST['member_last_name'][$i] ?? ''));
-      $relation= trim((string)($_POST['member_relation'][$i] ?? ''));
+    if ($exists) {
+      redirect_with_message('danger', 'Email already exists.');
+    }
 
-      if ($mfname==='' || $mlname==='' || $relation==='') continue;
+    // assign admin based on phase
+    $assigned_admin_id = null;
+    $stmtAdmin = $conn->prepare("
+      SELECT id
+      FROM admins
+      WHERE phase = ?
+      ORDER BY CASE WHEN position = 'President' THEN 0 ELSE 1 END, id ASC
+      LIMIT 1
+    ");
+    $stmtAdmin->bind_param("s", $phase);
+    $stmtAdmin->execute();
+    $resAdmin = $stmtAdmin->get_result()->fetch_assoc();
+    $stmtAdmin->close();
 
+    if ($resAdmin && isset($resAdmin['id'])) {
+      $assigned_admin_id = (int)$resAdmin['id'];
+    }
+
+    $password  = password_hash($password_raw, PASSWORD_DEFAULT);
+    $status    = 'pending';
+    $public_id = generatePublicId($conn, $phase);
+
+    $conn->begin_transaction();
+
+    $stmtHome = $conn->prepare("
+      INSERT INTO homeowners
+      (
+        public_id,
+        first_name,
+        middle_name,
+        last_name,
+        contact_number,
+        email,
+        password,
+        phase,
+        house_lot_number,
+        valid_id_path,
+        proof_of_billing_path,
+        latitude,
+        longitude,
+        admin_id,
+        status
+      )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ");
+
+    $stmtHome->bind_param(
+      "sssssssssssddis",
+      $public_id,
+      $first_name,
+      $middle_name,
+      $last_name,
+      $contact_number,
+      $email,
+      $password,
+      $phase,
+      $house_lot_number,
+      $valid_id_path,
+      $proof_path,
+      $latitudeF,
+      $longitudeF,
+      $assigned_admin_id,
+      $status
+    );
+
+    $stmtHome->execute();
+    $homeowner_id = $stmtHome->insert_id;
+    $stmtHome->close();
+
+    if (isset($_POST['member_first_name']) && is_array($_POST['member_first_name'])) {
       $stmtMember = $conn->prepare("
-        INSERT INTO household_members (homeowner_id, first_name, middle_name, last_name, relation)
+        INSERT INTO household_members
+        (homeowner_id, first_name, middle_name, last_name, relation)
         VALUES (?,?,?,?,?)
       ");
-      $stmtMember->bind_param("issss", $homeowner_id, $mfname, $mmname, $mlname, $relation);
-      $stmtMember->execute();
+
+      foreach ($_POST['member_first_name'] as $i => $mfname) {
+        $mfname   = trim((string)$mfname);
+        $mmname   = trim((string)($_POST['member_middle_name'][$i] ?? ''));
+        $mlname   = trim((string)($_POST['member_last_name'][$i] ?? ''));
+        $relation = trim((string)($_POST['member_relation'][$i] ?? ''));
+
+        $allowedRelations = ['Homeowner','Spouse','Child','Parent','Relative','Tenant','Caretaker'];
+
+        if ($mfname === '' && $mlname === '' && $relation === '') {
+          continue;
+        }
+
+        if ($mfname === '' || $mlname === '' || !in_array($relation, $allowedRelations, true)) {
+          throw new Exception('One or more household members have incomplete or invalid details.');
+        }
+
+        $stmtMember->bind_param("issss", $homeowner_id, $mfname, $mmname, $mlname, $relation);
+        $stmtMember->execute();
+      }
+
       $stmtMember->close();
     }
-  }
 
-  echo "<script>alert('Done Registering.'); location.href='ho_approval.php';</script>";
-  exit;
+    $conn->commit();
+
+    $_SESSION['flash_type'] = 'success';
+    $_SESSION['flash_message'] = 'Done Registering.';
+    header("Location: ho_approval.php");
+    exit;
+
+  } catch (Throwable $e) {
+    try { $conn->rollback(); } catch (Throwable $ignored) {}
+
+    $msg = $e->getMessage();
+
+    if (stripos($msg, 'Duplicate entry') !== false && stripos($msg, 'uniq_homeowner_email') !== false) {
+      $msg = 'Email already exists.';
+    }
+
+    redirect_with_message('danger', $msg);
+  }
 }
 
 // ---- STEP 1: Registration submit (upload documents, then show map) ----
@@ -114,64 +284,81 @@ $valid_id_tmp = '';
 $proof_tmp = '';
 
 if ($showMap) {
-  $uploadDir = "uploads/";
-  if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+  try {
+    $password_raw     = (string)($_POST['password'] ?? '');
+    $confirm_password = (string)($_POST['confirm_password'] ?? '');
 
-  if (empty($_FILES['valid_id']['tmp_name']) || empty($_FILES['proof_of_billing']['tmp_name'])) {
-    echo "<script>alert('Please upload Valid ID and Proof of Billing.'); history.back();</script>";
-    exit;
-  }
+    if ($password_raw !== $confirm_password) {
+      redirect_with_message('danger', 'Password and Confirm Password do not match.');
+    }
 
-  $valid_id_tmp = $uploadDir . time() . "_id_" . basename($_FILES['valid_id']['name']);
-  $proof_tmp    = $uploadDir . time() . "_proof_" . basename($_FILES['proof_of_billing']['name']);
+    if (empty($_FILES['valid_id']['tmp_name']) || empty($_FILES['proof_of_billing']['tmp_name'])) {
+      redirect_with_message('danger', 'Please upload Valid ID and Proof of Billing.');
+    }
 
-  if (!move_uploaded_file($_FILES['valid_id']['tmp_name'], $valid_id_tmp)) {
-    echo "<script>alert('Failed to upload Valid ID.'); history.back();</script>";
-    exit;
-  }
-  if (!move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proof_tmp)) {
-    echo "<script>alert('Failed to upload Proof of Billing.'); history.back();</script>";
-    exit;
+    // Save files to project-root /uploads and store DB path as uploads/...
+    $uploadDirFs = dirname(__DIR__) . "/uploads/";
+    $uploadDirDb = "uploads/";
+
+    if (!is_dir($uploadDirFs) && !mkdir($uploadDirFs, 0755, true)) {
+      redirect_with_message('danger', 'Failed to create upload directory.');
+    }
+
+    $validName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($_FILES['valid_id']['name']));
+    $proofName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($_FILES['proof_of_billing']['name']));
+
+    $stamp = time() . '_' . bin2hex(random_bytes(4));
+
+    $validDbPath = $uploadDirDb . $stamp . "_id_" . $validName;
+    $proofDbPath = $uploadDirDb . $stamp . "_proof_" . $proofName;
+
+    $validFsPath = $uploadDirFs . $stamp . "_id_" . $validName;
+    $proofFsPath = $uploadDirFs . $stamp . "_proof_" . $proofName;
+
+    if (!move_uploaded_file($_FILES['valid_id']['tmp_name'], $validFsPath)) {
+      redirect_with_message('danger', 'Failed to upload Valid ID.');
+    }
+
+    if (!move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proofFsPath)) {
+      @unlink($validFsPath);
+      redirect_with_message('danger', 'Failed to upload Proof of Billing.');
+    }
+
+    $valid_id_tmp = $validDbPath;
+    $proof_tmp    = $proofDbPath;
+
+  } catch (Throwable $e) {
+    redirect_with_message('danger', $e->getMessage());
   }
 }
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- Basic Page Info -->
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<!-- Site favicon -->
 	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
 
-	<!-- Mobile Specific Metas -->
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<!-- Google Font -->
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<!-- CSS -->
 	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-	<!-- Global site tag (gtag.js) - Google Analytics -->
-	 <!-- Include CSS for DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-
+	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
-    <!-- ================= MAPS ================= -->
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 	<style>
 		:root{--brand:#077f46;}
@@ -180,6 +367,27 @@ if ($showMap) {
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.step-pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#f8fafc;font-weight:800;font-size:12px}
+
+		.access-toast {
+		  position: fixed;
+		  top: 20px;
+		  right: 20px;
+		  background: #ef4444;
+		  color: #fff;
+		  padding: 12px 18px;
+		  border-radius: 8px;
+		  font-weight: 600;
+		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+		  z-index: 99999;
+		  opacity: 0;
+		  transform: translateY(-10px);
+		  transition: all .3s ease;
+		}
+
+		.access-toast.show {
+		  opacity: 1;
+		  transform: translateY(0);
+		}
 	</style>
 </head>
 
@@ -197,7 +405,6 @@ if ($showMap) {
 						<span class="user-icon">
 							<img src="vendors/images/photo1.jpg" alt="">
 						</span>
-						<span class="user-name"><?= esc(strtoupper($admin_role)) ?></span>
 					</a>
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
@@ -207,85 +414,7 @@ if ($showMap) {
 		</div>
 	</div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle ">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="ho_approval.php">Household Approval</a></li>
-              <li><a href="ho_register.php">Register Household</a></li>
-              <li><a href="ho_approved.php">Approved Households</a></li>
-            </ul>
-          </li>
-
-          <!-- ✅ USER MANAGEMENT DROPDOWN -->
-          <?php $view = $_GET['view'] ?? ''; ?>
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
-              <li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-car"></span><span class="mtext">Parking</span></a>
-            <ul class="submenu">
-              <li><a href="parking.php">Parking Overview</a></li>
-              <li><a href="parking_permits.php">Manage Permits</a></li>
-              <li><a href="parking_violations.php">View Violations</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
+	<?php include 'sidebar.php'; ?>
 	<div class="mobile-menu-overlay"></div>
 
 	<div class="main-container">
@@ -299,6 +428,14 @@ if ($showMap) {
 			</div>
 
 			<div class="card-box p-3">
+
+				<?php if (!empty($_SESSION['flash_message'])): ?>
+					<div class="alert alert-<?= esc($_SESSION['flash_type'] ?? 'info') ?> alert-dismissible fade show" role="alert">
+						<?= esc($_SESSION['flash_message']) ?>
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+					</div>
+					<?php unset($_SESSION['flash_type'], $_SESSION['flash_message']); ?>
+				<?php endif; ?>
 
 				<?php if (!$showMap): ?>
 					<div class="d-flex justify-content-end mb-2">
@@ -349,10 +486,10 @@ if ($showMap) {
 							<div class="col-md-6">
 								<label class="form-label fw-semibold">Phase</label>
 								<select name="phase" class="form-control" required>
-									<option disabled selected>Select Phase</option>
-									<option>Phase 1</option>
-									<option>Phase 2</option>
-									<option>Phase 3</option>
+									<option value="" disabled selected>Select Phase</option>
+									<option value="Phase 1">Phase 1</option>
+									<option value="Phase 2">Phase 2</option>
+									<option value="Phase 3">Phase 3</option>
 								</select>
 							</div>
 							<div class="col-md-6">
@@ -388,14 +525,14 @@ if ($showMap) {
 									</div>
 									<div class="col-md-2">
 										<select name="member_relation[]" class="form-control" required>
-											<option disabled selected>Relation</option>
-											<option>Homeowner</option>
-											<option>Spouse</option>
-											<option>Child</option>
-											<option>Parent</option>
-											<option>Relative</option>
-											<option>Tenant</option>
-											<option>Caretaker</option>
+											<option value="" disabled selected>Relation</option>
+											<option value="Homeowner">Homeowner</option>
+											<option value="Spouse">Spouse</option>
+											<option value="Child">Child</option>
+											<option value="Parent">Parent</option>
+											<option value="Relative">Relative</option>
+											<option value="Tenant">Tenant</option>
+											<option value="Caretaker">Caretaker</option>
 										</select>
 									</div>
 								</div>
@@ -421,7 +558,12 @@ if ($showMap) {
 						<h5 class="mb-3 border-bottom pb-2 text-success">Pin Homeowner Location</h5>
 
 						<?php
-						foreach($_POST as $key => $value){
+						$skipHiddenFields = ['registration_submit'];
+						foreach ($_POST as $key => $value) {
+							if (in_array($key, $skipHiddenFields, true)) {
+								continue;
+							}
+
 							if (is_array($value)) {
 								foreach ($value as $v) {
 									echo '<input type="hidden" name="'.esc($key).'[]" value="'.esc($v).'">';
@@ -472,10 +614,17 @@ if ($showMap) {
 								document.getElementById('longitude').value = pos.lng;
 							}
 
-							marker.on('dragend', e => setHidden(e.target.getLatLng()));
-							setHidden(center);
+							marker.on('dragend', function(e){
+								setHidden(e.target.getLatLng());
+							});
 
-							setTimeout(()=>map.invalidateSize(), 250);
+							map.on('click', function(e){
+								marker.setLatLng(e.latlng);
+								setHidden(e.latlng);
+							});
+
+							setHidden(center);
+							setTimeout(function(){ map.invalidateSize(); }, 250);
 						});
 					</script>
 				<?php endif; ?>
@@ -499,10 +648,40 @@ if ($showMap) {
 			const members = document.getElementById('members');
 			const member = members.firstElementChild.cloneNode(true);
 			member.querySelectorAll('input').forEach(input => input.value = '');
-			member.querySelector('select').selectedIndex = 0;
+			member.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
 			members.appendChild(member);
 		}
 	</script>
 
+	<div id="accessToast" class="access-toast">
+	  🚫 You do not have access to that part.
+	</div>
+
+	<script>
+	window.userPermissions = <?= json_encode($permissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+	document.addEventListener('DOMContentLoaded', function () {
+	  const toast = document.getElementById('accessToast');
+
+	  function showAccessToast() {
+	    toast.classList.add('show');
+	    setTimeout(() => {
+	      toast.classList.remove('show');
+	    }, 2500);
+	  }
+
+	  document.querySelectorAll('.menu-access-link').forEach(function(link){
+	    link.addEventListener('click', function(e){
+	      const moduleKey = this.dataset.module || '';
+	      const allowed = !!window.userPermissions[moduleKey];
+
+	      if(!allowed){
+	        e.preventDefault();
+	        showAccessToast();
+	      }
+	    });
+	  });
+	});
+	</script>
 </body>
 </html>

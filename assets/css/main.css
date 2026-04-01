@@ -169,12 +169,13 @@ h6 {
 }
 
 .header .logo img {
-  max-height: 32px;
-  margin-right: 8px;
+  height: 70px;
+  width: auto;
+  margin-right: 10px;
 }
 
 .header .logo svg {
-  height: 32px;
+  height: 70px;
   margin-right: 6px;
   color: color-mix(in srgb, var(--default-color), transparent 50%);
 }
@@ -9075,3 +9076,7 @@ section,
 .starter-section {
   /* Add your styles here */
 }
+html {
+  scroll-behavior: smooth;
+}
+

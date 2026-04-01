@@ -10,7 +10,7 @@ if (!in_array($phase, $allowed, true)) {
   exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB connect failed']); exit; }
 $conn->set_charset("utf8mb4");
 

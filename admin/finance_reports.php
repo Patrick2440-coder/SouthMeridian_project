@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . "/finance_helpers.php";
+require_once 'admin_access.php';
+requireAccess('finance');
 require_admin();
 $conn = db_conn();
 
@@ -7,59 +9,159 @@ $myPhase = admin_phase($conn);
 [$phase, $canPickPhase] = phase_scope_clause($myPhase);
 $adminId = admin_id();
 
-$isPresident = is_president($conn, $phase);
-$adminEmail = admin_email($conn);
+/* Shared officer/admin account setup */
+$canApproveReports = true;
 
-// Request report
+/* =========================
+   HELPER FOR REDIRECT QUERY
+   ========================= */
+function buildReportRedirect(string $base, bool $canPickPhase, string $phase): string {
+  $qs = [];
+
+  if ($canPickPhase) {
+    $qs[] = "phase=" . urlencode($phase);
+  }
+
+  if (isset($_GET['filter_status']) && $_GET['filter_status'] !== '') {
+    $qs[] = "filter_status=" . urlencode((string)$_GET['filter_status']);
+  }
+  if (isset($_GET['filter_year']) && $_GET['filter_year'] !== '') {
+    $qs[] = "filter_year=" . urlencode((string)$_GET['filter_year']);
+  }
+  if (isset($_GET['filter_month']) && $_GET['filter_month'] !== '') {
+    $qs[] = "filter_month=" . urlencode((string)$_GET['filter_month']);
+  }
+
+  return $base . ($qs ? ("?" . implode("&", $qs)) : "");
+}
+
+/* =========================
+   REQUEST REPORT
+   ========================= */
 if (isset($_POST['request_report'])) {
   $year  = (int)($_POST['report_year'] ?? (int)date('Y'));
   $month = (int)($_POST['report_month'] ?? (int)date('n'));
-  if ($month < 1 || $month > 12) $month = (int)date('n');
+
+  if ($month < 1 || $month > 12) {
+    $month = (int)date('n');
+  }
 
   $stmt = $conn->prepare("
     INSERT INTO finance_report_requests (phase, report_year, report_month, status, requested_by_admin_id)
     VALUES (?,?,?,'pending',?)
-    ON DUPLICATE KEY UPDATE status='pending', requested_by_admin_id=VALUES(requested_by_admin_id), requested_at=CURRENT_TIMESTAMP
+    ON DUPLICATE KEY UPDATE
+      status='pending',
+      requested_by_admin_id=VALUES(requested_by_admin_id),
+      requested_at=CURRENT_TIMESTAMP
   ");
   $stmt->bind_param("siii", $phase, $year, $month, $adminId);
   $stmt->execute();
+  $stmt->close();
 
-  header("Location: finance_reports.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
+  header("Location: " . buildReportRedirect("finance_reports.php", $canPickPhase, $phase));
   exit;
 }
 
-// President action
-if ($isPresident && isset($_POST['pres_action'])) {
+/* =========================
+   APPROVE / REJECT ACTION
+   ========================= */
+if ($canApproveReports && isset($_POST['report_action'])) {
   $id = (int)($_POST['request_id'] ?? 0);
-  $action = ($_POST['pres_action'] === 'approve') ? 'approved' : 'rejected';
-  $remarks = trim($_POST['remarks'] ?? '');
+  $action = ($_POST['report_action'] === 'approve') ? 'approved' : 'rejected';
+  $remarks = trim((string)($_POST['remarks'] ?? ''));
 
   $stmt = $conn->prepare("
     UPDATE finance_report_requests
-    SET status=?, president_approved_by_email=?, president_action_at=NOW(), president_remarks=?
+    SET status=?, president_action_at=NOW(), president_remarks=?
     WHERE id=? AND phase=?
   ");
-  $stmt->bind_param("sssis", $action, $adminEmail, $remarks, $id, $phase);
+  $stmt->bind_param("ssis", $action, $remarks, $id, $phase);
   $stmt->execute();
+  $stmt->close();
 
-  header("Location: finance_reports.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
+  header("Location: " . buildReportRedirect("finance_reports.php", $canPickPhase, $phase));
   exit;
 }
 
-// Fetch requests
-$stmt = $conn->prepare("
+/* =========================
+   FILTERS
+   ========================= */
+$filterStatus = trim((string)($_GET['filter_status'] ?? ''));
+$filterYear   = (int)($_GET['filter_year'] ?? 0);
+$filterMonth  = (int)($_GET['filter_month'] ?? 0);
+
+$allowedStatuses = ['pending', 'approved', 'rejected'];
+if (!in_array($filterStatus, $allowedStatuses, true)) {
+  $filterStatus = '';
+}
+
+if ($filterMonth < 1 || $filterMonth > 12) {
+  $filterMonth = 0;
+}
+if ($filterYear < 2000 || $filterYear > 2100) {
+  $filterYear = 0;
+}
+
+/* Default view: pending only */
+if ($filterStatus === '' && $filterYear === 0 && $filterMonth === 0) {
+  $filterStatus = 'pending';
+}
+
+/* =========================
+   FETCH CURRENT/FILTERED REQUESTS
+   ========================= */
+$sql = "
   SELECT r.*, a.email AS requested_by_email
   FROM finance_report_requests r
-  LEFT JOIN admins a ON a.id=r.requested_by_admin_id
-  WHERE r.phase=?
-  ORDER BY r.requested_at DESC
-  LIMIT 200
-");
-$stmt->bind_param("s", $phase);
+  LEFT JOIN admins a ON a.id = r.requested_by_admin_id
+  WHERE r.phase = ?
+";
+$types = "s";
+$params = [$phase];
+
+if ($filterStatus !== '') {
+  $sql .= " AND r.status = ?";
+  $types .= "s";
+  $params[] = $filterStatus;
+}
+if ($filterYear > 0) {
+  $sql .= " AND r.report_year = ?";
+  $types .= "i";
+  $params[] = $filterYear;
+}
+if ($filterMonth > 0) {
+  $sql .= " AND r.report_month = ?";
+  $types .= "i";
+  $params[] = $filterMonth;
+}
+
+$sql .= " ORDER BY r.requested_at DESC LIMIT 200";
+
+$stmt = $conn->prepare($sql);
+$stmt->bind_param($types, ...$params);
 $stmt->execute();
 $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
 
-$defYear = (int)date('Y');
+/* =========================
+   FETCH HISTORY (recent + past)
+   ========================= */
+$historyStmt = $conn->prepare("
+  SELECT r.*, a.email AS requested_by_email
+  FROM finance_report_requests r
+  LEFT JOIN admins a ON a.id = r.requested_by_admin_id
+  WHERE r.phase = ?
+  ORDER BY
+    COALESCE(r.president_action_at, r.requested_at) DESC,
+    r.id DESC
+  LIMIT 100
+");
+$historyStmt->bind_param("s", $phase);
+$historyStmt->execute();
+$historyRows = $historyStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$historyStmt->close();
+
+$defYear  = (int)date('Y');
 $defMonth = (int)date('n');
 ?>
 <!DOCTYPE html>
@@ -88,6 +190,29 @@ $defMonth = (int)date('n');
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 
   <script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
+  <style>
+      /* ACCESS TOAST */
+.access-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  z-index: 99999;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all .3s ease;
+}
+
+.access-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+  </style>
 </head>
 <body>
 
@@ -123,7 +248,6 @@ $defMonth = (int)date('n');
             <span class="user-icon">
               <img src="vendors/images/photo1.jpg" alt="">
             </span>
-            <span class="user-name">JOHNFALL SANCHEZ</span>
           </a>
           <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
             <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
@@ -167,78 +291,8 @@ $defMonth = (int)date('n');
     </div>
   </div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">Homeowner Management</span>
-						</a>
-						<ul class="submenu">
-							<li><a  href="ho_approval.php">Household Approval</a></li>
-							<li><a href="ho_register.php">Register Household</a></li>
-							<li><a href="ho_approved.php">Approved Households</a></li>
-						</ul>
-					</li>
-					<!-- ✅ USER MANAGEMENT DROPDOWN -->
-					<li class="dropdown">
-						<a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-							<span class="micon dw dw-user"></span>
-							<span class="mtext">User Management</span>
-						</a>
-						<ul class="submenu">
-							<li>
-								<a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">
-									Homeowners
-								</a>
-							</li>
-							<li>
-								<a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">
-									Officers
-								</a>
-							</li>
-						</ul>
-					</li>
-          
-          <li><a href="announcements.php" class="dropdown-toggle no-arrow"><span class="micon dw dw-megaphone"></span><span class="mtext">Announcement</span></a></li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
-	</div>
+  <!-- SIDEBAR -->
+<?php include 'sidebar.php'; ?>
   <div class="mobile-menu-overlay"></div>
 
   <div class="main-container">
@@ -249,7 +303,7 @@ $defMonth = (int)date('n');
           <div class="col-md-6 col-sm-12">
             <div class="title"><h4>Financial Reports</h4></div>
             <div class="text-secondary">
-              Phase: <b><?=esc($phase)?></b> |
+              Phase: <b><?= htmlspecialchars($phase) ?></b>
             </div>
           </div>
 
@@ -257,10 +311,20 @@ $defMonth = (int)date('n');
             <?php if ($canPickPhase): ?>
               <form method="get" class="d-inline-block">
                 <select name="phase" class="form-control d-inline-block" style="width:200px" onchange="this.form.submit()">
-                  <?php foreach(['Phase 1','Phase 2','Phase 3'] as $p): ?>
-                    <option value="<?=esc($p)?>" <?= $p===$phase ? 'selected' : '' ?>><?=esc($p)?></option>
+                  <?php foreach (['Phase 1','Phase 2','Phase 3'] as $p): ?>
+                    <option value="<?= htmlspecialchars($p) ?>" <?= $p === $phase ? 'selected' : '' ?>><?= htmlspecialchars($p) ?></option>
                   <?php endforeach; ?>
                 </select>
+
+                <?php if ($filterStatus !== ''): ?>
+                  <input type="hidden" name="filter_status" value="<?= htmlspecialchars($filterStatus) ?>">
+                <?php endif; ?>
+                <?php if ($filterYear > 0): ?>
+                  <input type="hidden" name="filter_year" value="<?= (int)$filterYear ?>">
+                <?php endif; ?>
+                <?php if ($filterMonth > 0): ?>
+                  <input type="hidden" name="filter_month" value="<?= (int)$filterMonth ?>">
+                <?php endif; ?>
               </form>
             <?php endif; ?>
           </div>
@@ -268,24 +332,68 @@ $defMonth = (int)date('n');
       </div>
 
       <div class="card-box mb-20 p-3">
-        <h5 class="mb-3">Request Monthly Report (requires President approval)</h5>
+        <h5 class="mb-3">Request Monthly Report</h5>
         <form method="post" class="form-inline">
           <label class="mr-2">Year</label>
-          <input class="form-control mr-3" type="number" name="report_year" value="<?=$defYear?>" required>
+          <input class="form-control mr-3" type="number" name="report_year" value="<?= $defYear ?>" required>
 
           <label class="mr-2">Month</label>
           <select class="form-control mr-3" name="report_month" required>
-            <?php for($m=1;$m<=12;$m++): ?>
-              <option value="<?=$m?>" <?=$m===$defMonth ? 'selected' : ''?>><?=$m?></option>
+            <?php for ($m = 1; $m <= 12; $m++): ?>
+              <option value="<?= $m ?>" <?= $m === $defMonth ? 'selected' : '' ?>>
+                <?= date('F', mktime(0, 0, 0, $m, 1)) ?>
+              </option>
             <?php endfor; ?>
           </select>
 
-          <button class="btn btn-primary" name="request_report">Send for Approval</button>
+          <button class="btn btn-primary" name="request_report">Send Request</button>
         </form>
 
         <small class="text-secondary d-block mt-2">
-          After approval, you can export the report to PDF/Excel.
+          Once approved, the report can be exported to PDF or Excel.
         </small>
+      </div>
+
+      <div class="card-box mb-20 p-3">
+        <h5 class="mb-3">Filter Report Requests</h5>
+
+        <form method="get" class="row">
+          <?php if ($canPickPhase): ?>
+            <input type="hidden" name="phase" value="<?= htmlspecialchars($phase) ?>">
+          <?php endif; ?>
+
+          <div class="col-md-3 mb-2">
+            <label>Status</label>
+            <select name="filter_status" class="form-control">
+              <option value="">All Status</option>
+              <option value="pending" <?= $filterStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
+              <option value="approved" <?= $filterStatus === 'approved' ? 'selected' : '' ?>>Approved</option>
+              <option value="rejected" <?= $filterStatus === 'rejected' ? 'selected' : '' ?>>Rejected</option>
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-2">
+            <label>Year</label>
+            <input type="number" name="filter_year" class="form-control" value="<?= $filterYear > 0 ? (int)$filterYear : '' ?>" placeholder="All Years">
+          </div>
+
+          <div class="col-md-3 mb-2">
+            <label>Month</label>
+            <select name="filter_month" class="form-control">
+              <option value="">All Months</option>
+              <?php for ($m = 1; $m <= 12; $m++): ?>
+                <option value="<?= $m ?>" <?= $filterMonth === $m ? 'selected' : '' ?>>
+                  <?= date('F', mktime(0, 0, 0, $m, 1)) ?>
+                </option>
+              <?php endfor; ?>
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-info mr-2">Apply Filter</button>
+            <a href="finance_reports.php<?= $canPickPhase ? ('?phase=' . urlencode($phase)) : '' ?>" class="btn btn-secondary">Reset</a>
+          </div>
+        </form>
       </div>
 
       <div class="card-box mb-20 p-3">
@@ -299,78 +407,136 @@ $defMonth = (int)date('n');
                 <th>Period</th>
                 <th>Status</th>
                 <th>Requested By</th>
-                <th>President Action</th>
+                <th>Action Date</th>
                 <th>Remarks</th>
                 <th>Export</th>
-                <?php if ($isPresident): ?><th>Action</th><?php endif; ?>
+                <th>Action</th>
               </tr>
             </thead>
 
             <tbody>
-              <?php foreach($rows as $r): ?>
+              <?php foreach ($rows as $r): ?>
                 <tr>
-                  <td><?=esc($r['requested_at'])?></td>
-                  <td><?=esc($r['report_year']."-".str_pad((string)$r['report_month'],2,'0',STR_PAD_LEFT))?></td>
+                  <td><?= htmlspecialchars($r['requested_at']) ?></td>
+                  <td><?= htmlspecialchars($r['report_year'] . "-" . str_pad((string)$r['report_month'], 2, '0', STR_PAD_LEFT)) ?></td>
 
                   <td>
                     <?php
                       $st = $r['status'] ?? 'pending';
-                      $badge = $st==='approved' ? 'badge-success' : ($st==='rejected' ? 'badge-danger' : 'badge-warning');
+                      $badge = $st === 'approved' ? 'badge-success' : ($st === 'rejected' ? 'badge-danger' : 'badge-warning');
                     ?>
-                    <span class="badge <?=$badge?>"><?=esc($st)?></span>
+                    <span class="badge <?= $badge ?>"><?= htmlspecialchars($st) ?></span>
                   </td>
 
-                  <td><?=esc($r['requested_by_email'] ?? '')?></td>
-                  <td><?=esc($r['president_action_at'] ?? '-')?></td>
-                  <td><?=esc($r['president_remarks'] ?? '')?></td>
+                  <td><?= htmlspecialchars($r['requested_by_email'] ?? '') ?></td>
+                  <td><?= htmlspecialchars($r['president_action_at'] ?? '-') ?></td>
+                  <td><?= htmlspecialchars($r['president_remarks'] ?? '') ?></td>
 
-                  <!-- EXPORT -->
                   <td style="min-width:220px">
                     <?php if (($r['status'] ?? '') === 'approved'): ?>
                       <?php
-                        $qs = "phase=".urlencode($phase)
-                            ."&year=".(int)$r['report_year']
-                            ."&month=".(int)$r['report_month'];
+                        $qs = "phase=" . urlencode($phase)
+                            . "&year=" . (int)$r['report_year']
+                            . "&month=" . (int)$r['report_month'];
                       ?>
-                      <a class="btn btn-sm btn-outline-success" target="_blank"
-                         href="finance_reports_export.php?format=pdf&<?=$qs?>">PDF</a>
-                      <a class="btn btn-sm btn-outline-primary" target="_blank"
-                         href="finance_reports_export.php?format=excel&<?=$qs?>">Excel</a>
+                      <a class="btn btn-sm btn-outline-success" target="_blank" href="finance_reports_export.php?format=pdf&<?= $qs ?>">PDF</a>
+                      <a class="btn btn-sm btn-outline-primary" target="_blank" href="finance_reports_export.php?format=excel&<?= $qs ?>">Excel</a>
                     <?php else: ?>
                       <span class="text-secondary">—</span>
                     <?php endif; ?>
                   </td>
 
-                  <!-- ACTION (PRESIDENT ONLY) -->
-                  <?php if ($isPresident): ?>
-                    <td style="min-width:220px">
-                      <?php if (($r['status'] ?? '') === 'pending'): ?>
-                        <form method="post" class="d-inline">
-                          <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
-                          <input type="hidden" name="pres_action" value="approve">
-                          <input type="text" name="remarks" class="form-control mb-1" placeholder="Remarks (optional)">
-                          <button class="btn btn-sm btn-success">Approve</button>
-                        </form>
+                  <td style="min-width:220px">
+                    <?php if (($r['status'] ?? '') === 'pending'): ?>
+                      <form method="post" class="d-inline">
+                        <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
+                        <input type="hidden" name="report_action" value="approve">
+                        <input type="text" name="remarks" class="form-control mb-1" placeholder="Remarks (optional)">
+                        <button class="btn btn-sm btn-success">Approve</button>
+                      </form>
 
-                        <form method="post" class="d-inline">
-                          <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
-                          <input type="hidden" name="pres_action" value="reject">
-                          <input type="hidden" name="remarks" value="Rejected">
-                          <button class="btn btn-sm btn-danger">Reject</button>
-                        </form>
-                      <?php else: ?>
-                        -
-                      <?php endif; ?>
-                    </td>
-                  <?php endif; ?>
-
+                      <form method="post" class="d-inline">
+                        <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
+                        <input type="hidden" name="report_action" value="reject">
+                        <input type="hidden" name="remarks" value="Rejected">
+                        <button class="btn btn-sm btn-danger">Reject</button>
+                      </form>
+                    <?php else: ?>
+                      <span class="text-secondary">-</span>
+                    <?php endif; ?>
+                  </td>
                 </tr>
               <?php endforeach; ?>
 
               <?php if (!$rows): ?>
                 <tr>
-                  <td colspan="<?= $isPresident ? 8 : 7 ?>" class="text-center text-secondary">
-                    No report requests yet.
+                  <td colspan="8" class="text-center text-secondary">
+                    No report requests found for the selected filter.
+                  </td>
+                </tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- HISTORY SECTION -->
+      <div class="card-box mb-20 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">History</h5>
+          <small class="text-secondary">Recent and past requests, including approved reports</small>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Requested At</th>
+                <th>Period</th>
+                <th>Status</th>
+                <th>Requested By</th>
+                <th>Action Date</th>
+                <th>Remarks</th>
+                <th>Available Export</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($historyRows as $i => $h): ?>
+                <tr>
+                  <td><?= (int)($i + 1) ?></td>
+                  <td><?= htmlspecialchars($h['requested_at']) ?></td>
+                  <td><?= htmlspecialchars($h['report_year'] . "-" . str_pad((string)$h['report_month'], 2, '0', STR_PAD_LEFT)) ?></td>
+                  <td>
+                    <?php
+                      $hst = $h['status'] ?? 'pending';
+                      $hBadge = $hst === 'approved' ? 'badge-success' : ($hst === 'rejected' ? 'badge-danger' : 'badge-warning');
+                    ?>
+                    <span class="badge <?= $hBadge ?>"><?= htmlspecialchars($hst) ?></span>
+                  </td>
+                  <td><?= htmlspecialchars($h['requested_by_email'] ?? '') ?></td>
+                  <td><?= htmlspecialchars($h['president_action_at'] ?? '-') ?></td>
+                  <td><?= htmlspecialchars($h['president_remarks'] ?? '') ?></td>
+                  <td>
+                    <?php if (($h['status'] ?? '') === 'approved'): ?>
+                      <?php
+                        $hqs = "phase=" . urlencode($phase)
+                             . "&year=" . (int)$h['report_year']
+                             . "&month=" . (int)$h['report_month'];
+                      ?>
+                      <a class="btn btn-sm btn-outline-success" target="_blank" href="finance_reports_export.php?format=pdf&<?= $hqs ?>">PDF</a>
+                      <a class="btn btn-sm btn-outline-primary" target="_blank" href="finance_reports_export.php?format=excel&<?= $hqs ?>">Excel</a>
+                    <?php else: ?>
+                      <span class="text-secondary">—</span>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+
+              <?php if (!$historyRows): ?>
+                <tr>
+                  <td colspan="8" class="text-center text-secondary">
+                    No history found yet.
                   </td>
                 </tr>
               <?php endif; ?>
@@ -391,5 +557,41 @@ $defMonth = (int)date('n');
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+<div id="accessToast" class="access-toast">
+  🚫 You do not have access to that part.
+</div>
+<script>
+window.userPermissions = <?= json_encode($permissions) ?>;
+
+document.addEventListener('DOMContentLoaded', function () {
+
+  const toast = document.getElementById('accessToast');
+
+  function showAccessToast() {
+    toast.classList.add('show');
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2500);
+  }
+
+  document.querySelectorAll('.menu-access-link').forEach(function(link){
+
+    link.addEventListener('click', function(e){
+
+      const moduleKey = this.dataset.module || '';
+      const allowed = !!window.userPermissions[moduleKey];
+
+      if(!allowed){
+        e.preventDefault();
+        showAccessToast();
+      }
+
+    });
+
+  });
+
+});
+</script>
 </body>
 </html>

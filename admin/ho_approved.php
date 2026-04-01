@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once 'admin_access.php';
+requireAccess('homeowner_management');
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
@@ -7,20 +9,31 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-$host="localhost"; $db="south_meridian_hoa"; $user="root"; $pass="";
+$host="localhost";
+$db="u972459197_south_meridian";
+$user="u972459197_patrick";
+$pass="Idle2440";
+
 $conn = new mysqli($host,$user,$pass,$db);
 if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-// ✅ prevent undefined $view in sidebar
+// prevent undefined $view in sidebar
 $view = $_GET['view'] ?? '';
 
 function phase_prefix(string $phase): string {
   $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
   return $n > 0 ? ('P'.$n) : 'P';
 }
+
+if (empty($_SESSION['csrf_delete_homeowner'])) {
+  $_SESSION['csrf_delete_homeowner'] = bin2hex(random_bytes(32));
+}
+$csrfDelete = $_SESSION['csrf_delete_homeowner'];
 
 $admin_id = (int)$_SESSION['admin_id'];
 $stmt = $conn->prepare("SELECT phase, role FROM admins WHERE id=? LIMIT 1");
@@ -31,6 +44,110 @@ $stmt->close();
 
 $admin_phase = $admin['phase'] ?? '';
 $admin_role  = $admin['role'] ?? '';
+
+if (!isset($permissions) || !is_array($permissions)) {
+  $permissions = [];
+}
+
+/* =========================
+   DELETE HOMEOWNER ACTION
+   ========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_homeowner') {
+  header('Content-Type: application/json; charset=utf-8');
+
+  $token = (string)($_POST['csrf_token'] ?? '');
+  if (!hash_equals($_SESSION['csrf_delete_homeowner'] ?? '', $token)) {
+    echo json_encode(['success'=>false, 'message'=>'Invalid request token. Please refresh and try again.']);
+    exit;
+  }
+
+  $deleteId = (int)($_POST['homeowner_id'] ?? 0);
+  if ($deleteId <= 0) {
+    echo json_encode(['success'=>false, 'message'=>'Invalid homeowner ID.']);
+    exit;
+  }
+
+  if ($admin_role === 'superadmin') {
+    $stmt = $conn->prepare("
+      SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
+      FROM homeowners
+      WHERE id=?
+      LIMIT 1
+    ");
+    $stmt->bind_param("i", $deleteId);
+  } else {
+    $stmt = $conn->prepare("
+      SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
+      FROM homeowners
+      WHERE id=? AND phase=?
+      LIMIT 1
+    ");
+    $stmt->bind_param("is", $deleteId, $admin_phase);
+  }
+
+  $stmt->execute();
+  $target = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$target) {
+    echo json_encode(['success'=>false, 'message'=>'Homeowner not found or not allowed for your account.']);
+    exit;
+  }
+
+  $fullName = trim(
+    (string)($target['first_name'] ?? '') . ' ' .
+    (string)($target['middle_name'] ?? '') . ' ' .
+    (string)($target['last_name'] ?? '')
+  );
+
+  try {
+    $conn->begin_transaction();
+
+    // delete child rows first
+    $stmt = $conn->prepare("DELETE FROM household_members WHERE homeowner_id=?");
+    $stmt->bind_param("i", $deleteId);
+    $stmt->execute();
+    $stmt->close();
+
+    $stmt = $conn->prepare("DELETE FROM homeowners WHERE id=? LIMIT 1");
+    $stmt->bind_param("i", $deleteId);
+    $stmt->execute();
+    $affected = $stmt->affected_rows;
+    $stmt->close();
+
+    if ($affected < 1) {
+      throw new Exception('Homeowner was not deleted.');
+    }
+
+    $conn->commit();
+
+    // optional cleanup of uploaded files after successful commit
+    $rootPath = dirname(__DIR__) . DIRECTORY_SEPARATOR;
+    foreach (['valid_id_path', 'proof_of_billing_path'] as $fileField) {
+      $dbPath = trim((string)($target[$fileField] ?? ''));
+      if ($dbPath !== '' && strpos($dbPath, 'uploads/') === 0) {
+        $fullPath = $rootPath . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $dbPath);
+        if (is_file($fullPath)) {
+          @unlink($fullPath);
+        }
+      }
+    }
+
+    echo json_encode([
+      'success' => true,
+      'message' => 'Homeowner deleted successfully: ' . ($fullName !== '' ? $fullName : ('ID '.$deleteId))
+    ]);
+    exit;
+
+  } catch (Throwable $e) {
+    $conn->rollback();
+    echo json_encode([
+      'success' => false,
+      'message' => 'Delete failed. ' . $e->getMessage()
+    ]);
+    exit;
+  }
+}
 
 if ($admin_role === 'superadmin') {
   $sqlApproved = $conn->prepare("SELECT * FROM homeowners WHERE status='approved' ORDER BY created_at DESC");
@@ -44,40 +161,31 @@ $resultApproved = $sqlApproved->get_result();
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- Basic Page Info -->
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<!-- Site favicon -->
 	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
 
-	<!-- Mobile Specific Metas -->
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<!-- Google Font -->
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<!-- CSS -->
 	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-	<!-- Global site tag (gtag.js) - Google Analytics -->
-	 <!-- Include CSS for DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
-    <!-- ================= MAPS ================= -->
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 	<style>
 		:root{--brand:#077f46;}
@@ -86,9 +194,28 @@ $resultApproved = $sqlApproved->get_result();
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
+		.access-toast {
+		  position: fixed;
+		  top: 20px;
+		  right: 20px;
+		  background: #ef4444;
+		  color: #fff;
+		  padding: 12px 18px;
+		  border-radius: 8px;
+		  font-weight: 600;
+		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+		  z-index: 99999;
+		  opacity: 0;
+		  transform: translateY(-10px);
+		  transition: all .3s ease;
+		}
+
+		.access-toast.show {
+		  opacity: 1;
+		  transform: translateY(0);
+		}
 	</style>
 </head>
-
 
 <body>
 
@@ -126,7 +253,6 @@ $resultApproved = $sqlApproved->get_result();
 						<span class="user-icon">
 							<img src="vendors/images/photo1.jpg" alt="">
 						</span>
-						<span class="user-name"><?= esc(strtoupper($admin_role)) ?></span>
 					</a>
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
@@ -138,85 +264,7 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
-
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle ">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="ho_approval.php">Household Approval</a></li>
-              <li><a href="ho_register.php">Register Household</a></li>
-              <li><a href="ho_approved.php">Approved Households</a></li>
-            </ul>
-          </li>
-
-          <!-- ✅ USER MANAGEMENT DROPDOWN -->
-          <?php $view = $_GET['view'] ?? ''; ?>
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
-              <li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-car"></span><span class="mtext">Parking</span></a>
-            <ul class="submenu">
-              <li><a href="parking.php">Parking Overview</a></li>
-              <li><a href="parking_permits.php">Manage Permits</a></li>
-              <li><a href="parking_violations.php">View Violations</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
+	<?php include 'sidebar.php'; ?>
 
 	<div class="mobile-menu-overlay"></div>
 
@@ -246,21 +294,38 @@ $resultApproved = $sqlApproved->get_result();
 							<?php while($row = $resultApproved->fetch_assoc()): ?>
 								<?php
 									$rowPhase = (string)($row['phase'] ?? $admin_phase);
-									$prefix = phase_prefix($rowPhase);
-									$displayId = $prefix . (int)$row['id']; // ✅ SAME FORMAT AS USER MANAGEMENT
+									$displayId = trim((string)($row['public_id'] ?? ''));
+									if ($displayId === '') {
+										$prefix = phase_prefix($rowPhase);
+										$displayId = $prefix . (int)$row['id'];
+									}
+                  					$rowName = trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''));
+                  					$rowAddress = trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''));
 								?>
-								<tr>
+								<tr id="homeownerRow<?= (int)$row['id'] ?>">
 									<td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
-									<td><?= esc(trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''))) ?></td>
-									<td><?= esc(trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''))) ?></td>
+									<td><?= esc($rowName) ?></td>
+									<td><?= esc($rowAddress) ?></td>
 									<td><span class="badge badge-success">Approved</span></td>
 									<td>
-										<button type="button" class="btn btn-sm btn-info viewHomeownerBtn" data-id="<?= (int)$row['id'] ?>" title="View">
-											<i class="dw dw-eye"></i>
-										</button>
-										<button class="btn btn-sm btn-warning editHomeowner" data-id="<?= (int)$row['id'] ?>" title="Edit">
-											<i class="dw dw-edit-1"></i>
-										</button>
+                    					<div class="btn-action-wrap">
+                      						<button type="button" class="btn btn-sm btn-info viewHomeownerBtn" data-id="<?= (int)$row['id'] ?>" title="View">
+                        						<i class="dw dw-eye"></i>
+                      						</button>
+                      						<button class="btn btn-sm btn-warning editHomeowner" data-id="<?= (int)$row['id'] ?>" title="Edit">
+                        						<i class="dw dw-edit-1"></i>
+                      						</button>
+                      						<button
+                        						type="button"
+                        						class="btn btn-sm btn-danger deleteHomeownerBtn"
+                        						data-id="<?= (int)$row['id'] ?>"
+                        						data-name="<?= esc($rowName) ?>"
+                        						data-address="<?= esc($rowAddress) ?>"
+                        						title="Delete"
+                      						>
+                        						<i class="dw dw-delete-3"></i>
+                      						</button>
+                    					</div>
 									</td>
 								</tr>
 							<?php endwhile; ?>
@@ -275,7 +340,6 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<!-- VIEW MODAL -->
 	<div class="modal fade" id="viewHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
 			<div class="modal-content" style="border-radius: 14px; overflow: hidden;">
@@ -290,7 +354,6 @@ $resultApproved = $sqlApproved->get_result();
 		</div>
 	</div>
 
-	<!-- EDIT MODAL -->
 	<div class="modal fade" id="editHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
 			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
@@ -310,8 +373,34 @@ $resultApproved = $sqlApproved->get_result();
 			</div>
 		</div>
 	</div>
+	
+	<div class="modal fade" id="deleteHomeownerModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
+				<div class="modal-header bg-danger text-white">
+					<h5 class="modal-title fw-bold">Delete Homeowner</h5>
+					<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+				</div>
+				<div class="modal-body">
+					<div class="alert alert-warning mb-3">
+						This action will permanently delete the homeowner record.
+					</div>
 
-	<!-- TOAST -->
+					<div class="mb-2"><b>Name:</b> <span id="deleteHomeownerName">-</span></div>
+					<div class="mb-2"><b>Address:</b> <span id="deleteHomeownerAddress">-</span></div>
+
+					<input type="hidden" id="deleteHomeownerId" value="">
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+					<button type="button" class="btn btn-danger" id="confirmDeleteHomeownerBtn">
+						Delete Permanently
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="d-flex">
@@ -336,6 +425,8 @@ $resultApproved = $sqlApproved->get_result();
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 	<script>
+    const DELETE_CSRF = <?= json_encode($csrfDelete) ?>;
+
 		function showToast(message, type='success'){
 			const toastEl = document.getElementById('appToast');
 			const msgEl   = document.getElementById('appToastMsg');
@@ -348,32 +439,61 @@ $resultApproved = $sqlApproved->get_result();
 		}
 
 		$(function(){
-			if ($.fn.DataTable && $('#approvedTable').length && !$.fn.DataTable.isDataTable('#approvedTable')) {
-				$('#approvedTable').DataTable({ responsive:true, columnDefs:[{orderable:false, targets:4}] });
-			}
+      		let approvedDt = null;
 
-			// VIEW modal
+			if ($.fn.DataTable && $('#approvedTable').length && !$.fn.DataTable.isDataTable('#approvedTable')) {
+				approvedDt = $('#approvedTable').DataTable({
+          			responsive:true,
+          			columnDefs:[{orderable:false, targets:4}]
+        		});
+			} else if ($.fn.DataTable.isDataTable('#approvedTable')) {
+        		approvedDt = $('#approvedTable').DataTable();
+      		}
+
 			const modalEl = document.getElementById('viewHomeownerModal');
 			const content = document.getElementById('viewHomeownerContent');
 			const modal = new bootstrap.Modal(modalEl, { backdrop:'static', keyboard:true });
 
 			let coverMapInstance = null;
 
-			function initCoverMapIfAny(){
-				const mapEl = document.getElementById('coverMap');
-				if (!mapEl) return;
+function initCoverMapIfAny() {
+	const mapEl = document.getElementById('coverMap');
+	if (!mapEl || typeof L === 'undefined') return;
 
-				const lat = parseFloat(mapEl.dataset.lat||'');
-				const lng = parseFloat(mapEl.dataset.lng||'');
-				if (!isFinite(lat) || !isFinite(lng)) return;
+	const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
+	const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
+	if (!isFinite(lat) || !isFinite(lng)) return;
 
-				if (coverMapInstance) { coverMapInstance.remove(); coverMapInstance = null; }
+	destroyCoverMap();
 
-				coverMapInstance = L.map('coverMap', { zoomControl:false }).setView([lat,lng],18);
-				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; OpenStreetMap contributors' }).addTo(coverMapInstance);
-				L.marker([lat,lng]).addTo(coverMapInstance);
-				setTimeout(()=>coverMapInstance.invalidateSize(), 250);
-			}
+	coverMapInstance = L.map(mapEl, {
+		center: [lat, lng],
+		zoom: 18,
+		zoomControl: true,
+		attributionControl: true
+	});
+
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		maxZoom: 19,
+		subdomains: ['a', 'b', 'c'],
+		attribution: '&copy; OpenStreetMap contributors'
+	}).addTo(coverMapInstance);
+
+	L.marker([lat, lng]).addTo(coverMapInstance);
+
+	setTimeout(function () {
+		if (coverMapInstance) {
+			coverMapInstance.invalidateSize(true);
+			coverMapInstance.setView([lat, lng], 18);
+		}
+	}, 300);
+
+	setTimeout(function () {
+		if (coverMapInstance) {
+			coverMapInstance.invalidateSize(true);
+		}
+	}, 800);
+}
 
 			$(document).on('click','.viewHomeownerBtn', function(e){
 				e.preventDefault();
@@ -395,7 +515,6 @@ $resultApproved = $sqlApproved->get_result();
 				content.innerHTML = '';
 			});
 
-			// EDIT modal load + map init (kept your working version)
 			const editModalEl = document.getElementById('editHomeownerModal');
 			const editContent = document.getElementById('editHomeownerContent');
 			const editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
@@ -486,7 +605,6 @@ $resultApproved = $sqlApproved->get_result();
 				pendingInit = false;
 			});
 
-			// ✅ SAVE CHANGES
 			document.addEventListener('click', async function(e){
 				if (!e.target.closest('#saveEditHomeownerBtn')) return;
 
@@ -526,8 +644,126 @@ $resultApproved = $sqlApproved->get_result();
 					btn.innerHTML = oldHTML;
 				}
 			});
+
+      		const deleteModalEl = document.getElementById('deleteHomeownerModal');
+      		const deleteModal = new bootstrap.Modal(deleteModalEl, { backdrop:'static', keyboard:true });
+      		const deleteIdEl = document.getElementById('deleteHomeownerId');
+      		const deleteNameEl = document.getElementById('deleteHomeownerName');
+      		const deleteAddressEl = document.getElementById('deleteHomeownerAddress');
+      		const confirmDeleteBtn = document.getElementById('confirmDeleteHomeownerBtn');
+
+      		$(document).on('click', '.deleteHomeownerBtn', function(e){
+        		e.preventDefault();
+
+        		const id = $(this).data('id');
+        		const name = $(this).data('name') || '-';
+        		const address = $(this).data('address') || '-';
+
+        		deleteIdEl.value = id || '';
+        		deleteNameEl.textContent = name;
+        		deleteAddressEl.textContent = address;
+
+        		deleteModal.show();
+      		});
+
+      		confirmDeleteBtn?.addEventListener('click', async function(){
+        		const homeownerId = parseInt(deleteIdEl.value || '0', 10);
+        		if (!homeownerId) {
+          			showToast('Invalid homeowner selected.', 'error');
+          			return;
+        		}
+
+        		const oldHtml = confirmDeleteBtn.innerHTML;
+        		confirmDeleteBtn.disabled = true;
+        		confirmDeleteBtn.innerHTML = 'Deleting...';
+
+        		try {
+          			const fd = new FormData();
+          			fd.append('action', 'delete_homeowner');
+          			fd.append('homeowner_id', homeownerId);
+          			fd.append('csrf_token', DELETE_CSRF);
+
+          			const resp = await fetch(window.location.href, {
+            			method: 'POST',
+            			body: fd
+          			});
+
+          			const text = await resp.text();
+
+          			let data;
+          			try {
+            			data = JSON.parse(text);
+          			} catch (err) {
+            			console.error('Non-JSON delete response:', text);
+            			showToast('Delete failed. Server returned invalid response.', 'error');
+            			return;
+          			}
+
+          			if (!data.success) {
+            			showToast(data.message || 'Delete failed.', 'error');
+            			return;
+          			}
+
+          			showToast(data.message || 'Homeowner deleted.', 'success');
+          			deleteModal.hide();
+
+          			const rowNode = document.getElementById('homeownerRow' + homeownerId);
+          			if (rowNode) {
+            			if (approvedDt) {
+              				approvedDt.row($(rowNode)).remove().draw(false);
+            			} else {
+              				rowNode.remove();
+            			}
+          			} else {
+            			setTimeout(() => location.reload(), 350);
+          			}
+
+        		} catch (err) {
+          			console.error(err);
+          			showToast('Request failed while deleting homeowner.', 'error');
+        		} finally {
+          			confirmDeleteBtn.disabled = false;
+          			confirmDeleteBtn.innerHTML = oldHtml;
+        		}
+      		});
+
+      		deleteModalEl?.addEventListener('hidden.bs.modal', function(){
+        		deleteIdEl.value = '';
+        		deleteNameEl.textContent = '-';
+        		deleteAddressEl.textContent = '-';
+      		});
 		});
 	</script>
 
+	<div id="accessToast" class="access-toast">
+  		🚫 You do not have access to that part.
+	</div>
+	<script>
+	window.userPermissions = <?= json_encode($permissions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+	document.addEventListener('DOMContentLoaded', function () {
+  		const toast = document.getElementById('accessToast');
+
+  		function showAccessToast() {
+    		toast.classList.add('show');
+
+    		setTimeout(() => {
+      			toast.classList.remove('show');
+    		}, 2500);
+  		}
+
+  		document.querySelectorAll('.menu-access-link').forEach(function(link){
+    		link.addEventListener('click', function(e){
+      			const moduleKey = this.dataset.module || '';
+      			const allowed = !!window.userPermissions[moduleKey];
+
+      			if(!allowed){
+        			e.preventDefault();
+        			showAccessToast();
+      			}
+    		});
+  		});
+	});
+	</script>
 </body>
 </html>

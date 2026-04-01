@@ -6,7 +6,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SE
   exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -37,6 +37,13 @@ if ($mustChange) {
   exit;
 }
 
+$activePage  = basename($_SERVER['PHP_SELF'] ?? 'homeowner_pay_dues.php');
+$parkingOpen = in_array($activePage, [
+  'homeowner_parking.php',
+  'homeowner_parking_permit.php',
+  'homeowner_parking_violations.php'
+], true);
+
 // Year selection
 $selYear = (int)($_GET['year'] ?? (int)date('Y'));
 if ($selYear < 2000 || $selYear > ((int)date('Y') + 1)) $selYear = (int)date('Y');
@@ -47,7 +54,6 @@ $stmt->bind_param("s", $phase);
 $stmt->execute();
 $monthlyDues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
 $stmt->close();
-
 
 function paymongo_get_checkout(string $csId, string $secretKey): ?array {
   $ch = curl_init("https://api.paymongo.com/v1/checkout_sessions/" . rawurlencode($csId));
@@ -73,10 +79,8 @@ function checkout_is_paid(array $pm): bool {
   $cs = $pm['data'] ?? null;
   if (!is_array($cs)) return false;
   $attr = $cs['attributes'] ?? [];
-  // PayMongo checkout session often has payments list when paid
   $payments = $attr['payments'] ?? [];
   if (is_array($payments) && !empty($payments)) return true;
-  // Some versions: status field
   $status = (string)($attr['status'] ?? '');
   return in_array($status, ['paid','succeeded','complete','completed'], true);
 }
@@ -94,7 +98,7 @@ function extract_payment(array $pm): array {
   return [$pid, $amountCentavos];
 }
 
-// Only sync max once per 20 seconds per session to avoid hammering PayMongo
+// Only sync max once per 20 seconds per session
 $doSync = true;
 if (!empty($_SESSION['last_paymongo_sync'])) {
   if (time() - (int)$_SESSION['last_paymongo_sync'] < 20) $doSync = false;
@@ -105,7 +109,6 @@ if ($doSync) {
 
   $PAYMONGO_SECRET = getenv('PAYMONGO_SECRET_KEY') ?: 'sk_test_Rxb7X283U4N6dTvWTP4oE81y';
 
-  // Get all pending sessions for this homeowner + year
   $stmt = $conn->prepare("
     SELECT id, checkout_session_id, pay_month, amount, phase, status
     FROM finance_paymongo_checkouts
@@ -123,21 +126,18 @@ if ($doSync) {
 
     $pm = paymongo_get_checkout($csId, $PAYMONGO_SECRET);
     if (!$pm) continue;
-
     if (!checkout_is_paid($pm)) continue;
 
     [$paymentId, $amountCentavos] = extract_payment($pm);
 
-    $pMonth = (int)$pr['pay_month'];
+    $pMonth  = (int)$pr['pay_month'];
     $pAmount = (float)$pr['amount'];
     if ($amountCentavos > 0) $pAmount = $amountCentavos / 100.0;
 
-    // Use correct phase: from homeowners (safe), because old row might be ''.
     $pPhase = $phase;
 
     $conn->begin_transaction();
     try {
-      // Mark checkout as paid + store payment id
       $stmt = $conn->prepare("
         UPDATE finance_paymongo_checkouts
         SET status='paid', payment_id=?, paid_at=NOW(), phase=?
@@ -147,7 +147,6 @@ if ($doSync) {
       $stmt->execute();
       $stmt->close();
 
-      // Insert or update finance_payments (unique homeowner_id+year+month)
       $ref   = $paymentId !== '' ? $paymentId : $csId;
       $notes = "PayMongo (fallback sync)";
 
@@ -170,11 +169,9 @@ if ($doSync) {
       $conn->commit();
     } catch (Throwable $e) {
       $conn->rollback();
-      // swallow to avoid breaking the page
     }
   }
 }
-
 
 $stmt = $conn->prepare("
   SELECT pay_month, amount, paid_at, reference_no, notes
@@ -195,26 +192,10 @@ while($r = $res->fetch_assoc()){
 }
 $stmt->close();
 
-
-$stmt = $conn->prepare("
-  SELECT pay_month, checkout_session_id, status, created_at
-  FROM finance_paymongo_checkouts
-  WHERE homeowner_id=? AND pay_year=? AND status='pending'
-");
-$stmt->bind_param("ii", $hid, $selYear);
-$stmt->execute();
-$res = $stmt->get_result();
-$pendingByMonth = [];
-while($r = $res->fetch_assoc()){
-  $pendingByMonth[(int)$r['pay_month']] = $r;
-}
-$stmt->close();
-
 $flashPaid   = isset($_GET['paid']) ? 1 : 0;
 $flashCancel = isset($_GET['cancel']) ? 1 : 0;
 $flashErr    = trim((string)($_GET['err'] ?? ''));
 
-// CSRF token
 if (empty($_SESSION['csrf_pay_dues'])) {
   $_SESSION['csrf_pay_dues'] = bin2hex(random_bytes(16));
 }
@@ -226,6 +207,10 @@ $months = [
 ];
 
 $pageTitle = "Pay Monthly Dues • ".$phase;
+$chatPages = [
+  'homeowner_public_chat.php'
+];
+$chatOpen = in_array($activePage, $chatPages, true);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -239,32 +224,243 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 <link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
 
 <style>
-.dues-card{ border:1px solid #eef2f7; border-radius:16px; background:#fff; box-shadow:0 10px 30px rgba(16,24,40,.06); }
-.dues-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-top:1px solid #f1f5f9; }
-.dues-row:first-child{ border-top:none; }
-.badge-soft-success{ background:rgba(25,135,84,.12); color:#198754; border:1px solid rgba(25,135,84,.22); }
-.badge-soft-danger{ background:rgba(220,53,69,.10); color:#dc3545; border:1px solid rgba(220,53,69,.20); }
-.badge-soft-warning{ background:rgba(255,193,7,.14); color:#a06b00; border:1px solid rgba(255,193,7,.28); }
-.small-muted{ color:#6b7280; font-weight:600; }
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 
-/* Sidebar dropdown */
-.sb-dd { display:flex; flex-direction:column; gap:6px; }
-.sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
-.sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
-.sb-dd.open .sb-dd-menu{ display:block; }
-.sb-dd-caret{ transition: transform .15s ease; }
-.sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
+  .app-shell{
+    position: relative;
+  }
 
-.pillx{ display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#f1f5f9; font-weight:700; }
-.req-list li{ margin-bottom: 6px; }
+  .sidebar-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .45);
+    z-index: 1040;
+    opacity: 0;
+    visibility: hidden;
+    transition: .25s ease;
+  }
+  .sidebar-overlay.show{
+    opacity: 1;
+    visibility: visible;
+  }
 
+  .dues-card{
+    border:1px solid #eef2f7;
+    border-radius:16px;
+    background:#fff;
+    box-shadow:0 10px 30px rgba(16,24,40,.06);
+  }
+
+  .dues-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 16px;
+    border-top:1px solid #f1f5f9;
+  }
+  .dues-row:first-child{ border-top:none; }
+
+  .badge-soft-success{
+    background:rgba(25,135,84,.12);
+    color:#198754;
+    border:1px solid rgba(25,135,84,.22);
+  }
+  .badge-soft-danger{
+    background:rgba(220,53,69,.10);
+    color:#dc3545;
+    border:1px solid rgba(220,53,69,.20);
+  }
+  .badge-soft-warning{
+    background:rgba(255,193,7,.14);
+    color:#a06b00;
+    border:1px solid rgba(255,193,7,.28);
+  }
+  .small-muted{
+    color:#6b7280;
+    font-weight:600;
+  }
+
+  .sb-dd { display:flex; flex-direction:column; gap:6px; }
+  .sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+  .sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
+  .sb-dd.open .sb-dd-menu{ display:block; }
+  .sb-dd-caret{ transition: transform .15s ease; }
+  .sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
+
+  .pillx{
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+    padding:8px 12px;
+    border-radius:999px;
+    background:#f1f5f9;
+    font-weight:700;
+    flex-wrap: wrap;
+  }
+
+  .req-list li{ margin-bottom: 6px; }
+
+  .topbar-mobile-btn{
+    border: 1px solid #dbe3ea;
+    background: #fff;
+    color: #0f5132;
+    border-radius: 10px;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-user-strip{
+    display:none;
+  }
+
+  .dues-head{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+
+  .dues-year-form{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
+  .dues-row-left,
+  .dues-row-right{
+    min-width:0;
+  }
+
+  .dues-row-left{
+    flex:1;
+  }
+
+  .dues-row-right{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  .ref-text{
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 991.98px){
+    .sidebar{
+      position: fixed !important;
+      top: 0;
+      left: -290px;
+      width: 280px !important;
+      max-width: 85vw;
+      height: 100vh;
+      z-index: 1050;
+      transition: left .25s ease;
+      overflow-y: auto;
+    }
+
+    .sidebar.show{
+      left: 0;
+    }
+
+    .main-area{
+      width: 100% !important;
+      margin-left: 0 !important;
+    }
+
+    .container-xl{
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .desktop-user-text{
+      display:none !important;
+    }
+
+    .mobile-user-strip{
+      display:block;
+      margin-bottom: 14px;
+    }
+  }
+
+  @media (max-width: 767.98px){
+    body{
+      font-size:14px;
+    }
+
+    .navbar .container-xl{
+      gap: 10px;
+    }
+
+    .navbar-brand{
+      font-size: 1rem;
+      max-width: 170px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dues-card{
+      border-radius:14px;
+    }
+
+    .dues-row{
+      flex-direction:column;
+      align-items:flex-start;
+      padding:12px 14px;
+    }
+
+    .dues-row-right{
+      width:100%;
+      justify-content:flex-start;
+    }
+
+    .dues-year-form{
+      width:100%;
+    }
+
+    .dues-year-form input{
+      width:100% !important;
+      min-width:0;
+    }
+
+    .dues-year-form button{
+      width:100%;
+    }
+
+    .dues-head{
+      flex-direction:column;
+      align-items:stretch;
+    }
+
+    .badge{
+      white-space: normal;
+      text-align:center;
+    }
+
+    .footer-wrap{
+      font-size:13px;
+      text-align:center;
+    }
+  }
 </style>
 </head>
 
 <body>
 <div class="app-shell">
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sb-head">
       <div class="sb-brand">
@@ -282,25 +478,26 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
     </div>
 
     <nav class="sb-nav">
-      <a class="sb-link" href="homeowner_dashboard.php">
+      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
         <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
       </a>
 
       <a class="sb-link" href="homeowner_dashboard.php#feed">
         <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
       </a>
-
-      <a class="sb-link" href="homeowner_pay_dues.php">
+<a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
+  <i class="bi bi-people-fill"></i> <span>Public Chat</span>
+</a>
+      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
         <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
       </a>
 
       <!-- PARKING DROPDOWN -->
       <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
+        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
           <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
           <i class="bi bi-chevron-down sb-dd-caret"></i>
         </a>
-
         <div class="sb-dd-menu">
           <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
             <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
@@ -314,6 +511,16 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
         </div>
       </div>
 
+      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
+        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
+      </a>
+
+      <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
+        <i class="bi bi-chat-left-text-fill"></i> <span>File a Complaint</span>
+      </a>
+      <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
+  <i class="bi bi-check2-square"></i> <span>Voting</span>
+</a>
       <a class="sb-link" href="logout.php">
         <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
       </a>
@@ -324,10 +531,15 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
       <div class="container-xl">
-        <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php">🏘 HOA Community</a>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="topbar-mobile-btn d-inline-flex d-lg-none" id="sidebarToggle" aria-label="Open menu">
+            <i class="bi bi-list fs-4"></i>
+          </button>
+          <a class="navbar-brand fw-bold text-success m-0" href="homeowner_dashboard.php">🏘 HOA Community</a>
+        </div>
 
         <div class="ms-auto d-flex align-items-center gap-3">
-          <div class="small text-muted d-none d-md-block">
+          <div class="small text-muted desktop-user-text">
             Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
           </div>
           <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
@@ -336,6 +548,13 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
     </nav>
 
     <div class="container-xl my-4">
+
+      <div class="mobile-user-strip">
+        <div class="alert alert-light border shadow-sm mb-3">
+          <div class="fw-bold"><?= esc($fullName) ?></div>
+          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($houseLot) ?></div>
+        </div>
+      </div>
 
       <?php if ($flashPaid): ?>
         <div class="alert alert-success fw-semibold">
@@ -361,13 +580,13 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
       <div class="row g-4">
         <div class="col-lg-8">
           <div class="dues-card p-3">
-            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+            <div class="dues-head">
               <div>
                 <h5 class="mb-1">Monthly Dues</h5>
                 <div class="small-muted">Phase: <?= esc($phase) ?> • Blk/Lot: <?= esc($houseLot) ?></div>
               </div>
 
-              <form method="get" class="d-flex gap-2 align-items-center">
+              <form method="get" class="dues-year-form">
                 <label class="fw-semibold text-muted small">Year</label>
                 <input type="number" name="year" class="form-control" value="<?= (int)$selYear ?>" style="width:120px" min="2000" max="<?= (int)date('Y')+1 ?>">
                 <button class="btn btn-outline-success fw-semibold">Go</button>
@@ -388,30 +607,20 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 
             <div class="mt-3">
               <?php foreach($months as $m => $label): ?>
-                <?php
-                  $isPaid = !empty($paidMonths[$m]);
-                  $pending = $pendingByMonth[$m] ?? null;
-                ?>
+                <?php $isPaid = !empty($paidMonths[$m]); ?>
                 <div class="dues-row">
-                  <div>
+                  <div class="dues-row-left">
                     <div class="fw-bold"><?= esc($label) ?> <?= (int)$selYear ?></div>
                     <div class="small-muted">
-                      <?= $isPaid ? 'Payment recorded' : ($pending ? 'Pending PayMongo checkout' : 'Not paid yet') ?>
+                      <?= $isPaid ? 'Payment recorded' : 'Not paid yet' ?>
                     </div>
                   </div>
 
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="dues-row-right">
                     <?php if ($isPaid): ?>
                       <span class="badge rounded-pill badge-soft-success px-3 py-2 fw-semibold">
                         <i class="bi bi-check2-circle me-1"></i> PAID
                       </span>
-                    <?php elseif ($pending): ?>
-                      <span class="badge rounded-pill badge-soft-warning px-3 py-2 fw-semibold">
-                        <i class="bi bi-hourglass-split me-1"></i> PENDING
-                      </span>
-                      <button class="btn btn-sm btn-outline-success fw-semibold" onclick="location.reload()">
-                        Refresh
-                      </button>
                     <?php else: ?>
                       <span class="badge rounded-pill badge-soft-danger px-3 py-2 fw-semibold">
                         <i class="bi bi-x-circle me-1"></i> UNPAID
@@ -455,7 +664,7 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
                     <div class="small-muted">₱ <?= number_format((float)$p['amount'],2) ?></div>
                     <div class="text-muted small fw-semibold"><?= esc($paidAt) ?></div>
                     <?php if (!empty($p['reference_no'])): ?>
-                      <div class="text-muted small">Ref: <?= esc($p['reference_no']) ?></div>
+                      <div class="text-muted small ref-text">Ref: <?= esc($p['reference_no']) ?></div>
                     <?php endif; ?>
                   </div>
                 <?php endforeach; ?>
@@ -467,7 +676,6 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
             <h6 class="mb-2">How PayMongo works</h6>
             <div class="text-muted fw-semibold">
               When you click <b>Pay Now</b>, you’ll be redirected to PayMongo Checkout (GCash/Card/etc).
-              <br><br>
             </div>
           </div>
         </div>
@@ -483,11 +691,46 @@ $pageTitle = "Pay Monthly Dues • ".$phase;
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  (function(){
+(function(){
   const wrap = document.getElementById('sbParking');
   const btn  = document.getElementById('sbParkingToggle');
   if(!wrap || !btn) return;
   btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+
+(function(){
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const toggle  = document.getElementById('sidebarToggle');
+
+  if (!sidebar || !overlay || !toggle) return;
+
+  function openSidebar(){
+    sidebar.classList.add('show');
+    overlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSidebar(){
+    sidebar.classList.remove('show');
+    overlay.classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  toggle.addEventListener('click', openSidebar);
+  overlay.addEventListener('click', closeSidebar);
+
+  window.addEventListener('resize', function(){
+    if (window.innerWidth >= 992) {
+      closeSidebar();
+    }
+  });
+
+  sidebar.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', function(){
+      if (window.innerWidth < 992) closeSidebar();
+    });
+  });
 })();
 </script>
 </body>

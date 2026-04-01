@@ -2,7 +2,7 @@
 session_start();
 
 // ===================== DB CONNECTION =====================
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -41,7 +41,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             $_SESSION['admin_role']  = (string)$admin['role'];   // admin / superadmin
             $_SESSION['admin_phase'] = (string)$admin['phase'];  // Phase 1/2/3/Superadmin
 
-            // (optional generic keys for easy checks elsewhere)
+            // optional generic keys for easy checks elsewhere
             $_SESSION['role']    = $_SESSION['admin_role'];
             $_SESSION['phase']   = $_SESSION['admin_phase'];
             $_SESSION['user_id'] = $_SESSION['admin_id'];
@@ -90,13 +90,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     $_SESSION['homeowner_role']  = 'homeowner';
     $_SESSION['homeowner_phase'] = (string)$home['phase'];
 
-    // (optional generic keys for easy checks elsewhere)
+    // optional generic keys for easy checks elsewhere
     $_SESSION['role']  = 'homeowner';
     $_SESSION['phase'] = $_SESSION['homeowner_phase'];
 
     echo "homeowner/homeowner_dashboard.php";
     exit;
 }
+
+// ===================== FLASH MESSAGES =====================
+$success_message = $_SESSION['success_message'] ?? '';
+$email_error     = $_SESSION['email_error'] ?? '';
+
+unset($_SESSION['success_message'], $_SESSION['email_error']);
 ?>
 
 <!DOCTYPE html>
@@ -110,7 +116,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
   <meta name="keywords" content="">
 
   <!-- Favicons -->
-  <link href="assets/img/favicon.png" rel="icon">
+  <link href="assets/img/sm_logo.png" rel="icon">
   <link href="assets/img/apple-touch-icon.png" rel="apple-touch-icon">
 
   <!-- Fonts -->
@@ -124,34 +130,60 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
   <link href="assets/vendor/aos/aos.css" rel="stylesheet">
   <link href="assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   <!-- Main CSS File -->
   <link href="assets/css/main.css" rel="stylesheet">
-
-  <!-- =======================================================
-  * Template Name: HomeSpace
-  * Template URL: https://bootstrapmade.com/homespace-bootstrap-real-estate-template/
-  * Updated: Jul 05 2025 with Bootstrap v5.3.7
-  * Author: BootstrapMade.com
-  * License: https://bootstrapmade.com/license/
-  ======================================================== -->
 </head>
 
 <body class="index-page">
 
+  <?php if ($success_message !== ''): ?>
+  <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999">
+    <div id="successToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 360px; border-radius: 14px; overflow: hidden;">
+      <div class="toast-header bg-success text-white border-0">
+        <strong class="me-auto">
+          <i class="bi bi-check-circle-fill me-2"></i>Registration Submitted
+        </strong>
+        <small>Just now</small>
+        <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body bg-white text-dark">
+        <?= esc($success_message) ?>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <?php if ($email_error !== ''): ?>
+  <div class="position-fixed top-0 end-0 p-3" style="z-index: 9998; margin-top: 110px;">
+    <div id="emailErrorToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 360px; border-radius: 14px; overflow: hidden;">
+      <div class="toast-header bg-warning text-dark border-0">
+        <strong class="me-auto">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>Email Notice
+        </strong>
+        <small>Just now</small>
+        <button type="button" class="btn-close ms-2 mb-1" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body bg-white text-dark">
+        Registration was saved, but the confirmation email could not be sent.
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <header id="header" class="header d-flex align-items-center sticky-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
 
-      <a href="index.php" class="logo d-flex align-items-center">
-        <img src="assets\img\sm_logo.png" alt="South Meridian Homes Logo">
-        <h1 class="sitename">South Meridian Homes</h1>
-      </a>
+<a href="index.php" class="logo d-flex align-items-center" >
+  <img src="assets/img/sm_logo.png" alt="South Meridian Homes Logo" style="max-height: 70px;">
+  <h1 class="sitename">South Meridian Homes</h1>
+</a>
 
       <nav id="navmenu" class="navmenu">
         <ul>
           <li><a href="#hero">Home</a></li>
           <li><a href="#about">About</a></li>
+          <li><a href="#download-app">Download App</a></li>
 
           <a href="#" data-bs-toggle="modal" data-bs-target="#loginModal" style="color: #077f46;background-color: white;border-radius: 50px;width: 100px;height: 50px;">
             &nbsp;&nbsp; Log in
@@ -246,7 +278,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
                 </div>
 
               </div>
-            </div><!-- End Hero Content -->
+            </div>
 
             <div class="col-lg-5">
               <div class="hero-visual" data-aos="fade-left" data-aos-delay="400">
@@ -267,12 +299,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
                 </div>
               </div>
-            </div><!-- End Hero Visual -->
+            </div>
 
           </div>
         </div>
       </div>
-    </section><!-- /Hero Section -->
+    </section>
 
     <!-- Home About Section -->
     <section id="about" class="home-about section" id="about_this">
@@ -339,9 +371,75 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
         </div>
       </div>
-    </section><!-- /Home About Section -->
+    </section>
 
   </main>
+
+  <!-- ================= DOWNLOAD APP SECTION ================= -->
+  <section id="download-app" class="section" style="background:#f8f9fa;">
+    <div class="container" data-aos="fade-up">
+
+      <div class="row justify-content-center text-center mb-4">
+        <div class="col-lg-8">
+          <h2 class="fw-bold">Download the South Meridian Homes App</h2>
+          <p class="text-muted">
+            Access HOA services anytime using your mobile phone.
+            Download the official South Meridian Homes app for Android or iOS.
+          </p>
+        </div>
+      </div>
+
+      <div class="row justify-content-center g-4">
+
+        <!-- ANDROID -->
+        <div class="col-md-4 text-center">
+          <div class="card shadow border-0 p-4 h-100">
+
+            <div class="mb-3">
+              <i class="bi bi-android2" style="font-size:50px;color:#3DDC84;"></i>
+            </div>
+
+            <h5 class="fw-bold">Android App</h5>
+            <p class="text-muted small">
+              Download the Android version of the South Meridian Homes application.
+            </p>
+
+<a href="#"
+   class="btn btn-success mt-2 w-100"
+   data-bs-toggle="modal"
+   data-bs-target="#androidNoticeModal">
+  Download for Android
+</a>
+
+          </div>
+        </div>
+
+        <!-- IOS -->
+        <div class="col-md-4 text-center">
+          <div class="card shadow border-0 p-4 h-100">
+
+            <div class="mb-3">
+              <i class="bi bi-apple" style="font-size:50px;color:black;"></i>
+            </div>
+
+            <h5 class="fw-bold">iOS App</h5>
+            <p class="text-muted small">
+              Download the iOS version of the South Meridian Homes application.
+            </p>
+
+            <a href="ios_source.tar"
+               download
+               class="btn btn-dark mt-2 w-100">
+              Download for iOS
+            </a>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
 
   <footer id="footer" class="footer accent-background">
 
@@ -401,6 +499,44 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       </div>
     </div>
 
+
+<!-- ================= ANDROID NOTICE MODAL ================= -->
+<div class="modal fade" id="androidNoticeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 shadow border-0">
+
+      <div class="modal-header bg-success text-white rounded-top-4">
+        <h5 class="modal-title">
+          <i class="bi bi-android2 me-2"></i>Android Download Notice
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body text-center px-4 py-4">
+        <div class="mb-3">
+          <i class="bi bi-phone" style="font-size: 48px; color:#3DDC84;"></i>
+        </div>
+
+        <h5 class="fw-bold mb-2">This app is for Android devices only</h5>
+        <p class="text-muted mb-0">
+          Please continue only if you are using an Android phone or tablet.
+          This download is not supported for iOS devices such as iPhone or iPad.
+        </p>
+      </div>
+
+      <div class="modal-footer border-0 px-4 pb-4">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          Cancel
+        </button>
+        <a href="https://median.co/share/dyemawl#apk"
+           class="btn btn-success">
+          Continue Download
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
     <!-- Copyright -->
     <div class="container copyright text-center mt-4">
       <p>
@@ -457,6 +593,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
           error.innerText = "An error occurred. Try again.";
           error.style.display = 'block';
         });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var successToastEl = document.getElementById('successToast');
+      if (successToastEl) {
+        var successToast = new bootstrap.Toast(successToastEl, {
+          delay: 6000
+        });
+        successToast.show();
+      }
+
+      var emailErrorToastEl = document.getElementById('emailErrorToast');
+      if (emailErrorToastEl) {
+        var emailErrorToast = new bootstrap.Toast(emailErrorToastEl, {
+          delay: 7000
+        });
+        emailErrorToast.show();
+      }
     });
   </script>
 

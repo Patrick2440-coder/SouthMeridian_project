@@ -7,7 +7,7 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin','superadm
 	exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) {
 	echo json_encode(['success' => false, 'message' => 'DB connection failed.']);
 	exit;

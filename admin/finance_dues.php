@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . "/finance_helpers.php";
-require_admin();
+require_once 'admin_access.php';
+requireAccess('finance');
+require_admin();    
 $conn = db_conn();
 
 $myPhase = admin_phase($conn);
@@ -15,11 +17,15 @@ if (isset($_POST['save_dues'])) {
   $stmt = $conn->prepare("
     INSERT INTO finance_dues_settings (phase, monthly_dues, updated_by_admin_id)
     VALUES (?,?,?)
-    ON DUPLICATE KEY UPDATE monthly_dues=VALUES(monthly_dues), updated_by_admin_id=VALUES(updated_by_admin_id)
+    ON DUPLICATE KEY UPDATE
+      monthly_dues=VALUES(monthly_dues),
+      updated_by_admin_id=VALUES(updated_by_admin_id)
   ");
   $stmt->bind_param("sdi", $phase, $dues, $adminId);
   $stmt->execute();
-  header("Location: finance_dues.php" . ($canPickPhase?("?phase=".urlencode($phase)):"") );
+  $stmt->close();
+
+  header("Location: finance_dues.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
   exit;
 }
 
@@ -34,17 +40,24 @@ if (isset($_POST['record_payment'])) {
 
   if ($homeowner_id > 0 && $month >= 1 && $month <= 12 && $year >= 2000 && $amount > 0) {
     $stmt = $conn->prepare("
-      INSERT INTO finance_payments (homeowner_id, phase, pay_year, pay_month, amount, status, reference_no, notes, created_by_admin_id)
+      INSERT INTO finance_payments
+        (homeowner_id, phase, pay_year, pay_month, amount, status, reference_no, notes, created_by_admin_id)
       VALUES (?,?,?,?,?,'paid',?,?,?)
-      ON DUPLICATE KEY UPDATE amount=VALUES(amount), status='paid', reference_no=VALUES(reference_no), notes=VALUES(notes)
+      ON DUPLICATE KEY UPDATE
+        amount=VALUES(amount),
+        status='paid',
+        reference_no=VALUES(reference_no),
+        notes=VALUES(notes)
     ");
     $stmt->bind_param("isiidssi", $homeowner_id, $phase, $year, $month, $amount, $ref, $notes, $adminId);
     $stmt->execute();
+    $stmt->close();
   }
 
-  header("Location: finance_dues.php" . ($canPickPhase?("?phase=".urlencode($phase)):"") );
+  header("Location: finance_dues.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
   exit;
 }
+
 // ---- Unpaid list filter ----
 $selYear  = (int)($_GET['year'] ?? (int)date('Y'));
 $selMonth = (int)($_GET['month'] ?? (int)date('n'));
@@ -52,7 +65,7 @@ if ($selMonth < 1 || $selMonth > 12) $selMonth = (int)date('n');
 
 // Unpaid = approved homeowners in phase with NO payment record for selected year/month
 $stmt = $conn->prepare("
-  SELECT h.id, h.first_name, h.last_name, h.house_lot_number
+  SELECT h.id, h.first_name, h.last_name, h.house_lot_number, h.email
   FROM homeowners h
   LEFT JOIN finance_payments p
     ON p.homeowner_id = h.id
@@ -66,16 +79,18 @@ $stmt = $conn->prepare("
 $stmt->bind_param("iis", $selYear, $selMonth, $phase);
 $stmt->execute();
 $unpaid = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
 
-// Fetch dues
+// Fetch dues setting
 $stmt = $conn->prepare("SELECT monthly_dues FROM finance_dues_settings WHERE phase=? LIMIT 1");
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $monthly_dues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
+$stmt->close();
 
-// homeowners list in this phase
+// Homeowners list in this phase
 $stmt = $conn->prepare("
-  SELECT id, first_name, last_name, house_lot_number, status
+  SELECT id, first_name, last_name, house_lot_number, status, email
   FROM homeowners
   WHERE phase=? AND status='approved'
   ORDER BY last_name, first_name
@@ -83,12 +98,13 @@ $stmt = $conn->prepare("
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $homeowners = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
 
-// current month default
+// Defaults
 $defYear = (int)date('Y');
 $defMonth = (int)date('n');
 
-// payment history (recent)
+// Payment history (recent)
 $stmt = $conn->prepare("
   SELECT p.*, h.first_name, h.last_name, h.house_lot_number
   FROM finance_payments p
@@ -100,38 +116,168 @@ $stmt = $conn->prepare("
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Build modal transaction data for unpaid homeowners
+$txData = [];
+
+foreach ($unpaid as $u) {
+  $hid   = (int)$u['id'];
+  $email = trim((string)($u['email'] ?? ''));
+  $name  = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+
+  $txData[$hid] = [
+    'id' => $hid,
+    'name' => $name,
+    'email' => $email,
+    'house_lot_number' => (string)($u['house_lot_number'] ?? ''),
+    'dues' => [],
+    'donations' => []
+  ];
+}
+
+// Dues for modal
+$stmt = $conn->prepare("
+  SELECT p.homeowner_id, p.pay_year, p.pay_month, p.amount, p.status, p.paid_at, p.reference_no, p.notes
+  FROM finance_payments p
+  JOIN homeowners h ON h.id = p.homeowner_id
+  WHERE h.phase = ?
+  ORDER BY p.pay_year DESC, p.pay_month DESC, p.paid_at DESC
+");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($r = $res->fetch_assoc()) {
+  $hid = (int)$r['homeowner_id'];
+  if (isset($txData[$hid])) {
+    $txData[$hid]['dues'][] = $r;
+  }
+}
+$stmt->close();
+
+// Donations for modal, matched by donor_email or donor_name
+$stmt = $conn->prepare("
+  SELECT donor_name, donor_email, amount, donation_date, receipt_no, message, created_at
+  FROM finance_donations
+  WHERE phase = ?
+  ORDER BY donation_date DESC, created_at DESC
+");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$donRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+foreach ($donRows as $d) {
+  $dEmail = strtolower(trim((string)($d['donor_email'] ?? '')));
+  $dName  = strtolower(trim((string)($d['donor_name'] ?? '')));
+
+  foreach ($txData as $hid => $info) {
+    $hEmail = strtolower(trim((string)$info['email']));
+    $hName  = strtolower(trim((string)$info['name']));
+
+    if (($dEmail !== '' && $hEmail !== '' && $dEmail === $hEmail) || ($dName !== '' && $dName === $hName)) {
+      $txData[$hid]['donations'][] = $d;
+    }
+  }
+}
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- Basic Page Info -->
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<!-- Site favicon -->
 	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
 
-	<!-- Mobile Specific Metas -->
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<!-- Google Font -->
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<!-- CSS -->
 	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
-	<!-- Global site tag (gtag.js) - Google Analytics -->
-	 <!-- Include CSS for DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+	<style>
+	.modal-history-table th,
+	.modal-history-table td{
+		vertical-align: middle !important;
+		font-size: 13px;
+	}
+	.modal-empty{
+		padding: 12px;
+		border: 1px dashed #d0d7de;
+		border-radius: 8px;
+		color: #6c757d;
+		background: #fafbfc;
+	}
 
-	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
+	.custom-modal{
+		position: fixed;
+		inset: 0;
+		z-index: 99999;
+	}
+	.custom-modal-backdrop{
+		position: absolute;
+		inset: 0;
+		background: rgba(0,0,0,.5);
+	}
+	.custom-modal-dialog{
+		position: relative;
+		width: 95%;
+		max-width: 1100px;
+		margin: 40px auto;
+		z-index: 2;
+	}
+	.custom-modal-content{
+		background: #fff;
+		border-radius: 10px;
+		overflow: hidden;
+		box-shadow: 0 10px 35px rgba(0,0,0,.25);
+	}
+	.custom-modal-header,
+	.custom-modal-footer{
+		padding: 15px 20px;
+		border-bottom: 1px solid #eee;
+	}
+	.custom-modal-footer{
+		border-top: 1px solid #eee;
+		border-bottom: 0;
+		text-align: right;
+	}
+	.custom-modal-body{
+		padding: 20px;
+		max-height: 70vh;
+		overflow-y: auto;
+	}
+	body.modal-open-manual{
+		overflow: hidden;
+	}
+	/* ACCESS TOAST */
+.access-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  z-index: 99999;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all .3s ease;
+}
 
+.access-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+	</style>
 </head>
 <body>
 	
@@ -139,7 +285,6 @@ $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 		<div class="header-left">
 			<div class="menu-icon dw dw-menu"></div>
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
-			
 		</div>
 		<div class="header-right">
 	
@@ -199,13 +344,13 @@ $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 					</div>
 				</div>
 			</div>
+
 			<div class="user-info-dropdown">
 				<div class="dropdown">
 					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
 						<span class="user-icon">
 							<img src="vendors/images/photo1.jpg" alt="">
 						</span>
-						<span class="user-name">JOHNFALL SANCHEZ</span>
 					</a>
 					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
 						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
@@ -293,85 +438,8 @@ $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 		</div>
 	</div>
 
-  <div class="left-side-bar" style="background-color: #077f46;">
-    <div class="brand-logo">
-      <a href="dashboard.php">
-        <img src="vendors/images/deskapp-logo.svg" alt="" class="dark-logo">
-        <img src="vendors/images/deskapp-logo-white.svg" alt="" class="light-logo">
-      </a>
-      <div class="close-sidebar" data-toggle="left-sidebar-close">
-        <i class="ion-close-round"></i>
-      </div>
-    </div>
+  <?php include 'sidebar.php'; ?>
 
-    <div class="menu-block customscroll">
-      <div class="sidebar-menu">
-        <ul id="accordion-menu">
-          <li>
-            <a href="dashboard.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-house-1"></span>
-              <span class="mtext">Dashboard</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle ">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">Homeowner Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="ho_approval.php">Household Approval</a></li>
-              <li><a href="ho_register.php">Register Household</a></li>
-              <li><a href="ho_approved.php">Approved Households</a></li>
-            </ul>
-          </li>
-
-          <!-- ✅ USER MANAGEMENT DROPDOWN -->
-          <?php $view = $_GET['view'] ?? ''; ?>
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle <?= ($view==='homeowners' || $view==='officers') ? 'active' : '' ?>">
-              <span class="micon dw dw-user"></span>
-              <span class="mtext">User Management</span>
-            </a>
-            <ul class="submenu">
-              <li><a href="users-management.php?view=homeowners" class="<?= $view==='homeowners' ? 'active' : '' ?>">Homeowners</a></li>
-              <li><a href="users-management.php?view=officers" class="<?= $view==='officers' ? 'active' : '' ?>">Officers</a></li>
-            </ul>
-          </li>
-
-          <li>
-            <a href="announcements.php" class="dropdown-toggle no-arrow">
-              <span class="micon dw dw-megaphone"></span>
-              <span class="mtext">Announcement</span>
-            </a>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-money-1"></span><span class="mtext">Finance</span></a>
-            <ul class="submenu">
-              <li><a href="finance.php">Overview</a></li>
-              <li><a href="finance_dues.php">Monthly Dues</a></li>
-              <li><a href="finance_donations.php">Donations</a></li>
-              <li><a href="finance_expenses.php">Expenses</a></li>
-              <li><a href="finance_reports.php">Financial Reports</a></li>
-              <li><a href="finance_cashflow.php">Cash Flow Dashboard</a></li>
-            </ul>
-          </li>
-
-          <li class="dropdown">
-            <a href="javascript:;" class="dropdown-toggle"><span class="micon dw dw-car"></span><span class="mtext">Parking</span></a>
-            <ul class="submenu">
-              <li><a href="parking.php">Parking Overview</a></li>
-              <li><a href="parking_permits.php">Manage Permits</a></li>
-              <li><a href="parking_violations.php">View Violations</a></li>
-            </ul>
-          </li>
-
-          <li><a href="#" class="dropdown-toggle no-arrow"><span class="micon dw dw-settings2"></span><span class="mtext">Settings</span></a></li>
-        </ul>
-      </div>
-    </div>
-  </div>
 <div class="main-container">
   <div class="pd-ltr-20">
 
@@ -479,52 +547,180 @@ $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     </div>
 
     <div class="card-box mb-20 p-3">
-  <div class="d-flex justify-content-between align-items-center">
-    <h5 class="mb-0">Unpaid Homeowners</h5>
+      <div class="d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Unpaid Homeowners</h5>
 
-    <form method="get" class="form-inline">
-      <?php if ($canPickPhase): ?>
-        <input type="hidden" name="phase" value="<?=esc($phase)?>">
-      <?php endif; ?>
-      <label class="mr-2">Year</label>
-      <input type="number" name="year" class="form-control mr-3" value="<?= (int)$selYear ?>" style="width:120px">
-      <label class="mr-2">Month</label>
-      <select name="month" class="form-control mr-3" style="width:120px">
-        <?php for($m=1;$m<=12;$m++): ?>
-          <option value="<?=$m?>" <?= $m===$selMonth?'selected':'' ?>><?=$m?></option>
-        <?php endfor; ?>
-      </select>
-      <button class="btn btn-outline-primary">Filter</button>
-    </form>
-  </div>
+        <form method="get" class="form-inline">
+          <?php if ($canPickPhase): ?>
+            <input type="hidden" name="phase" value="<?=esc($phase)?>">
+          <?php endif; ?>
+          <label class="mr-2">Year</label>
+          <input type="number" name="year" class="form-control mr-3" value="<?= (int)$selYear ?>" style="width:120px">
+          <label class="mr-2">Month</label>
+          <select name="month" class="form-control mr-3" style="width:120px">
+            <?php for($m=1;$m<=12;$m++): ?>
+              <option value="<?=$m?>" <?= $m===$selMonth?'selected':'' ?>><?=$m?></option>
+            <?php endfor; ?>
+          </select>
+          <button class="btn btn-outline-primary">Filter</button>
+        </form>
+      </div>
 
-  <div class="mt-3">
-    <span class="badge badge-danger">Unpaid count: <?=count($unpaid)?></span>
-  </div>
+      <div class="mt-3">
+        <span class="badge badge-danger">Unpaid count: <?=count($unpaid)?></span>
+      </div>
 
-  <div class="table-responsive mt-2">
-    <table class="table table-striped table-hover">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Blk/Lot</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php if (!$unpaid): ?>
-          <tr><td colspan="2" class="text-center text-secondary">No unpaid homeowners for this period.</td></tr>
-        <?php else: ?>
-          <?php foreach($unpaid as $u): ?>
+      <div class="table-responsive mt-2">
+        <table class="table table-striped table-hover">
+          <thead>
             <tr>
-              <td><?=esc($u['last_name'].", ".$u['first_name'])?></td>
-              <td><?=esc($u['house_lot_number'])?></td>
+              <th>Name</th>
+              <th>Blk/Lot</th>
+              <th>Action</th>
             </tr>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-</div>
+          </thead>
+          <tbody>
+            <?php if (!$unpaid): ?>
+              <tr><td colspan="3" class="text-center text-secondary">No unpaid homeowners for this period.</td></tr>
+            <?php else: ?>
+              <?php foreach($unpaid as $u): ?>
+                <?php $hid = (int)$u['id']; ?>
+                <tr>
+                  <td><?=esc($u['last_name'].", ".$u['first_name'])?></td>
+                  <td><?=esc($u['house_lot_number'])?></td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      onclick="openHistoryModal(<?= $hid ?>)"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Hidden rendered transaction data -->
+    <div id="historyDataStore" style="display:none;">
+      <?php foreach($unpaid as $u): ?>
+        <?php
+          $hid = (int)$u['id'];
+          $dues = $txData[$hid]['dues'] ?? [];
+          $donations = $txData[$hid]['donations'] ?? [];
+        ?>
+        <div id="history-data-<?= $hid ?>">
+          <div class="hd-name"><?= esc($txData[$hid]['name'] ?? '') ?></div>
+          <div class="hd-email"><?= esc($txData[$hid]['email'] ?? '') ?></div>
+          <div class="hd-lot"><?= esc($txData[$hid]['house_lot_number'] ?? '') ?></div>
+
+          <div class="hd-dues">
+            <?php if (!$dues): ?>
+              <div class="modal-empty">No monthly dues payments found.</div>
+            <?php else: ?>
+              <div class="table-responsive">
+                <table class="table table-bordered table-sm modal-history-table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Paid At</th>
+                      <th>Ref #</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach($dues as $r): ?>
+                      <tr>
+                        <td><?= esc(date('F', mktime(0,0,0,(int)$r['pay_month'],1)) . ' ' . (int)$r['pay_year']) ?></td>
+                        <td>₱ <?= number_format((float)$r['amount'], 2) ?></td>
+                        <td><?= esc($r['status'] ?? '-') ?></td>
+                        <td><?= esc($r['paid_at'] ?? '-') ?></td>
+                        <td><?= esc($r['reference_no'] ?? '-') ?></td>
+                        <td><?= esc($r['notes'] ?? '-') ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php endif; ?>
+          </div>
+
+          <div class="hd-donations">
+            <?php if (!$donations): ?>
+              <div class="modal-empty">No donation records found.</div>
+            <?php else: ?>
+              <div class="table-responsive">
+                <table class="table table-bordered table-sm modal-history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Amount</th>
+                      <th>Receipt #</th>
+                      <th>Email</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach($donations as $r): ?>
+                      <tr>
+                        <td><?= esc($r['donation_date'] ?? '-') ?></td>
+                        <td>₱ <?= number_format((float)$r['amount'], 2) ?></td>
+                        <td><?= esc($r['receipt_no'] ?? '-') ?></td>
+                        <td><?= esc($r['donor_email'] ?? '-') ?></td>
+                        <td><?= esc($r['message'] ?? '-') ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+
+    <!-- Manual Modal -->
+    <div id="historyModal" class="custom-modal" style="display:none;">
+      <div class="custom-modal-backdrop" onclick="closeHistoryModal()"></div>
+      <div class="custom-modal-dialog">
+        <div class="custom-modal-content">
+          <div class="custom-modal-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Homeowner Transaction History</h5>
+            <button type="button" class="close" onclick="closeHistoryModal()" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+
+          <div class="custom-modal-body">
+            <div class="mb-3">
+              <div><strong>Name:</strong> <span id="hmName">-</span></div>
+              <div><strong>Email:</strong> <span id="hmEmail">-</span></div>
+              <div><strong>Blk/Lot:</strong> <span id="hmLot">-</span></div>
+            </div>
+
+            <hr>
+
+            <h6>Monthly Dues Paid</h6>
+            <div id="hmDuesWrap"></div>
+
+            <hr>
+
+            <h6>Donations</h6>
+            <div id="hmDonationWrap"></div>
+          </div>
+
+          <div class="custom-modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeHistoryModal()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="footer-wrap pd-20 mb-20 card-box">
       © Copyright South Meridian Homes All Rights Reserved
@@ -534,9 +730,45 @@ $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
 <script>
 $(function(){
   $('#paymentsTable').DataTable({ pageLength: 25, order: [[0,'desc']] });
+});
+
+function openHistoryModal(homeownerId) {
+  var box = document.getElementById('history-data-' + homeownerId);
+  if (!box) {
+    alert('No transaction data found.');
+    return;
+  }
+
+  var nameEl = box.querySelector('.hd-name');
+  var emailEl = box.querySelector('.hd-email');
+  var lotEl = box.querySelector('.hd-lot');
+  var duesEl = box.querySelector('.hd-dues');
+  var donationsEl = box.querySelector('.hd-donations');
+
+  document.getElementById('hmName').textContent = nameEl ? nameEl.textContent : '-';
+  document.getElementById('hmEmail').textContent = emailEl ? emailEl.textContent : '-';
+  document.getElementById('hmLot').textContent = lotEl ? lotEl.textContent : '-';
+
+  document.getElementById('hmDuesWrap').innerHTML = duesEl ? duesEl.innerHTML : '<div class="modal-empty">No monthly dues payments found.</div>';
+  document.getElementById('hmDonationWrap').innerHTML = donationsEl ? donationsEl.innerHTML : '<div class="modal-empty">No donation records found.</div>';
+
+  document.getElementById('historyModal').style.display = 'block';
+  document.body.classList.add('modal-open-manual');
+}
+
+function closeHistoryModal() {
+  document.getElementById('historyModal').style.display = 'none';
+  document.body.classList.remove('modal-open-manual');
+}
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') {
+    closeHistoryModal();
+  }
 });
 </script>
 
@@ -544,5 +776,41 @@ $(function(){
 <script src="vendors/scripts/script.min.js"></script>
 <script src="vendors/scripts/process.js"></script>
 <script src="vendors/scripts/layout-settings.js"></script>
+<div id="accessToast" class="access-toast">
+  🚫 You do not have access to that part.
+</div>
+<script>
+window.userPermissions = <?= json_encode($permissions) ?>;
+
+document.addEventListener('DOMContentLoaded', function () {
+
+  const toast = document.getElementById('accessToast');
+
+  function showAccessToast() {
+    toast.classList.add('show');
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2500);
+  }
+
+  document.querySelectorAll('.menu-access-link').forEach(function(link){
+
+    link.addEventListener('click', function(e){
+
+      const moduleKey = this.dataset.module || '';
+      const allowed = !!window.userPermissions[moduleKey];
+
+      if(!allowed){
+        e.preventDefault();
+        showAccessToast();
+      }
+
+    });
+
+  });
+
+});
+</script>
 </body>
 </html>

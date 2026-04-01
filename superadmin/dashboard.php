@@ -5,7 +5,7 @@ session_start();
 // if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') { header("Location: authentication-login.html"); exit; }
 
 // ===================== DB =====================
-$conn = new mysqli("localhost", "root", "", "south_meridian_hoa");
+$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
@@ -41,7 +41,7 @@ $stmt->close();
 
 $active_homeowners_pct = ($total_homeowners > 0) ? round(($approved_homeowners / $total_homeowners) * 100) : 0;
 
-// “Active Voters” (no voting table in schema) -> using “active participants” as distinct payers in last 30 days
+// “Active Voters” -> using “active participants” as distinct payers in last 30 days
 $active_participants_30d = 0;
 $stmt = $conn->prepare("
   SELECT COUNT(DISTINCT homeowner_id) AS c
@@ -83,7 +83,7 @@ if ($dues_prev_week > 0) {
   $dues_change_pct = 100;
 }
 
-// Maintenance expenses logged this week (closest match in your DB)
+// Maintenance expenses logged this week
 $maintenance_expenses_week = 0;
 $stmt = $conn->prepare("
   SELECT COUNT(*) AS c
@@ -146,7 +146,7 @@ while ($row = $res->fetch_assoc()) {
 }
 $stmt->close();
 
-// Chart data: “active participants” per phase (distinct payers last 30 days)
+// Chart data: active participants per phase (distinct payers last 30 days)
 $active_by_phase = array_fill_keys($phases, 0);
 $stmt = $conn->prepare("
   SELECT phase, COUNT(DISTINCT homeowner_id) AS c
@@ -163,7 +163,7 @@ while ($row = $res->fetch_assoc()) {
 }
 $stmt->close();
 
-// Table: latest homeowners (from DB)
+// Table: latest homeowners
 $latest_homeowners = [];
 $stmt = $conn->prepare("
   SELECT first_name, middle_name, last_name, phase, house_lot_number, status, created_at
@@ -191,7 +191,6 @@ $stmt->close();
   <div class="page-wrapper" id="main-wrapper" data-layout="vertical" data-navbarbg="skin6" data-sidebartype="full"
     data-sidebar-position="fixed" data-header-position="fixed">
 
-    <!-- Topstrip -->
     <div class="app-topstrip py-6 px-3 w-100 d-lg-flex align-items-center justify-content-between" style="background-color: #077f46;">
       <div class="d-flex align-items-center justify-content-center gap-5 mb-2 mb-lg-0">
         <a class="d-flex justify-content-center" href="#">
@@ -200,83 +199,86 @@ $stmt->close();
       </div>
     </div>
 
-  <!-- Sidebar Start -->
-  <aside class="left-sidebar">
-    <div>
-      <div class="brand-logo d-flex align-items-center justify-content-between">
-        <a href="./dashboard.html" class="text-nowrap logo-img">
-          <img src="assets/images/logos/logo.svg" alt="" />
-        </a>
-        <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-          <i class="ti ti-x fs-6"></i>
+    <!-- Sidebar Start -->
+    <aside class="left-sidebar">
+      <div>
+        <div class="brand-logo d-flex align-items-center justify-content-between">
+          <a href="./dashboard.php" class="text-nowrap logo-img">
+            <img src="assets/images/logos/logo.svg" alt="" />
+          </a>
+          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
+            <i class="ti ti-x fs-6"></i>
+          </div>
         </div>
-      </div>
 
-      <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-        <ul id="sidebarnav">
-          <li class="nav-small-cap">
-            <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-            <span class="hide-menu">Home</span>
-          </li>
+        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
+          <ul id="sidebarnav">
+            <li class="nav-small-cap">
+              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
+              <span class="hide-menu">Home</span>
+            </li>
 
-          <li class="sidebar-item">
-            <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
-              <i class="ti ti-layout-dashboard"></i>
-              <span class="hide-menu">Dashboard</span>
-            </a>
-          </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link active" href="./dashboard.php" aria-expanded="false">
+                <i class="ti ti-layout-dashboard"></i>
+                <span class="hide-menu">Dashboard</span>
+              </a>
+            </li>
 
-          <!-- ✅ User Management Dropdown -->
-          <li class="sidebar-item">
-            <a class="sidebar-link has-arrow collapsed"
-              href="#userMgmtMenu"
-              data-bs-toggle="collapse"
-              role="button"
-              aria-expanded="false"
-              aria-controls="userMgmtMenu">
-              <i class="ti ti-users"></i>
-              <span class="hide-menu">User Management</span>
-            </a>
+            <li class="sidebar-item">
+              <a class="sidebar-link has-arrow collapsed"
+                href="#userMgmtMenu"
+                data-bs-toggle="collapse"
+                role="button"
+                aria-expanded="false"
+                aria-controls="userMgmtMenu">
+                <i class="ti ti-users"></i>
+                <span class="hide-menu">User Management</span>
+              </a>
 
-            <ul id="userMgmtMenu" class="collapse first-level">
-              <li class="sidebar-item">
-                <a href="./user_management.php" class="sidebar-link">
-                  <i class="ti ti-home"></i>
-                  <span class="hide-menu">Homeowners</span>
-                </a>
-              </li>
+              <ul id="userMgmtMenu" class="collapse first-level">
+                <li class="sidebar-item">
+                  <a href="./user_management.php" class="sidebar-link">
+                    <i class="ti ti-home"></i>
+                    <span class="hide-menu">Homeowners</span>
+                  </a>
+                </li>
 
-              <li class="sidebar-item">
-                <a href="./phase_management.php" class="sidebar-link">
-                  <i class="ti ti-shield-check"></i>
-                  <span class="hide-menu">Officers</span>
-                </a>
-              </li>
-            </ul>
-          </li>
-                      <li class="sidebar-item">
+                <li class="sidebar-item">
+                  <a href="./phase_management.php" class="sidebar-link">
+                    <i class="ti ti-shield-check"></i>
+                    <span class="hide-menu">Officers</span>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="./access_control.php" aria-expanded="false">
+                <i class="ti ti-lock-access"></i>
+                <span class="hide-menu">Access Control</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
               <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
                 <i class="ti ti-bell"></i>
                 <span class="hide-menu">Announcements</span>
               </a>
             </li>
 
-          <li class="sidebar-item">
-            <a class="sidebar-link" href="./voting.html" aria-expanded="false">
-              <i class="ti ti-checkbox"></i>
-              <span class="hide-menu">Voting Management</span>
-            </a>
-          </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
+                <i class="ti ti-checkbox"></i>
+                <span class="hide-menu">Voting Management</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
 
-        <!-- End Sidebar navigation -->
-      </nav>
-    </div>
-  </aside>
-
-    <!-- Main wrapper -->
     <div class="body-wrapper">
-
-      <!-- Header Start -->
       <header class="app-header">
         <nav class="navbar navbar-expand-lg navbar-light">
           <ul class="navbar-nav">
@@ -286,7 +288,6 @@ $stmt->close();
               </a>
             </li>
 
-            <!-- Notifications (DB-based) -->
             <li class="nav-item dropdown">
               <a class="nav-link" href="javascript:void(0)" id="drop1" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="ti ti-bell"></i>
@@ -322,7 +323,6 @@ $stmt->close();
 
           <div class="navbar-collapse justify-content-end px-0" id="navbarNav">
             <ul class="navbar-nav flex-row ms-auto align-items-center justify-content-end">
-
               <li class="nav-item dropdown">
                 <a class="nav-link" href="javascript:void(0)" id="drop2" data-bs-toggle="dropdown" aria-expanded="false">
                   <img src="./assets/images/profile/user-1.jpg" alt="" width="35" height="35" class="rounded-circle">
@@ -341,17 +341,13 @@ $stmt->close();
                   </div>
                 </div>
               </li>
-
             </ul>
           </div>
         </nav>
       </header>
-      <!-- Header End -->
 
       <div class="body-wrapper-inner">
         <div class="container-fluid">
-
-          <!-- Row 1 -->
           <div class="row">
             <div class="col-lg-8">
               <div class="card w-100">
@@ -374,8 +370,6 @@ $stmt->close();
                       </ul>
                     </div>
                   </div>
-
-                  <!-- Chart (DB-based) -->
                   <div id="sales-overview" class="mt-4 mx-n6"></div>
                 </div>
               </div>
@@ -403,7 +397,6 @@ $stmt->close();
                     </div>
                   </div>
 
-                  <!-- Weekly Dues Collected -->
                   <div class="mt-4 pb-3 d-flex align-items-center">
                     <span class="btn btn-primary rounded-circle round-48 hstack justify-content-center">
                       <i class="ti ti-cash fs-6"></i>
@@ -421,7 +414,6 @@ $stmt->close();
                     </div>
                   </div>
 
-                  <!-- Active Homeowners -->
                   <div class="py-3 d-flex align-items-center">
                     <span class="btn btn-warning rounded-circle round-48 hstack justify-content-center">
                       <i class="ti ti-users fs-6"></i>
@@ -435,7 +427,6 @@ $stmt->close();
                     </div>
                   </div>
 
-                  <!-- Maintenance (from finance_expenses category=maintenance) -->
                   <div class="py-3 d-flex align-items-center">
                     <span class="btn btn-success rounded-circle round-48 hstack justify-content-center">
                       <i class="ti ti-tool fs-6"></i>
@@ -449,7 +440,6 @@ $stmt->close();
                     </div>
                   </div>
 
-                  <!-- Community Concerns (parking violations) -->
                   <div class="pt-3 mb-7 d-flex align-items-center">
                     <span class="btn btn-secondary rounded-circle round-48 hstack justify-content-center">
                       <i class="ti ti-message-report fs-6"></i>
@@ -467,7 +457,6 @@ $stmt->close();
               </div>
             </div>
 
-            <!-- Latest Homeowners Table (DB-based) -->
             <div class="col-12">
               <div class="card">
                 <div class="card-body">
@@ -528,7 +517,6 @@ $stmt->close();
                 </div>
               </div>
             </div>
-
           </div>
 
           <div class="py-6 px-6 text-center">
@@ -550,11 +538,9 @@ $stmt->close();
   <script src="./assets/js/app.min.js"></script>
   <script src="./assets/libs/apexcharts/dist/apexcharts.min.js"></script>
   <script src="./assets/libs/simplebar/dist/simplebar.js"></script>
-  <!-- solar icons -->
   <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
 
   <script>
-    // DB-based chart: Approved homeowners per phase + Active participants per phase (last 30 days)
     const phases = <?= json_encode($phases) ?>;
     const approvedByPhase = <?= json_encode(array_values($approved_by_phase)) ?>;
     const activeByPhase = <?= json_encode(array_values($active_by_phase)) ?>;
