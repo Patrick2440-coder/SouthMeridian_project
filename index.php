@@ -181,7 +181,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
 
       <nav id="navmenu" class="navmenu">
         <ul>
-          <li><a href="#hero">Home</a></li>
+          <li><a href="#hero">Homes</a></li>
           <li><a href="#about">About</a></li>
           <li><a href="#download-app">Download App</a></li>
 
