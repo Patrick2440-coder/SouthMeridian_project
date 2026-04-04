@@ -119,6 +119,7 @@ $stmt = $conn->prepare("
     SELECT
         p.id,
         p.plate_no,
+        p.vehicle_type,
         p.vehicle_make,
         p.vehicle_model,
         p.status,
@@ -341,6 +342,7 @@ $stmt->close();
                         <th>Homeowner</th>
                         <th>Blk/Lot</th>
                         <th>Plate</th>
+                        <th>Vehicle Type</th>
                         <th>Vehicle</th>
                         <th>Payment</th>
                         <th>Status</th>
@@ -368,6 +370,7 @@ $stmt->close();
                             <td><?= esc($name) ?></td>
                             <td><?= esc($p['house_lot_number'] ?? '') ?></td>
                             <td><?= esc($p['plate_no'] ?? '') ?></td>
+                            <td><?= esc(ucfirst((string)($p['vehicle_type'] ?? ''))) ?></td>
                             <td><?= esc(trim(($p['vehicle_make'] ?? '') . ' ' . ($p['vehicle_model'] ?? ''))) ?></td>
                             <td>
                                 <span class="badge-soft <?= esc($payBadge) ?>"><?= esc($pay ?: 'unpaid') ?></span>
@@ -378,7 +381,7 @@ $stmt->close();
                         </tr>
                     <?php endforeach; ?>
                     <?php if (!$recentPermits): ?>
-                        <tr><td colspan="8" class="text-center text-secondary">No permit records yet.</td></tr>
+                        <tr><td colspan="9" class="text-center text-secondary">No permit records yet.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -437,10 +440,8 @@ $stmt->close();
         <div class="card-box mb-30 p-3">
             <h5 class="mb-2">Requirements for Yearly Parking Stickers/Permits</h5>
             <ul class="mb-2">
-                <li><b>Vehicle OR/CR</b></li>
                 <li><b>Picture of Vehicle (Front)</b></li>
                 <li><b>Picture of Vehicle (Back)</b></li>
-                <li><b>Driver’s License</b></li>
             </ul>
             <div class="text-secondary" style="font-size:12px;">
                 Admin approval requires complete requirements and completed payment.

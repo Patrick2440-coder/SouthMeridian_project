@@ -14,7 +14,7 @@ if (
     exit;
 }
 if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
-    echo "<script>alert('Superadmin cannot access President Dashboard.'); window.location='index.php';</script>";
+    echo "<script>alert('Superadmin cannot access this module.'); window.location='index.php';</script>";
     exit;
 }
 

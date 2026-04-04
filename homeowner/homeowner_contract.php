@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
     header("Location: ../index.php");
     exit;
 }
@@ -10,6 +10,8 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 $conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 $conn->set_charset("utf8mb4");
+
+require_once 'tenant_module_guard.php';
 
 function esc($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -47,11 +49,96 @@ function paymentStatusLabel($status) {
     if ($status === 'unpaid' || $status === 'not paid') return 'Not Paid';
     if ($status === 'paid') return 'Paid';
     if ($status === 'pending') return 'Pending';
+    if ($status === 'for payment') return 'For Payment';
     return ucfirst($status);
 }
 
-$homeownerId = (int)$_SESSION['homeowner_id'];
-$permitId    = (int)($_GET['permit_id'] ?? 0);
+function vehicleTypeLabel($type) {
+    $map = [
+        'car'        => 'Car',
+        'motorcycle' => 'Motorcycle',
+        'ebike'      => 'E-Bike',
+    ];
+    return $map[strtolower((string)$type)] ?? ucfirst((string)$type);
+}
+
+$isTenant = ($_SESSION['role'] === 'tenant');
+$tenant = null;
+$user = null;
+$homeownerId = 0;
+
+if ($isTenant) {
+    if (empty($_SESSION['tenant_id']) || empty($_SESSION['tenant_homeowner_id'])) {
+        header("Location: ../index.php");
+        exit;
+    }
+
+    $tenantId = (int)$_SESSION['tenant_id'];
+    $homeownerId = (int)$_SESSION['tenant_homeowner_id'];
+
+    $stmt = $conn->prepare("
+        SELECT id, homeowner_id, first_name, last_name, email, status, phase,
+               can_pay_dues, can_rent, can_parking, can_announcements
+        FROM tenants
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $tenantId);
+    $stmt->execute();
+    $tenant = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$tenant || $tenant['status'] !== 'active') {
+        session_destroy();
+        header("Location: ../index.php");
+        exit;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+        FROM homeowners
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $homeownerId);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$user || $user['status'] !== 'approved') {
+        session_destroy();
+        header("Location: ../index.php");
+        exit;
+    }
+
+    tenant_guard('parking', $tenant);
+} else {
+    if (empty($_SESSION['homeowner_id'])) {
+        header("Location: ../index.php");
+        exit;
+    }
+
+    $homeownerId = (int)$_SESSION['homeowner_id'];
+
+    $stmt = $conn->prepare("
+        SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+        FROM homeowners
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $homeownerId);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$user || $user['status'] !== 'approved') {
+        session_destroy();
+        header("Location: ../index.php");
+        exit;
+    }
+}
+
+$permitId    = (int)($_GET['permit_id'] ?? $_GET['id'] ?? 0);
 $downloadPdf = (isset($_GET['download']) && $_GET['download'] === 'pdf');
 
 if ($permitId <= 0) {
@@ -110,8 +197,9 @@ $addressParts = array_filter([
 
 $fullAddress = !empty($addressParts) ? implode(', ', $addressParts) : 'N/A';
 
-$permitNo       = $permit['permit_no'] ?: ('P' . $permit['id']);
+$permitNo       = !empty($permit['permit_no']) ? $permit['permit_no'] : ('P' . $permit['id']);
 $plateNo        = $permit['plate_no'] ?? 'N/A';
+$vehicleType    = vehicleTypeLabel((string)($permit['vehicle_type'] ?? 'car'));
 $vehicleMake    = $permit['vehicle_make'] ?? 'N/A';
 $vehicleModel   = $permit['vehicle_model'] ?? 'N/A';
 $vehicleColor   = $permit['vehicle_color'] ?? 'N/A';
@@ -121,12 +209,12 @@ $paymentStatus  = paymentStatusLabel((string)($permit['payment_status'] ?? 'Pend
 $status         = ucfirst((string)($permit['status'] ?? 'Pending'));
 $stickerYear    = $permit['sticker_year'] ?? 'N/A';
 
-$validFrom = $permit['valid_from'] ?? $permit['validity_start'] ?? null;
-$validUntil = $permit['valid_until'] ?? $permit['validity_end'] ?? null;
+$validFrom   = $permit['valid_from'] ?? $permit['validity_start'] ?? null;
+$validUntil  = $permit['valid_until'] ?? $permit['validity_end'] ?? null;
 $requestedAt = $permit['requested_at'] ?? null;
 
-$issuedDate = formatDateValue($requestedAt);
-$validFromFormatted = formatDateValue($validFrom);
+$issuedDate          = formatDateValue($requestedAt);
+$validFromFormatted  = formatDateValue($validFrom);
 $validUntilFormatted = formatDateValue($validUntil);
 
 $contractHtml = '
@@ -227,6 +315,7 @@ $contractHtml = '
     <div class="section-title">Permit Information</div>
     <table class="details">
         <tr><td class="label">Plate No.</td><td>' . esc($plateNo) . '</td></tr>
+        <tr><td class="label">Vehicle Type</td><td>' . esc($vehicleType) . '</td></tr>
         <tr><td class="label">Vehicle Make</td><td>' . esc($vehicleMake) . '</td></tr>
         <tr><td class="label">Vehicle Model</td><td>' . esc($vehicleModel) . '</td></tr>
         <tr><td class="label">Vehicle Color</td><td>' . esc($vehicleColor) . '</td></tr>
@@ -452,6 +541,7 @@ if ($downloadPdf) {
         <div class="section-title">Permit Information</div>
         <table class="details">
             <tr><td class="label">Plate No.</td><td><?= esc($plateNo) ?></td></tr>
+            <tr><td class="label">Vehicle Type</td><td><?= esc($vehicleType) ?></td></tr>
             <tr><td class="label">Vehicle Make</td><td><?= esc($vehicleMake) ?></td></tr>
             <tr><td class="label">Vehicle Model</td><td><?= esc($vehicleModel) ?></td></tr>
             <tr><td class="label">Vehicle Color</td><td><?= esc($vehicleColor) ?></td></tr>

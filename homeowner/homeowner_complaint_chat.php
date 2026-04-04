@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
   header("Location: ../index.php");
   exit;
 }
@@ -12,30 +12,95 @@ $conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_so
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+require_once 'tenant_module_guard.php';
+
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-$hid = (int)$_SESSION['homeowner_id'];
+$isTenant = ($_SESSION['role'] === 'tenant');
+$tenant = null;
+$user = null;
+$hid = 0;
 
-$stmt = $conn->prepare("
-  SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
-  FROM homeowners
-  WHERE id=? LIMIT 1
-");
-$stmt->bind_param("i", $hid);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+if ($isTenant) {
+  if (empty($_SESSION['tenant_id']) || empty($_SESSION['tenant_homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
 
-if (!$user || $user['status'] !== 'approved') {
-  session_destroy();
-  header("Location: ../index.php");
-  exit;
+  $tenant_id = (int)$_SESSION['tenant_id'];
+  $hid = (int)$_SESSION['tenant_homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, homeowner_id, first_name, last_name, email, status, phase,
+           can_pay_dues, can_rent, can_parking, can_announcements
+    FROM tenants
+    WHERE id=?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $tenant_id);
+  $stmt->execute();
+  $tenant = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$tenant || $tenant['status'] !== 'active') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=? LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  tenant_guard('complaints', $tenant);
+} else {
+  if (empty($_SESSION['homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $hid = (int)$_SESSION['homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=? LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
 }
 
-$phase      = (string)$user['phase'];
-$fullName   = trim($user['first_name'].' '.$user['last_name']);
-$mustChange = ((int)$user['must_change_password'] === 1);
-$initials   = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
+$phase = (string)$user['phase'];
+$mustChange = !$isTenant && ((int)$user['must_change_password'] === 1);
+
+if ($isTenant) {
+  $fullName = trim(($tenant['first_name'] ?? '').' '.($tenant['last_name'] ?? ''));
+  $initials = strtoupper(substr($tenant['first_name'] ?? 'T',0,1).substr($tenant['last_name'] ?? 'N',0,1));
+} else {
+  $fullName = trim(($user['first_name'] ?? '').' '.($user['last_name'] ?? ''));
+  $initials = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
+}
+
 $pageTitle  = "Complaint Chat • ".$phase;
 $activePage = basename($_SERVER['PHP_SELF'] ?? 'homeowner_complaint_chat.php');
 
@@ -56,7 +121,7 @@ $err = "";
 $okMsg = "";
 
 /* password change */
-if ($mustChange && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password_submit'])) {
+if (!$isTenant && $mustChange && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password_submit'])) {
   $p1 = $_POST['password'] ?? '';
   $p2 = $_POST['password2'] ?? '';
 
@@ -620,83 +685,7 @@ body{
 
 <div class="app-shell">
 
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-head">
-      <div class="sb-brand">
-        <i class="bi bi-grid-fill"></i>
-        <span class="sb-brand-text">HOA Menu</span>
-      </div>
-    </div>
-
-    <div class="sb-user">
-      <div class="sb-avatar"><?= esc($initials) ?></div>
-      <div class="sb-user-text">
-        <p class="sb-name"><?= esc($fullName) ?></p>
-        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
-      </div>
-    </div>
-
-    <nav class="sb-nav">
-      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
-        <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
-      </a>
-
-      <a class="sb-link" href="homeowner_dashboard.php#feed">
-        <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
-      </a>
-      <a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
-  <i class="bi bi-people-fill"></i> <span>Public Chat</span>
-</a>
-
-      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
-        <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
-      </a>
-
-      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
-          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
-          <i class="bi bi-chevron-down sb-dd-caret"></i>
-        </a>
-        <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
-            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
-            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
-            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
-          </a>
-        </div>
-      </div>
-
-      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
-        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
-      </a>
-
-      <div class="sb-dd <?= $complaintsOpen ? 'open' : '' ?>" id="sbComplaints">
-        <a class="sb-link sb-dd-toggle <?= $complaintsOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbComplaintsToggle">
-          <span><i class="bi bi-chat-dots-fill"></i> <span>Complaints</span></span>
-          <i class="bi bi-chevron-down sb-dd-caret"></i>
-        </a>
-        <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
-            <i class="bi bi-pencil-square"></i> <span>File a Complaint</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_complaint_chat.php' ? 'active' : '' ?>" href="homeowner_complaint_chat.php">
-            <i class="bi bi-chat-left-text-fill"></i> <span>Complaint Chat</span>
-          </a>
-        </div>
-      </div>
-            <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
-  <i class="bi bi-check2-square"></i> <span>Voting</span>
-</a>
-
-      <a class="sb-link" href="logout.php">
-        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-      </a>
-    </nav>
-  </aside>
+<?php include 'homeowner_sidebar.php'; ?>
 
   <div class="main-area">
     <div class="<?= $mustChange ? 'blur-wrap' : '' ?>">
@@ -706,7 +695,7 @@ body{
           <a class="navbar-brand fw-bold text-success" href="homeowner_dashboard.php">HOA Community</a>
           <div class="ms-auto d-flex align-items-center gap-3">
             <div class="small text-muted d-none d-md-block">
-              Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
+              Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?><?= $isTenant ? ' • Tenant' : '' ?>)
             </div>
             <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
           </div>
@@ -726,7 +715,7 @@ body{
               <div class="fb-avatar"><?= esc($initials) ?></div>
               <div class="flex-grow-1">
                 <h2 class="fb-name">Talk to Phase Admin</h2>
-                <div class="fb-sub"><?= esc($phase) ?> complaint conversations</div>
+                <div class="fb-sub"><?= esc($phase) ?> complaint conversations<?= $isTenant ? ' • Tenant' : '' ?></div>
                 <div class="mt-2 d-flex gap-2 flex-wrap">
                   <span class="pill">💬 Complaint chat</span>
                   <span class="pill">📌 Complaint updates</span>
@@ -799,7 +788,7 @@ body{
                     <?php
                       $isMine = ($m['sender_type'] === 'homeowner');
                       $senderName = $isMine
-                        ? $fullName
+                        ? ($isTenant ? $fullName . ' (Tenant)' : $fullName)
                         : ((string)($m['admin_name'] ?? 'Phase Admin'));
                     ?>
                     <div class="msg-row <?= $isMine ? 'mine' : 'theirs' ?>">
@@ -830,7 +819,7 @@ body{
 
     </div>
 
-    <?php if ($mustChange): ?>
+    <?php if (!$isTenant && $mustChange): ?>
       <div class="lock-overlay">
         <div class="lock-modal">
           <div class="head">
@@ -878,6 +867,14 @@ body{
   const btn  = document.getElementById('sbComplaintsToggle');
   if (wrap && btn) {
     btn.addEventListener('click', () => wrap.classList.toggle('open'));
+  }
+})();
+
+(function(){
+  const tenantWrap = document.getElementById('sbTenant');
+  const tenantBtn  = document.getElementById('sbTenantToggle');
+  if (tenantWrap && tenantBtn) {
+    tenantBtn.addEventListener('click', () => tenantWrap.classList.toggle('open'));
   }
 })();
 

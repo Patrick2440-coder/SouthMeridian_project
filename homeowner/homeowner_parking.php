@@ -1,24 +1,40 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
-  header("Location: ../index.php"); exit;
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
+  header("Location: ../index.php");
+  exit;
 }
 
 $conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+require_once 'tenant_module_guard.php';
+
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-function badge($status){
-  $status = strtolower((string)$status);
-  $cls = "secondary";
-  if ($status === 'active') $cls = "success";
-  elseif ($status === 'pending') $cls = "warning";
-  elseif ($status === 'approved') $cls = "info";
-  elseif (in_array($status, ['rejected','revoked','expired'], true)) $cls = "danger";
-  return '<span class="badge bg-'.$cls.'">'.htmlspecialchars($status).'</span>';
+function badge($status, $paymentStatus = ''){
+  $status = strtolower(trim((string)$status));
+  $paymentStatus = strtolower(trim((string)$paymentStatus));
+
+  if ($status === 'active') {
+    return '<span class="badge bg-success">Active</span>';
+  }
+
+  if ($status === 'pending' && $paymentStatus === 'for payment') {
+    return '<span class="badge bg-info text-dark">For Payment</span>';
+  }
+
+  if ($status === 'pending') {
+    return '<span class="badge bg-warning text-dark">Pending</span>';
+  }
+
+  if (in_array($status, ['rejected','revoked','expired'], true)) {
+    return '<span class="badge bg-danger">'.htmlspecialchars(ucfirst($status)).'</span>';
+  }
+
+  return '<span class="badge bg-secondary">'.htmlspecialchars(ucfirst($status)).'</span>';
 }
 
 function duration_label(string $duration): string {
@@ -43,7 +59,18 @@ function payment_status_label(string $status): string {
   $status = strtolower(trim((string)$status));
   if ($status === 'unpaid' || $status === 'not paid') return 'Not Paid';
   if ($status === 'paid') return 'Paid';
+  if ($status === 'for payment') return 'For Payment';
+  if ($status === 'pending') return 'Pending';
   return ucfirst($status);
+}
+
+function vehicle_type_label(string $type): string {
+  $map = [
+    'car' => 'Car',
+    'motorcycle' => 'Motorcycle',
+    'ebike' => 'E-Bike',
+  ];
+  return $map[$type] ?? ucfirst($type);
 }
 
 function days_until_expiry(?string $validUntil): ?int {
@@ -63,51 +90,143 @@ function can_renew_now(?string $validUntil, int $daysBeforeExpiry = 30): bool {
   return $days !== null && $days <= $daysBeforeExpiry;
 }
 
-$hid = (int)$_SESSION['homeowner_id'];
+$isTenant = ($_SESSION['role'] === 'tenant');
+$tenant = null;
+$user = null;
+$hid = 0;
 
-$stmt = $conn->prepare("
-  SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
-  FROM homeowners
-  WHERE id=?
-  LIMIT 1
-");
-$stmt->bind_param("i", $hid);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+if ($isTenant) {
+  if (empty($_SESSION['tenant_id']) || empty($_SESSION['tenant_homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
 
-if (!$user || $user['status'] !== 'approved') {
-  session_destroy();
-  header("Location: ../index.php"); exit;
+  $tenant_id = (int)$_SESSION['tenant_id'];
+  $hid = (int)$_SESSION['tenant_homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, homeowner_id, first_name, last_name, email, status, phase,
+           can_pay_dues, can_rent, can_parking, can_announcements
+    FROM tenants
+    WHERE id = ?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $tenant_id);
+  $stmt->execute();
+  $tenant = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$tenant || $tenant['status'] !== 'active') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  tenant_guard('parking', $tenant);
+} else {
+  if (empty($_SESSION['homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $hid = (int)$_SESSION['homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
 }
 
-if ((int)$user['must_change_password'] === 1) {
-  header("Location: homeowner_dashboard.php"); exit;
+if ((int)$user['must_change_password'] === 1 && !$isTenant) {
+  header("Location: homeowner_dashboard.php");
+  exit;
 }
 
 $phase      = (string)$user['phase'];
-$fullName   = trim(($user['first_name'] ?? '').' '.($user['last_name'] ?? ''));
-$initials   = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
 $pageTitle  = "Parking • ".$phase;
 $yearNow    = (int)date('Y');
 $renewalWindowDays = 30;
 
-// Latest request this year (shown only if there are no active permits)
+if ($isTenant) {
+  $fullName = trim(($tenant['first_name'] ?? '') . ' ' . ($tenant['last_name'] ?? ''));
+  $initials = strtoupper(substr($tenant['first_name'] ?? 'T',0,1).substr($tenant['last_name'] ?? 'N',0,1));
+} else {
+  $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+  $initials = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
+}
+
+$msg = '';
+$msgType = 'success';
+
+if (isset($_GET['paid']) && isset($_GET['active'])) {
+  $msgType = 'success';
+  $msg = 'Online payment recorded successfully. Your parking permit is now active.';
+} elseif (isset($_GET['paid'])) {
+  $msgType = 'success';
+  $msg = 'Online payment recorded successfully.';
+} elseif (isset($_GET['cancelled'])) {
+  $msgType = 'warning';
+  $msg = 'Online payment was cancelled or not completed.';
+} elseif (isset($_GET['waiting_approval'])) {
+  $msgType = 'warning';
+  $msg = 'Your permit is not yet open for online payment. Please wait for admin approval first.';
+} elseif (isset($_GET['rejected'])) {
+  $msgType = 'danger';
+  $msg = 'This permit request was rejected.';
+} elseif (isset($_GET['revoked'])) {
+  $msgType = 'danger';
+  $msg = 'This permit has been revoked.';
+} elseif (isset($_GET['expired'])) {
+  $msgType = 'warning';
+  $msg = 'This permit has already expired.';
+}
+
+/*
+  Latest non-active request
+*/
 $stmt = $conn->prepare("
   SELECT *
   FROM parking_permits
-  WHERE homeowner_id=? AND phase=? AND sticker_year=?
+  WHERE homeowner_id=? AND phase=? AND status <> 'active'
   ORDER BY id DESC
   LIMIT 1
 ");
-$stmt->bind_param("isi", $hid, $phase, $yearNow);
+$stmt->bind_param("is", $hid, $phase);
 $stmt->execute();
-$permitThisYear = $stmt->get_result()->fetch_assoc();
+$latestRequest = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 /*
-  SHOW ALL ACTIVE PERMITS
-  No LIMIT here.
+  Show all active permits
 */
 $stmt = $conn->prepare("
   SELECT *
@@ -115,6 +234,7 @@ $stmt = $conn->prepare("
   WHERE homeowner_id=?
     AND phase=?
     AND status='active'
+    AND LOWER(COALESCE(payment_status, 'paid'))='paid'
     AND valid_until >= CURDATE()
   ORDER BY valid_until DESC, id DESC
 ");
@@ -123,7 +243,9 @@ $stmt->execute();
 $activePermits = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Violation counts
+/*
+  Violation count
+*/
 $stmt = $conn->prepare("
   SELECT COUNT(*) c
   FROM parking_violations
@@ -134,7 +256,9 @@ $stmt->execute();
 $unpaidCount = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
-// Per-permit open violation counts
+/*
+  Per-permit violation counts
+*/
 $violationCountsByPermit = [];
 if (!empty($activePermits)) {
   $permitIds = array_map(fn($p) => (int)$p['id'], $activePermits);
@@ -179,7 +303,6 @@ if (!empty($activePermits)) {
 
 $activePage = basename($_SERVER['PHP_SELF'] ?? 'homeowner_parking.php');
 $parkingOpen = in_array($activePage, ['homeowner_parking.php','homeowner_parking_permit.php','homeowner_parking_violations.php'], true);
-
 $chatPages = ['homeowner_public_chat.php'];
 $chatOpen = in_array($activePage, $chatPages, true);
 ?>
@@ -323,69 +446,7 @@ $chatOpen = in_array($activePage, $chatPages, true);
 <div class="app-shell">
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-head">
-      <div class="sb-brand">
-        <i class="bi bi-grid-fill"></i>
-        <span class="sb-brand-text">HOA Menu</span>
-      </div>
-    </div>
-
-    <div class="sb-user">
-      <div class="sb-avatar"><?= esc($initials) ?></div>
-      <div class="sb-user-text">
-        <p class="sb-name"><?= esc($fullName) ?></p>
-        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
-      </div>
-    </div>
-
-    <nav class="sb-nav">
-      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
-        <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
-      </a>
-
-      <a class="sb-link" href="homeowner_dashboard.php#feed">
-        <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
-      </a>
-      <a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
-        <i class="bi bi-people-fill"></i> <span>Public Chat</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
-        <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
-      </a>
-
-      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
-          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
-          <i class="bi bi-chevron-down sb-dd-caret"></i>
-        </a>
-        <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
-            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
-            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
-            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
-          </a>
-        </div>
-      </div>
-
-      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
-        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
-        <i class="bi bi-chat-left-text-fill"></i> <span>File a Complaint</span>
-      </a>
-
-      <a class="sb-link" href="logout.php">
-        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-      </a>
-    </nav>
-  </aside>
+  <?php include 'homeowner_sidebar.php'; ?>
 
   <div class="main-area">
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
@@ -399,11 +460,8 @@ $chatOpen = in_array($activePage, $chatPages, true);
 
         <div class="ms-auto d-flex align-items-center gap-3">
           <div class="small text-muted desktop-user-text">
-            Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
+            Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?><?= $isTenant ? ' • Tenant' : '' ?>)
           </div>
-          <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
-            <i class="bi bi-check2-square"></i> <span>Voting</span>
-          </a>
           <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
         </div>
       </div>
@@ -414,9 +472,13 @@ $chatOpen = in_array($activePage, $chatPages, true);
       <div class="mobile-user-strip">
         <div class="alert alert-light border shadow-sm mb-3">
           <div class="fw-bold"><?= esc($fullName) ?></div>
-          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></div>
+          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?><?= $isTenant ? ' • Tenant' : '' ?></div>
         </div>
       </div>
+
+      <?php if ($msg !== ''): ?>
+        <div class="alert alert-<?= esc($msgType) ?>"><?= esc($msg) ?></div>
+      <?php endif; ?>
 
       <div class="fb-card mb-4">
         <div class="fb-card-h">
@@ -456,20 +518,24 @@ $chatOpen = in_array($activePage, $chatPages, true);
 
                   <div class="permit-grid">
                     <div><b>Permit No:</b> <?= esc($permit['permit_no'] ?? '—') ?></div>
-                    <div><b>Status:</b> <?= badge($permit['status'] ?? '') ?></div>
+                    <div><b>Status:</b> <?= badge($permit['status'] ?? '', $permit['payment_status'] ?? '') ?></div>
 
                     <div><b>Plate No:</b> <?= esc($permit['plate_no'] ?? '') ?></div>
+                    <div><b>Vehicle Type:</b> <?= esc(vehicle_type_label((string)($permit['vehicle_type'] ?? 'car'))) ?></div>
+
+                    <div><b>Vehicle Brand:</b> <?= esc($permit['vehicle_make'] ?? '') ?></div>
+                    <div><b>Vehicle Model:</b> <?= esc($permit['vehicle_model'] ?? '') ?></div>
+
                     <div><b>Vehicle Color:</b> <?= esc($permit['vehicle_color'] ?? '') ?></div>
-
                     <div><b>Permit Duration:</b> <?= esc(duration_label((string)($permit['permit_duration'] ?? ''))) ?></div>
+
                     <div><b>Payment Method:</b> <?= esc(payment_label((string)($permit['payment_method'] ?? ''))) ?></div>
-
                     <div><b>Payment Status:</b> <?= esc(payment_status_label($permit['payment_status'] ?? '')) ?></div>
+
                     <div><b>Sticker Year:</b> <?= esc($permit['sticker_year'] ?? '') ?></div>
-
                     <div><b>Validity Start:</b> <?= esc($permit['valid_from'] ?? ($permit['validity_start'] ?? '')) ?></div>
-                    <div><b>Validity End:</b> <?= esc($permit['valid_until'] ?? ($permit['validity_end'] ?? '')) ?></div>
 
+                    <div><b>Validity End:</b> <?= esc($permit['valid_until'] ?? ($permit['validity_end'] ?? '')) ?></div>
                     <div><b>Days Remaining:</b> <?= $daysRemaining !== null ? (int)$daysRemaining : 'Expired' ?></div>
                   </div>
 
@@ -487,9 +553,10 @@ $chatOpen = in_array($activePage, $chatPages, true);
                     <a href="homeowner_parking_violations.php?permit_id=<?= (int)$permit['id'] ?>" class="btn btn-sm btn-outline-danger">
                       <i class="bi bi-receipt-cutoff me-1"></i> View Violations
                     </a>
-<a href="homeowner_contract.php?permit_id=<?= (int)$permit['id'] ?>" class="btn btn-info btn-sm">
-    <i class="bi bi-file-earmark-text me-1"></i> Contract
-</a>
+
+                    <a href="homeowner_contract.php?permit_id=<?= (int)$permit['id'] ?>" class="btn btn-info btn-sm">
+                      <i class="bi bi-file-earmark-text me-1"></i> Contract
+                    </a>
                   </div>
 
                   <?php if (!$canRenew && $daysRemaining !== null): ?>
@@ -501,30 +568,47 @@ $chatOpen = in_array($activePage, $chatPages, true);
               <?php endforeach; ?>
             </div>
 
-          <?php elseif ($permitThisYear): ?>
+          <?php elseif ($latestRequest): ?>
+            <?php
+              $latestStatus = strtolower(trim((string)($latestRequest['status'] ?? '')));
+              $latestPayStatus = strtolower(trim((string)($latestRequest['payment_status'] ?? '')));
+            ?>
             <div class="alert alert-warning parking-alert-content">
-              <div class="fw-bold mb-1">Latest Request This Year</div>
-              <div>Status: <?= badge($permitThisYear['status'] ?? 'pending') ?></div>
-              <div>Payment Status: <b><?= esc(payment_status_label($permitThisYear['payment_status'] ?? 'unpaid')) ?></b></div>
-              <div>Plate: <b><?= esc($permitThisYear['plate_no'] ?? '') ?></b></div>
+              <div class="fw-bold mb-1">Latest Permit Request</div>
+              <div>Status: <?= badge($latestRequest['status'] ?? '', $latestRequest['payment_status'] ?? '') ?></div>
+              <div>Payment Status: <b><?= esc(payment_status_label($latestRequest['payment_status'] ?? 'unpaid')) ?></b></div>
+              <div>Plate: <b><?= esc($latestRequest['plate_no'] ?? '') ?></b></div>
+              <div>Vehicle Type: <b><?= esc(vehicle_type_label((string)($latestRequest['vehicle_type'] ?? 'car'))) ?></b></div>
 
-              <?php if (($permitThisYear['status'] ?? '') === 'approved' && !in_array(strtolower((string)($permitThisYear['payment_status'] ?? 'unpaid')), ['paid'], true)): ?>
+              <?php if ($latestStatus === 'pending' && $latestPayStatus === 'for payment'): ?>
                 <div class="mt-2">Your request is approved and waiting for payment.</div>
-              <?php elseif (($permitThisYear['status'] ?? '') === 'pending'): ?>
+              <?php elseif ($latestStatus === 'pending'): ?>
                 <div class="mt-2">Your request is still waiting for admin approval.</div>
+              <?php elseif ($latestStatus === 'rejected'): ?>
+                <div class="mt-2 text-danger">Your request was rejected.</div>
+              <?php elseif ($latestStatus === 'expired'): ?>
+                <div class="mt-2">Your previous permit has already expired.</div>
+              <?php elseif ($latestStatus === 'revoked'): ?>
+                <div class="mt-2 text-danger">Your permit was revoked.</div>
               <?php endif; ?>
 
-              <?php if (!empty($permitThisYear['rejected_reason'])): ?>
-                <div class="text-danger mt-1"><b>Reason:</b> <?= esc($permitThisYear['rejected_reason']) ?></div>
+              <?php if (!empty($latestRequest['rejected_reason'])): ?>
+                <div class="text-danger mt-1"><b>Reason:</b> <?= esc($latestRequest['rejected_reason']) ?></div>
               <?php endif; ?>
 
               <div class="mt-2 parking-actions">
+                <?php if ($latestStatus === 'pending' && $latestPayStatus === 'for payment' && strtolower((string)($latestRequest['payment_method'] ?? '')) === 'online'): ?>
+                  <a class="btn btn-sm btn-primary" href="paymongo_parking_checkout.php?permit_id=<?= (int)$latestRequest['id'] ?>">
+                    <i class="bi bi-credit-card me-1"></i> Pay Online Now
+                  </a>
+                <?php endif; ?>
+
                 <a class="btn btn-sm btn-outline-success" href="homeowner_parking_permit.php">Open Permit Page</a>
               </div>
             </div>
           <?php else: ?>
             <div class="alert alert-secondary parking-alert-content">
-              No active permit found for <?= (int)$yearNow ?> yet.
+              No active permit found yet.
               <div class="mt-2 parking-actions">
                 <a class="btn btn-sm btn-success" href="homeowner_parking_permit.php"><i class="bi bi-plus-circle"></i> Apply for Permit</a>
               </div>
@@ -535,15 +619,14 @@ $chatOpen = in_array($activePage, $chatPages, true);
 
       <div class="fb-card">
         <div class="fb-card-h">
-          <h6>📌 Requirements for Yearly Parking Stickers/Permits</h6>
+          <h6>📌 Requirements for Parking Permit</h6>
           <span class="pill">Upload on Permit page</span>
         </div>
         <div class="fb-card-b">
           <ul class="req-list mb-2">
-            <li><b>Vehicle OR/CR</b></li>
             <li><b>Picture of Vehicle (Front)</b></li>
             <li><b>Picture of Vehicle (Back)</b></li>
-            <li><b>Driver’s License</b></li>
+            <li><b>Select Vehicle Type</b> (Car, Motorcycle, or E-Bike)</li>
           </ul>
           <div class="text-muted fw-semibold small">
             Tip: Upload clear photos or PDF/image copies to avoid delays.
@@ -571,6 +654,13 @@ $chatOpen = in_array($activePage, $chatPages, true);
   const btn  = document.getElementById('sbParkingToggle');
   if(!wrap || !btn) return;
   btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+
+(function(){
+  const tenantWrap = document.getElementById('sbTenant');
+  const tenantBtn  = document.getElementById('sbTenantToggle');
+  if(!tenantWrap || !tenantBtn) return;
+  tenantBtn.addEventListener('click', () => tenantWrap.classList.toggle('open'));
 })();
 
 (function(){

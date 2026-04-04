@@ -654,75 +654,7 @@ if ($electionState === 'finished' && $currentElection) {
 <div class="app-shell">
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-head">
-      <div class="sb-brand">
-        <i class="bi bi-grid-fill"></i>
-        <span class="sb-brand-text">HOA Menu</span>
-      </div>
-    </div>
-
-    <div class="sb-user">
-      <div class="sb-avatar"><?= esc($initials) ?></div>
-      <div class="sb-user-text">
-        <p class="sb-name"><?= esc($fullName) ?></p>
-        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
-      </div>
-    </div>
-
-    <nav class="sb-nav">
-      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
-        <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
-      </a>
-
-      <a class="sb-link" href="homeowner_dashboard.php#feed">
-        <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
-        <i class="bi bi-people-fill"></i> <span>Public Chat</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
-        <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
-      </a>
-
-      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
-          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
-          <i class="bi bi-chevron-down sb-dd-caret"></i>
-        </a>
-        <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
-            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
-            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
-            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
-          </a>
-        </div>
-      </div>
-
-      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
-        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
-        <i class="bi bi-chat-left-text-fill"></i> <span>File a Complaint</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
-        <i class="bi bi-check2-square"></i> <span>Voting</span>
-      </a>
-
-      <a class="sb-link" href="logout.php">
-        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-      </a>
-    </nav>
-  </aside>
-
+ <?php include 'homeowner_sidebar.php'; ?>
   <div class="main-area">
 
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">

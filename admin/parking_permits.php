@@ -106,12 +106,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = (string)($_POST['action'] ?? '');
 
-        // =========================================================
-        // APPROVE REQUIREMENTS ONLY
-        // - Does NOT require payment proof
-        // - Does NOT require payment_status = paid
-        // - Just validates docs and allows homeowner to proceed to payment
-        // =========================================================
         if ($action === 'approve') {
             $id = (int)($_POST['id'] ?? 0);
 
@@ -122,10 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     SELECT
                         id,
                         payment_status,
-                        or_cr_path,
                         vehicle_front_path,
-                        vehicle_back_path,
-                        drivers_license_path
+                        vehicle_back_path
                     FROM parking_permits
                     WHERE id=? AND phase=? AND status='pending'
                     LIMIT 1
@@ -139,15 +131,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     fail_flash($flash, $flashType, "Permit request not found or already processed.");
                 } else {
                     $missing = [];
-                    if (empty($p['or_cr_path'])) $missing[] = "Vehicle OR/CR";
                     if (empty($p['vehicle_front_path'])) $missing[] = "Vehicle Front Picture";
                     if (empty($p['vehicle_back_path'])) $missing[] = "Vehicle Back Picture";
-                    if (empty($p['drivers_license_path'])) $missing[] = "Driver’s License";
 
                     if ($missing) {
                         fail_flash($flash, $flashType, "Cannot approve. Missing requirements: " . implode(", ", $missing));
                     } else {
-                        // keep status pending; just move payment_status forward if still unpaid
                         $currentPaymentStatus = strtolower((string)($p['payment_status'] ?? 'unpaid'));
                         $nextPaymentStatus = $currentPaymentStatus;
 
@@ -169,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($stmt->affected_rows <= 0) {
                             fail_flash($flash, $flashType, "Approval failed.");
                         } else {
-                            $flash = "Requirements approved. Homeowner may now proceed to payment.";
+                            $flash = "Requirements approved. Homeowner/Tenant may now proceed to payment.";
                             $flashType = "success";
                         }
                         $stmt->close();
@@ -178,13 +167,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // =========================================================
-        // ACTIVATE PERMIT
-        // - Requires payment_status = paid
-        // - Requires payment_proof_path
-        // - Generates permit number
-        // - Makes status active
-        // =========================================================
         if ($action === 'activate') {
             $id = (int)($_POST['id'] ?? 0);
             $valid_from  = (string)($_POST['valid_from'] ?? '');
@@ -202,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         SELECT
                             id,
                             payment_status,
-                            payment_proof_path,
+                            payment_method,
                             permit_no
                         FROM parking_permits
                         WHERE id=? AND phase=? AND status='pending'
@@ -220,10 +202,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (strtolower((string)($p['payment_status'] ?? 'unpaid')) !== 'paid') {
                         throw new Exception("Cannot activate. Payment is not yet marked as paid.");
-                    }
-
-                    if (empty($p['payment_proof_path'])) {
-                        throw new Exception("Cannot activate. Payment proof is missing.");
                     }
 
                     $permitNo = !empty($p['permit_no']) ? (string)$p['permit_no'] : next_permit_no($conn, $phase);
@@ -563,13 +541,11 @@ $stmt->close();
         <div class="card-box mb-30 p-3">
             <h5 class="mb-2">Requirements for Yearly Parking Stickers/Permits</h5>
             <ul class="req-list mb-2">
-                <li><b>Vehicle OR/CR</b></li>
                 <li><b>Picture of Vehicle (Front)</b></li>
                 <li><b>Picture of Vehicle (Back)</b></li>
-                <li><b>Driver’s License</b></li>
             </ul>
             <div class="req-note">
-                Note: Initial approval only checks the required documents. Payment proof is checked only during final activation.
+                Note: Initial approval only checks the required vehicle photos. Online payments update the permit to paid automatically after successful checkout.
             </div>
         </div>
 
@@ -582,7 +558,6 @@ $stmt->close();
 
             <div class="tab-content pt-3">
 
-                <!-- PENDING -->
                 <div class="tab-pane fade show active" id="tabPending" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterPendingName" class="form-control form-control-sm" placeholder="Search homeowner...">
@@ -597,6 +572,7 @@ $stmt->close();
                                 <th>Homeowner</th>
                                 <th>Blk/Lot</th>
                                 <th>Plate</th>
+                                <th>Vehicle Type</th>
                                 <th>Payment</th>
                                 <th>Status</th>
                                 <th>Requested</th>
@@ -610,7 +586,7 @@ $stmt->close();
                                 $veh  = trim(($r['vehicle_make'] ?? '') . ' ' . ($r['vehicle_model'] ?? '') . ' ' . ($r['vehicle_color'] ?? ''));
 
                                 $missingCount = 0;
-                                foreach (['or_cr_path', 'vehicle_front_path', 'vehicle_back_path', 'drivers_license_path'] as $k) {
+                                foreach (['vehicle_front_path', 'vehicle_back_path'] as $k) {
                                     if (empty($r[$k])) $missingCount++;
                                 }
 
@@ -621,7 +597,7 @@ $stmt->close();
                                 elseif (in_array($pay, ['waived', 'for payment', 'for verification'], true)) $payBadge = 'badge-soft-info';
 
                                 $canApprove = ($missingCount === 0);
-                                $canActivate = ($pay === 'paid' && !empty($r['payment_proof_path']));
+                                $canActivate = ($pay === 'paid');
 
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
@@ -630,6 +606,7 @@ $stmt->close();
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
                                     'plate_no' => $r['plate_no'] ?? '',
+                                    'vehicle_type' => $r['vehicle_type'] ?? '',
                                     'vehicle_make' => $r['vehicle_make'] ?? '',
                                     'vehicle_model' => $r['vehicle_model'] ?? '',
                                     'vehicle_color' => $r['vehicle_color'] ?? '',
@@ -655,6 +632,7 @@ $stmt->close();
                                     </td>
                                     <td><?= esc($r['house_lot_number'] ?? '') ?></td>
                                     <td><?= esc($r['plate_no'] ?? '') ?></td>
+                                    <td><?= esc(ucfirst((string)($r['vehicle_type'] ?? ''))) ?></td>
                                     <td>
                                         <span class="badge-soft <?= esc($payBadge) ?>"><?= esc($pay ?: 'unpaid') ?></span>
                                         <div class="text-secondary" style="font-size:12px;"><?= esc($r['payment_method'] ?? '—') ?></div>
@@ -676,11 +654,8 @@ $stmt->close();
 
                                         <button class="btn btn-sm btn-outline-primary btnReq"
                                                 data-json='<?= esc(json_encode([
-                                                    "Vehicle OR/CR" => $r['or_cr_path'] ?? "",
                                                     "Picture of Vehicle (Front)" => $r['vehicle_front_path'] ?? "",
                                                     "Picture of Vehicle (Back)" => $r['vehicle_back_path'] ?? "",
-                                                    "Driver’s License" => $r['drivers_license_path'] ?? "",
-                                                    "Payment Proof" => $r['payment_proof_path'] ?? "",
                                                 ], JSON_UNESCAPED_SLASHES)) ?>'
                                                 data-name="<?= esc($name) ?>"
                                                 data-plate="<?= esc($r['plate_no'] ?? '') ?>"
@@ -706,8 +681,8 @@ $stmt->close();
                                                     data-payment="<?= esc($r['payment_status'] ?? 'unpaid') ?>">
                                                 <i class="dw dw-shield"></i> Activate
                                             </button>
-                                        <?php elseif ($pay === 'paid' && empty($r['payment_proof_path'])): ?>
-                                            <button class="btn btn-sm btn-primary" disabled title="Payment proof is required before activation.">
+                                        <?php else: ?>
+                                            <button class="btn btn-sm btn-primary" disabled title="Payment must be marked as paid before activation.">
                                                 <i class="dw dw-shield"></i> Activate
                                             </button>
                                         <?php endif; ?>
@@ -722,14 +697,13 @@ $stmt->close();
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (!$pendingRows): ?>
-                                <tr><td colspan="8" class="text-center text-secondary">No pending permit requests.</td></tr>
+                                <tr><td colspan="9" class="text-center text-secondary">No pending permit requests.</td></tr>
                             <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- ACTIVE -->
                 <div class="tab-pane fade" id="tabActive" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterActiveName" class="form-control form-control-sm" placeholder="Search homeowner...">
@@ -744,6 +718,7 @@ $stmt->close();
                                 <th>Permit No</th>
                                 <th>Homeowner</th>
                                 <th>Plate</th>
+                                <th>Vehicle Type</th>
                                 <th>Payment</th>
                                 <th>Validity</th>
                                 <th class="text-center">Actions</th>
@@ -767,6 +742,7 @@ $stmt->close();
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
                                     'plate_no' => $r['plate_no'] ?? '',
+                                    'vehicle_type' => $r['vehicle_type'] ?? '',
                                     'vehicle_make' => $r['vehicle_make'] ?? '',
                                     'vehicle_model' => $r['vehicle_model'] ?? '',
                                     'vehicle_color' => $r['vehicle_color'] ?? '',
@@ -788,6 +764,7 @@ $stmt->close();
                                     <td><span class="badge-soft badge-soft-info"><?= esc($r['permit_no'] ?? '—') ?></span></td>
                                     <td><?= esc($name) ?></td>
                                     <td><?= esc($r['plate_no'] ?? '') ?></td>
+                                    <td><?= esc(ucfirst((string)($r['vehicle_type'] ?? ''))) ?></td>
                                     <td>
                                         <span class="badge-soft <?= esc($payBadge) ?>"><?= esc($pay ?: 'unpaid') ?></span>
                                         <div class="text-secondary" style="font-size:12px;"><?= esc($r['payment_method'] ?? '—') ?></div>
@@ -816,14 +793,13 @@ $stmt->close();
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (!$activeRows): ?>
-                                <tr><td colspan="7" class="text-center text-secondary">No active permits.</td></tr>
+                                <tr><td colspan="8" class="text-center text-secondary">No active permits.</td></tr>
                             <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- ALL -->
                 <div class="tab-pane fade" id="tabAll" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterAllName" class="form-control form-control-sm" placeholder="Search homeowner...">
@@ -838,6 +814,7 @@ $stmt->close();
                                 <th>Permit No</th>
                                 <th>Homeowner</th>
                                 <th>Plate</th>
+                                <th>Vehicle Type</th>
                                 <th>Payment</th>
                                 <th>Status</th>
                                 <th>Validity</th>
@@ -870,6 +847,7 @@ $stmt->close();
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
                                     'plate_no' => $r['plate_no'] ?? '',
+                                    'vehicle_type' => $r['vehicle_type'] ?? '',
                                     'vehicle_make' => $r['vehicle_make'] ?? '',
                                     'vehicle_model' => $r['vehicle_model'] ?? '',
                                     'vehicle_color' => $r['vehicle_color'] ?? '',
@@ -891,6 +869,7 @@ $stmt->close();
                                     <td><?= esc($r['permit_no'] ?? '—') ?></td>
                                     <td><?= esc($name) ?></td>
                                     <td><?= esc($r['plate_no'] ?? '') ?></td>
+                                    <td><?= esc(ucfirst((string)($r['vehicle_type'] ?? ''))) ?></td>
                                     <td>
                                         <span class="badge-soft <?= esc($payBadge) ?>"><?= esc($pay ?: 'unpaid') ?></span>
                                         <div class="text-secondary" style="font-size:12px;"><?= esc($r['payment_method'] ?? '—') ?></div>
@@ -907,7 +886,7 @@ $stmt->close();
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (!$allRows): ?>
-                                <tr><td colspan="9" class="text-center text-secondary">No permits found.</td></tr>
+                                <tr><td colspan="10" class="text-center text-secondary">No permits found.</td></tr>
                             <?php endif; ?>
                             </tbody>
                         </table>
@@ -924,7 +903,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- REQUIREMENTS MODAL -->
 <div class="modal fade" id="modalReq" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -944,7 +922,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- DETAILS MODAL -->
 <div class="modal fade" id="modalDetails" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -960,7 +937,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- APPROVE MODAL -->
 <div class="modal fade" id="modalApprove" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -974,7 +950,7 @@ $stmt->close();
             <div class="modal-body">
                 <div class="text-secondary mb-2" id="approveInfo"></div>
                 <div class="alert alert-info mb-0">
-                    This approves the submitted requirements only and allows the homeowner to proceed to payment.
+                    This approves the submitted requirements only and allows the homeowner/tenant to proceed to payment.
                 </div>
             </div>
             <div class="modal-footer">
@@ -985,7 +961,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- ACTIVATE MODAL -->
 <div class="modal fade" id="modalActivate" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1016,7 +991,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- REJECT MODAL -->
 <div class="modal fade" id="modalReject" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1042,7 +1016,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- REVOKE MODAL -->
 <div class="modal fade" id="modalRevoke" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1068,7 +1041,6 @@ $stmt->close();
     </div>
 </div>
 
-<!-- RENEW MODAL -->
 <div class="modal fade" id="modalRenew" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1177,6 +1149,7 @@ function openDetailsModal(data) {
     html += `<div class="section-label">Vehicle Information</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Plate No.', data.plate_no);
+    html += detailRow('Vehicle Type', data.vehicle_type);
     html += detailRow('Vehicle Make', data.vehicle_make);
     html += detailRow('Vehicle Model', data.vehicle_model);
     html += detailRow('Vehicle Color', data.vehicle_color);
@@ -1224,21 +1197,21 @@ async function ensureDataTablesThenInit() {
                 responsive: true,
                 pageLength: 10,
                 order: [],
-                columnDefs: [{ orderable: false, targets: 7 }]
+                columnDefs: [{ orderable: false, targets: 8 }]
             });
 
             const dtActive = $('#tblActive').DataTable({
                 responsive: true,
                 pageLength: 10,
                 order: [],
-                columnDefs: [{ orderable: false, targets: 6 }]
+                columnDefs: [{ orderable: false, targets: 7 }]
             });
 
             const dtAll = $('#tblAll').DataTable({
                 responsive: true,
                 pageLength: 10,
                 order: [],
-                columnDefs: [{ orderable: false, targets: 8 }]
+                columnDefs: [{ orderable: false, targets: 9 }]
             });
 
             $('#filterPendingName, #filterPendingPlate').on('keyup change', function() {

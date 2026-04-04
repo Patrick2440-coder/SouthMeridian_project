@@ -1,42 +1,147 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
-  header("Location: ../index.php"); exit;
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
+  header("Location: ../index.php");
+  exit;
 }
 
 $conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+require_once 'tenant_module_guard.php';
+
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 function badge($status){
-  $status = (string)$status;
+  $status = strtolower(trim((string)$status));
   $cls = "secondary";
+
   if ($status === 'paid') $cls = "success";
-  if ($status === 'open') $cls = "danger";
-  if ($status === 'cleared') $cls = "warning";
-  if ($status === 'void') $cls = "secondary";
-  return '<span class="badge bg-'.$cls.'">'.htmlspecialchars($status).'</span>';
+  elseif ($status === 'open') $cls = "danger";
+  elseif ($status === 'cleared') $cls = "warning";
+  elseif ($status === 'void') $cls = "secondary";
+
+  return '<span class="badge bg-'.$cls.'">'.htmlspecialchars(ucfirst($status)).'</span>';
 }
 
-$hid = (int)$_SESSION['homeowner_id'];
+function duration_label(string $duration): string {
+  $map = [
+    '1_month'   => '1 Month',
+    '3_months'  => '3 Months',
+    '6_months'  => '6 Months',
+    '1_year'    => '1 Year',
+  ];
+  return $map[$duration] ?? $duration;
+}
+
+function payment_label(string $payment): string {
+  $map = [
+    'online' => 'Online Payment',
+    'cash'   => 'Cash / Physical Payment',
+  ];
+  return $map[$payment] ?? $payment;
+}
+
+function vehicle_type_label(string $type): string {
+  $map = [
+    'car' => 'Car',
+    'motorcycle' => 'Motorcycle',
+    'ebike' => 'E-Bike',
+  ];
+  return $map[$type] ?? ucfirst($type);
+}
+
+$isTenant = ($_SESSION['role'] === 'tenant');
+$tenant = null;
+$user = null;
+$hid = 0;
+
+if ($isTenant) {
+  if (empty($_SESSION['tenant_id']) || empty($_SESSION['tenant_homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $tenant_id = (int)$_SESSION['tenant_id'];
+  $hid = (int)$_SESSION['tenant_homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, homeowner_id, first_name, last_name, email, status, phase,
+           can_pay_dues, can_rent, can_parking, can_announcements
+    FROM tenants
+    WHERE id = ?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $tenant_id);
+  $stmt->execute();
+  $tenant = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$tenant || $tenant['status'] !== 'active') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=? LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  tenant_guard('parking', $tenant);
+} else {
+  if (empty($_SESSION['homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $hid = (int)$_SESSION['homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    FROM homeowners
+    WHERE id=? LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  if ((int)$user['must_change_password'] === 1) {
+    header("Location: homeowner_dashboard.php");
+    exit;
+  }
+}
+
+$phase = (string)$user['phase'];
 $permitId = (int)($_GET['permit_id'] ?? 0);
 
-$stmt = $conn->prepare("SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
-                        FROM homeowners WHERE id=? LIMIT 1");
-$stmt->bind_param("i", $hid);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if (!$user || $user['status'] !== 'approved') { session_destroy(); header("Location: ../index.php"); exit; }
-if ((int)$user['must_change_password'] === 1) { header("Location: homeowner_dashboard.php"); exit; }
-
-$phase      = (string)$user['phase'];
-$fullName   = trim(($user['first_name'] ?? '').' '.($user['last_name'] ?? ''));
-$initials   = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
+if ($isTenant) {
+  $fullName = trim(($tenant['first_name'] ?? '') . ' ' . ($tenant['last_name'] ?? ''));
+  $initials = strtoupper(substr($tenant['first_name'] ?? 'T',0,1).substr($tenant['last_name'] ?? 'N',0,1));
+} else {
+  $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+  $initials = strtoupper(substr($user['first_name'] ?? 'H',0,1).substr($user['last_name'] ?? 'O',0,1));
+}
 
 $pageTitle = "My Parking Violations • ".$phase;
 
@@ -45,13 +150,9 @@ $parkingOpen = in_array($activePage, ['homeowner_parking.php','homeowner_parking
 
 $selectedPermit = null;
 
-/*
-  Get selected permit info if permit_id is provided.
-  This helps show a filtered permit summary above the list.
-*/
 if ($permitId > 0) {
   $stmt = $conn->prepare("
-    SELECT id, permit_no, plate_no, vehicle_color, permit_duration, payment_method, status, valid_from, valid_until, sticker_year
+    SELECT id, permit_no, plate_no, vehicle_type, vehicle_color, permit_duration, payment_method, status, valid_from, valid_until, sticker_year
     FROM parking_permits
     WHERE id=? AND homeowner_id=? AND phase=?
     LIMIT 1
@@ -61,17 +162,11 @@ if ($permitId > 0) {
   $selectedPermit = $stmt->get_result()->fetch_assoc();
   $stmt->close();
 
-  // If invalid permit_id or not owned by current homeowner, ignore filter safely
   if (!$selectedPermit) {
     $permitId = 0;
   }
 }
 
-/*
-  Fetch violations.
-  If permit_id is provided, filter by permit_id.
-  Assumes parking_violations has permit_id column.
-*/
 if ($permitId > 0) {
   $stmt = $conn->prepare("
     SELECT id, permit_id, plate_no, violation_type, location, notes, fine_amount, status, issued_at, resolved_at
@@ -95,9 +190,7 @@ $stmt->execute();
 $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-$chatPages = [
-  'homeowner_public_chat.php'
-];
+$chatPages = ['homeowner_public_chat.php'];
 $chatOpen = in_array($activePage, $chatPages, true);
 ?>
 <!DOCTYPE html>
@@ -189,70 +282,7 @@ html, body { max-width:100%; overflow-x:hidden; }
 <div class="app-shell">
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-head">
-      <div class="sb-brand">
-        <i class="bi bi-grid-fill"></i>
-        <span class="sb-brand-text">HOA Menu</span>
-      </div>
-    </div>
-
-    <div class="sb-user">
-      <div class="sb-avatar"><?= esc($initials) ?></div>
-      <div class="sb-user-text">
-        <p class="sb-name"><?= esc($fullName) ?></p>
-        <p class="sb-meta"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></p>
-      </div>
-    </div>
-
-    <nav class="sb-nav">
-      <a class="sb-link <?= $activePage==='homeowner_dashboard.php' ? 'active' : '' ?>" href="homeowner_dashboard.php">
-        <i class="bi bi-house-door-fill"></i> <span>Dashboard</span>
-      </a>
-
-      <a class="sb-link" href="homeowner_dashboard.php#feed">
-        <i class="bi bi-megaphone-fill"></i> <span>Announcement Feed</span>
-      </a>
-      <a class="sb-link <?= $activePage==='homeowner_public_chat.php' ? 'active' : '' ?>" href="homeowner_public_chat.php">
-        <i class="bi bi-people-fill"></i> <span>Public Chat</span>
-      </a>
-      <a class="sb-link <?= $activePage==='homeowner_pay_dues.php' ? 'active' : '' ?>" href="homeowner_pay_dues.php">
-        <i class="bi bi-cash-coin"></i> <span>Pay Monthly Dues</span>
-      </a>
-
-      <div class="sb-dd <?= $parkingOpen ? 'open' : '' ?>" id="sbParking">
-        <a class="sb-link sb-dd-toggle <?= $parkingOpen ? 'active' : '' ?>" href="javascript:void(0)" id="sbParkingToggle">
-          <span><i class="bi bi-car-front-fill"></i> <span>Parking</span></span>
-          <i class="bi bi-chevron-down sb-dd-caret"></i>
-        </a>
-        <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage==='homeowner_parking.php' ? 'active' : '' ?>" href="homeowner_parking.php">
-            <i class="bi bi-info-circle-fill"></i> <span>Parking Overview</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_permit.php' ? 'active' : '' ?>" href="homeowner_parking_permit.php">
-            <i class="bi bi-card-checklist"></i> <span>Apply / Renew Permit</span>
-          </a>
-          <a class="sb-link <?= $activePage==='homeowner_parking_violations.php' ? 'active' : '' ?>" href="homeowner_parking_violations.php">
-            <i class="bi bi-receipt-cutoff"></i> <span>My Violations</span>
-          </a>
-        </div>
-      </div>
-
-      <a class="sb-link <?= $activePage==='homeowner_rentals.php' ? 'active' : '' ?>" href="homeowner_rentals.php">
-        <i class="bi bi-calendar2-week-fill"></i> <span>Facility Rentals</span>
-      </a>
-
-      <a class="sb-link <?= $activePage==='homeowner_complaints.php' ? 'active' : '' ?>" href="homeowner_complaints.php">
-        <i class="bi bi-chat-left-text-fill"></i> <span>File a Complaint</span>
-      </a>
-      <a class="sb-link <?= $activePage==='homeowner_voting.php' ? 'active' : '' ?>" href="homeowner_voting.php">
-        <i class="bi bi-check2-square"></i> <span>Voting</span>
-      </a>
-      <a class="sb-link" href="logout.php">
-        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-      </a>
-    </nav>
-  </aside>
+  <?php include 'homeowner_sidebar.php'; ?>
 
   <div class="main-area">
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
@@ -266,7 +296,7 @@ html, body { max-width:100%; overflow-x:hidden; }
 
         <div class="ms-auto d-flex align-items-center gap-3">
           <div class="small text-muted desktop-user-text">
-            Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?>)
+            Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?><?= $isTenant ? ' • Tenant' : '' ?>)
           </div>
           <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
         </div>
@@ -278,7 +308,7 @@ html, body { max-width:100%; overflow-x:hidden; }
       <div class="mobile-user-strip">
         <div class="alert alert-light border shadow-sm mb-3">
           <div class="fw-bold"><?= esc($fullName) ?></div>
-          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?></div>
+          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?><?= $isTenant ? ' • Tenant' : '' ?></div>
         </div>
       </div>
 
@@ -310,11 +340,12 @@ html, body { max-width:100%; overflow-x:hidden; }
 
               <div class="permit-filter-grid">
                 <div><b>Permit No:</b> <?= esc($selectedPermit['permit_no'] ?? '—') ?></div>
-                <div><b>Status:</b> <?= esc($selectedPermit['status'] ?? '—') ?></div>
+                <div><b>Status:</b> <?= esc(ucfirst((string)($selectedPermit['status'] ?? '—'))) ?></div>
                 <div><b>Plate No:</b> <?= esc($selectedPermit['plate_no'] ?? '—') ?></div>
+                <div><b>Vehicle Type:</b> <?= esc(vehicle_type_label((string)($selectedPermit['vehicle_type'] ?? 'car'))) ?></div>
                 <div><b>Vehicle Color:</b> <?= esc($selectedPermit['vehicle_color'] ?? '—') ?></div>
-                <div><b>Permit Duration:</b> <?= esc($selectedPermit['permit_duration'] ?? '—') ?></div>
-                <div><b>Payment Method:</b> <?= esc($selectedPermit['payment_method'] ?? '—') ?></div>
+                <div><b>Permit Duration:</b> <?= esc(duration_label((string)($selectedPermit['permit_duration'] ?? ''))) ?></div>
+                <div><b>Payment Method:</b> <?= esc(payment_label((string)($selectedPermit['payment_method'] ?? ''))) ?></div>
                 <div><b>Sticker Year:</b> <?= esc($selectedPermit['sticker_year'] ?? '—') ?></div>
                 <div><b>Validity:</b> <?= esc(($selectedPermit['valid_from'] ?? '—').' → '.($selectedPermit['valid_until'] ?? '—')) ?></div>
               </div>
@@ -405,6 +436,13 @@ html, body { max-width:100%; overflow-x:hidden; }
   const btn  = document.getElementById('sbParkingToggle');
   if(!wrap || !btn) return;
   btn.addEventListener('click', () => wrap.classList.toggle('open'));
+})();
+
+(function(){
+  const tenantWrap = document.getElementById('sbTenant');
+  const tenantBtn  = document.getElementById('sbTenantToggle');
+  if(!tenantWrap || !tenantBtn) return;
+  tenantBtn.addEventListener('click', () => tenantWrap.classList.toggle('open'));
 })();
 
 (function(){
