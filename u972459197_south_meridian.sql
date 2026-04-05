@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 04, 2026 at 11:55 AM
+-- Generation Time: Apr 05, 2026 at 12:01 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -340,7 +340,7 @@ INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`
 (125, 16, 'homeowner', 45, NULL, 'Carlo B Lim', 'p1_carlo.lim@hoa.local', '2026-03-30 07:33:52'),
 (126, 16, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-03-30 07:33:52'),
 (127, 16, 'homeowner', 88, NULL, 'Jheanna Abigail Abella', 'jheannaabigailerolesabella@gmail.com', '2026-03-30 07:33:52'),
-(128, 16, 'homeowner', 109, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:33:52'),
+(128, 16, 'homeowner', NULL, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:33:52'),
 (129, 16, 'homeowner', 113, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:33:52'),
 (130, 16, 'homeowner', 115, NULL, 'mark dexter  legacion', 'chann7721@gmail.com', '2026-03-30 07:33:52'),
 (131, 16, 'homeowner', 116, NULL, 'dawdsasddwad awdsa dawdsa', 'jayjay@gmail.com', '2026-03-30 07:33:52'),
@@ -359,7 +359,7 @@ INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`
 (144, 17, 'homeowner', 45, NULL, 'Carlo B Lim', 'p1_carlo.lim@hoa.local', '2026-03-30 07:45:48'),
 (145, 17, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-03-30 07:45:48'),
 (146, 17, 'homeowner', 88, NULL, 'Jheanna Abigail Abella', 'jheannaabigailerolesabella@gmail.com', '2026-03-30 07:45:48'),
-(147, 17, 'homeowner', 109, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:45:48'),
+(147, 17, 'homeowner', NULL, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:45:48'),
 (148, 17, 'homeowner', 113, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:45:48'),
 (149, 17, 'homeowner', 115, NULL, 'mark dexter  legacion', 'chann7721@gmail.com', '2026-03-30 07:45:48'),
 (150, 17, 'homeowner', 116, NULL, 'dawdsasddwad awdsa dawdsa', 'jayjay@gmail.com', '2026-03-30 07:45:48'),
@@ -781,7 +781,7 @@ INSERT INTO `hoa_officers` (`id`, `phase`, `position`, `officer_name`, `officer_
 (425, 'Phase 3', 'Treasurer', 'Arvin S. Delgado', 'arvin.delgado.p3@hoa.local', 1, '2026-02-13 20:31:30'),
 (426, 'Phase 3', 'Auditor', 'Ma. Lourdes Castillo', 'lourdes.castillo.p3@hoa.local', 1, '2026-02-13 20:31:30'),
 (427, 'Phase 3', 'Board of Director', 'Stephanie R. Ong', 'stephanie.ong.p3@hoa.local', 1, '2026-02-13 20:31:30'),
-(2632, 'Phase 1', 'President', 'Jheanna Abella', 'jheannaabigailerolesabella@gmail.com', 0, '2026-03-31 07:18:20'),
+(2632, 'Phase 1', 'President', 'Jheanna Abella', 'jheannaabigailerolesabella@gmail.com', 1, '2026-04-05 09:20:23'),
 (2633, 'Phase 1', 'Vice President', 'patrick baculpo', 'baculpopatrick2440@gmail.com', 1, '2026-03-11 17:04:39'),
 (2634, 'Phase 1', 'Secretary', 'John Cruz', 'p1_john.cruz@hoa.local', 1, '2026-03-11 17:04:39'),
 (2635, 'Phase 1', 'Treasurer', 'Mika Dela Cruz', 'p1_mika.delacruz@hoa.local', 1, '2026-03-11 17:04:39'),
@@ -790,8 +790,8 @@ INSERT INTO `hoa_officers` (`id`, `phase`, `position`, `officer_name`, `officer_
 (2638, 'Phase 1', 'Board of Director', 'John Cruz', 'p1_john.cruz@hoa.local', 1, '2026-03-11 17:04:39'),
 (2639, 'Phase 1', 'Board of Director', 'Liza Domingo', 'p1_liza.domingo@hoa.local', 1, '2026-03-11 17:04:39'),
 (2640, 'Phase 1', 'Board of Director', 'Mark Santos', 'p1_mark.santos@hoa.local', 1, '2026-03-11 17:04:39'),
-(2641, 'Phase 1', 'Board of Director', 'Paolo Flores', 'p1_paolo.flores@hoa.local', 1, '2026-03-11 17:04:39'),
-(2642, 'Phase 1', 'Auditor', NULL, NULL, 0, '2026-03-31 07:18:25');
+(2641, 'Phase 1', 'Board of Director', 'Paolo Flores', 'p1_paolo.flores@hoa.local', 1, '2026-04-05 09:34:46'),
+(2642, 'Phase 1', 'Auditor', NULL, NULL, 1, '2026-04-05 09:20:24');
 
 -- --------------------------------------------------------
 
@@ -868,7 +868,6 @@ INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_
 (88, NULL, 'Jheanna', 'Abigail', 'Abella', '09029309101', 'jheannaabigailerolesabella@gmail.com', '$2y$10$0T/.SHVQUskk4oeKPVp6jeyzIDz571ahgFbHqLvzdO.LpMBVpb5HW', 0, 'Phase 1', 'utot mo', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'uploads/1773067918_id_Screenshot 2023-10-19 154922.png', 'uploads/1773067918_proof_Screenshot 2023-10-19 202059.png', 14.3548655, 120.9460555, 'approved', 2, '2026-03-09 14:52:04', NULL, NULL),
 (93, NULL, 'patrick', '', 'baculpo', '09916964490', 'baculpopatrick2440@gmail.com', '$2y$10$S1mF2jGz.uPBBGNEb84zzuT7bkt8C4csNuhbw0F0rHUtL7a./6vKy', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'uploads/1773839929_id_images (1).png', 'uploads/1773839929_proof_images (2).png', 14.3537782, 120.9469199, 'rejected', 6, '2026-03-18 13:18:53', NULL, NULL),
 (105, 'P1-000105', 'Liam', '', 'Alexander', '09916964490', 'leiannmartinez2440@gmail.com', '$2y$10$/61TLQav66EUbPZPuneKdeQFDHJHm0YztTFxYSkcgT202sWUqPxqm', 1, 'Phase 1', 'blk 15 lot 6', 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Belgium Street', NULL, 'uploads/1774460632_id_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', 'uploads/1774460632_proof_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', 14.3561584, 120.9456968, 'rejected', 6, '2026-03-25 17:43:52', NULL, NULL),
-(109, 'P118', 'Jay Andrew', '', 'baculpo', '09916964490', 'liamalexander2440@gmail.com', '$2y$10$T4am4RgHVXt0BYlJlkbfp.eNrZp0UK0CHVdaR3lxnxn0SclrRJfre', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'uploads/1774674883_156198de_id_sm_logo.png', 'uploads/1774674883_156198de_proof_logo.webp', 14.3548660, 120.9460550, 'approved', 9, '2026-03-28 05:14:44', 'ad98f7dc7cfd593e4c486c26126aa93bc4f1e9133c5a6e20d94f3cad48a76bae', '2026-03-28 06:14:56'),
 (110, 'P1-000110', 'patrick', '', 'baculpo', '09916964490', 'dawdawd@gmail.com', '$2y$10$vxc9vBkBUOVwwVbz2cR2eeprbY/DnS5GPpVnA6XrSilK.uZXExJ/6', 1, 'Phase 1', 'blk 7 lot 9', 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'uploads/1774675096_id_sm_logo.png', 'uploads/1774675096_proof_favicon.png', 14.3548655, 120.9460555, 'rejected', 6, '2026-03-28 05:18:16', NULL, NULL),
 (111, 'P119', 'erick', '', 'baculpo', '09916964490', 'awasdaawd@gmail.com', '$2y$10$kMLp7SxuJ1t.YtV547nQfOEeAlk.bTF090d4KeGlav7oWDgdegGTm', 1, 'Phase 1', 'blk 7 lot 9', 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'uploads/1774675589_id_sm_logo.png', 'uploads/1774675589_proof_favicon.png', 14.3548655, 120.9460555, 'rejected', 6, '2026-03-28 05:26:29', NULL, NULL),
 (112, 'P120', 'patrick', '', 'baculpo', '09916964490', 'awasdawasdadwadwad@gmail.com', '$2y$10$vk/IDJmuxCPRsf0cKRFtgOT5O0GcrNB5Ya05FQxYa6Rq4X3/WhVOi', 1, 'Phase 1', 'blk 7 lot 9', 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'uploads/1774675631_id_sm_logo.png', 'uploads/1774675631_proof_favicon.png', 14.3548655, 120.9460555, 'rejected', 6, '2026-03-28 05:27:11', NULL, NULL),
@@ -940,6 +939,9 @@ CREATE TABLE `homeowner_officer_messages` (
   `admin_id` int(11) NOT NULL,
   `sender_type` enum('homeowner','admin') NOT NULL DEFAULT 'homeowner',
   `message` text NOT NULL,
+  `attachment_name` varchar(255) DEFAULT NULL,
+  `attachment_path` varchar(255) DEFAULT NULL,
+  `attachment_type` varchar(100) DEFAULT NULL,
   `is_read_by_homeowner` tinyint(1) NOT NULL DEFAULT 0,
   `is_read_by_admin` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -949,8 +951,9 @@ CREATE TABLE `homeowner_officer_messages` (
 -- Dumping data for table `homeowner_officer_messages`
 --
 
-INSERT INTO `homeowner_officer_messages` (`id`, `phase`, `homeowner_id`, `admin_id`, `sender_type`, `message`, `is_read_by_homeowner`, `is_read_by_admin`, `created_at`) VALUES
-(1, 'Phase 1', 113, 9, 'homeowner', 'hello', 1, 1, '2026-03-28 05:44:35');
+INSERT INTO `homeowner_officer_messages` (`id`, `phase`, `homeowner_id`, `admin_id`, `sender_type`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `is_read_by_homeowner`, `is_read_by_admin`, `created_at`) VALUES
+(1, 'Phase 1', 113, 9, 'homeowner', 'hello', NULL, NULL, NULL, 1, 1, '2026-03-28 05:44:35'),
+(2, 'Phase 1', 113, 9, 'admin', 'hi', NULL, NULL, NULL, 0, 1, '2026-04-05 09:15:23');
 
 -- --------------------------------------------------------
 
@@ -966,13 +969,6 @@ CREATE TABLE `homeowner_positions` (
   `updated_by_admin_id` int(11) DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `homeowner_positions`
---
-
-INSERT INTO `homeowner_positions` (`id`, `homeowner_id`, `phase`, `position`, `updated_by_admin_id`, `updated_at`) VALUES
-(2, 109, 'Phase 1', 'homeowner', 9, '2026-03-30 05:13:27');
 
 -- --------------------------------------------------------
 
@@ -1022,7 +1018,6 @@ INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_nam
 (52, 92, 'patrick', '', 'baculpo', 'Spouse'),
 (53, 93, 'patrick', '', 'baculpo', 'Relative'),
 (68, 105, 'patrick', '', 'baculpo', 'Homeowner'),
-(72, 109, 'patrick', '', 'baculpo', 'Tenant'),
 (73, 110, 'patrick', '', 'baculpo', 'Homeowner'),
 (74, 113, 'patrick', '', 'baculpo', 'Homeowner'),
 (75, 114, 'patrick', 'justin', 'baculpo', 'Child'),
@@ -1071,29 +1066,17 @@ CREATE TABLE `parking_permits` (
   `rejected_reason` varchar(255) DEFAULT NULL,
   `revoked_reason` varchar(255) DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `application_form_path` varchar(255) DEFAULT NULL,
-  `proof_of_residency_path` varchar(255) DEFAULT NULL,
   `vehicle_front_path` varchar(255) DEFAULT NULL,
   `vehicle_back_path` varchar(255) DEFAULT NULL,
-  `proof_parking_space_path` varchar(255) DEFAULT NULL,
-  `proof_of_payment_path` varchar(255) DEFAULT NULL,
-  `deed_of_sale_path` varchar(255) DEFAULT NULL,
-  `remarks` varchar(255) DEFAULT NULL,
-  `expires_at` date DEFAULT NULL,
-  `last_reminded_at` datetime DEFAULT NULL,
-  `payment_status` varchar(20) DEFAULT 'Pending',
-  `validity_start` date DEFAULT NULL,
-  `validity_end` date DEFAULT NULL
+  `payment_status` enum('unpaid','for payment','paid','failed','waived') NOT NULL DEFAULT 'unpaid'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `parking_permits`
 --
 
-INSERT INTO `parking_permits` (`id`, `phase`, `homeowner_id`, `request_type`, `renew_of_id`, `plate_no`, `vehicle_type`, `vehicle_make`, `vehicle_model`, `vehicle_color`, `permit_no`, `sticker_year`, `permit_duration`, `payment_method`, `contract_path`, `status`, `valid_from`, `valid_until`, `requested_at`, `approved_by_admin_id`, `approved_at`, `rejected_reason`, `revoked_reason`, `updated_at`, `application_form_path`, `proof_of_residency_path`, `vehicle_front_path`, `vehicle_back_path`, `proof_parking_space_path`, `proof_of_payment_path`, `deed_of_sale_path`, `remarks`, `expires_at`, `last_reminded_at`, `payment_status`, `validity_start`, `validity_end`) VALUES
-(4, 'Phase 1', 113, 'new', NULL, '12ABC', 'car', 'ref', 'vios', 'red', NULL, 2026, '1_month', 'online', 'uploads/parking_contracts/113/parking_contract_1774676705_54307a00.html', 'pending', '2026-03-28', '2026-04-27', '2026-03-28 05:45:05', 9, '2026-03-30 09:41:00', NULL, NULL, '2026-04-04 09:21:43', NULL, NULL, 'uploads/parking_permits/113/1774676705_e59970138ab2.png', 'uploads/parking_permits/113/1774676705_254ccf5d408f.png', NULL, NULL, NULL, NULL, NULL, NULL, 'for payment', NULL, NULL),
-(5, 'Phase 2', 114, 'new', NULL, 'ABC123', 'car', 'SIA', 'WISE', 'DEX', NULL, 2026, '3_months', 'online', 'uploads/parking_contracts/114/parking_contract_1774687165_defd733b.html', 'pending', '2026-03-28', '2026-06-27', '2026-03-28 08:39:25', 8, '2026-03-28 08:52:03', NULL, NULL, '2026-04-04 09:21:43', NULL, NULL, 'uploads/parking_permits/114/1774687165_74215b38045f.png', 'uploads/parking_permits/114/1774687165_2840da458f6a.png', NULL, NULL, NULL, NULL, NULL, NULL, 'for payment', NULL, NULL),
-(6, 'Phase 1', 120, 'new', NULL, 'SADWA', 'car', 'dwadsadawd', 'dsawda', 'dsaw', NULL, 2026, '1_year', 'online', 'uploads/parking_contracts/120/parking_contract_1774885694_5fe52600.html', 'pending', '2026-03-30', '2027-03-29', '2026-03-30 15:48:14', 9, '2026-03-30 15:54:39', NULL, NULL, '2026-04-04 09:21:43', NULL, NULL, 'uploads/parking_permits/120/1774885694_1a1bffc978b9.png', 'uploads/parking_permits/120/1774885694_8d3bab70f9d1.png', NULL, NULL, NULL, NULL, NULL, NULL, 'for payment', NULL, NULL);
+INSERT INTO `parking_permits` (`id`, `phase`, `homeowner_id`, `request_type`, `renew_of_id`, `plate_no`, `vehicle_type`, `vehicle_make`, `vehicle_model`, `vehicle_color`, `permit_no`, `sticker_year`, `permit_duration`, `payment_method`, `contract_path`, `status`, `valid_from`, `valid_until`, `requested_at`, `approved_by_admin_id`, `approved_at`, `rejected_reason`, `revoked_reason`, `updated_at`, `vehicle_front_path`, `vehicle_back_path`, `payment_status`) VALUES
+(8, 'Phase 1', 115, 'new', NULL, '12ABC', 'car', 'toyoto', 'vios', '0', 'P1-001', 2026, '1_month', 'online', 'uploads/parking_contracts/parking_contract_1775375714_8524390d.html', 'pending', '2026-04-05', '2026-05-04', '2026-04-05 07:55:14', 9, '2026-04-05 15:55:45', NULL, NULL, '2026-04-05 07:55:45', 'uploads/parking_permits/1775375714_e5546aebf56b.jpg', 'uploads/parking_permits/1775375714_c7372fb34717.jpg', 'for payment');
 
 -- --------------------------------------------------------
 
@@ -1119,13 +1102,6 @@ CREATE TABLE `parking_violations` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `parking_violations`
---
-
-INSERT INTO `parking_violations` (`id`, `phase`, `permit_id`, `homeowner_id`, `plate_no`, `violation_type`, `location`, `notes`, `fine_amount`, `status`, `issued_at`, `resolved_at`, `resolved_by_admin_id`, `created_at`, `updated_at`) VALUES
-(1, 'Phase 1', NULL, NULL, 'WADSAWD', 'Blocking Driveway', '', 'dsawd', 1000.00, 'paid', '2026-03-30 09:43:00', '2026-03-30 09:45:25', 9, '2026-03-30 09:43:00', '2026-03-30 09:45:25');
-
 -- --------------------------------------------------------
 
 --
@@ -1137,6 +1113,9 @@ CREATE TABLE `public_chat_messages` (
   `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
   `homeowner_id` int(11) NOT NULL,
   `message` text NOT NULL,
+  `attachment_name` varchar(255) DEFAULT NULL,
+  `attachment_path` varchar(255) DEFAULT NULL,
+  `attachment_type` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -1144,10 +1123,12 @@ CREATE TABLE `public_chat_messages` (
 -- Dumping data for table `public_chat_messages`
 --
 
-INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `created_at`) VALUES
-(5, 'Phase 1', 113, 'hi', '2026-03-28 05:44:31'),
-(6, 'Phase 2', 114, 'Hi', '2026-03-28 08:36:23'),
-(7, 'Phase 1', 115, 'hello', '2026-04-04 08:51:34');
+INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `created_at`) VALUES
+(5, 'Phase 1', 113, 'hi', NULL, NULL, NULL, '2026-03-28 05:44:31'),
+(6, 'Phase 2', 114, 'Hi', NULL, NULL, NULL, '2026-03-28 08:36:23'),
+(7, 'Phase 1', 115, 'hello', NULL, NULL, NULL, '2026-04-04 08:51:34'),
+(8, 'Phase 1', 115, '', 'abi.jpg', 'uploads/chat_files/1775377010_7628adbe.jpg', 'image/jpeg', '2026-04-05 08:16:50'),
+(9, 'Phase 1', 115, 'gello', NULL, NULL, NULL, '2026-04-05 08:30:33');
 
 -- --------------------------------------------------------
 
@@ -1597,7 +1578,7 @@ ALTER TABLE `tenants`
 -- AUTO_INCREMENT for table `access_permissions`
 --
 ALTER TABLE `access_permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4471;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6187;
 
 --
 -- AUTO_INCREMENT for table `activity_logs`
@@ -1741,7 +1722,7 @@ ALTER TABLE `homeowners`
 -- AUTO_INCREMENT for table `homeowner_officer_messages`
 --
 ALTER TABLE `homeowner_officer_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `homeowner_positions`
@@ -1759,7 +1740,7 @@ ALTER TABLE `household_members`
 -- AUTO_INCREMENT for table `parking_permits`
 --
 ALTER TABLE `parking_permits`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `parking_violations`
@@ -1771,7 +1752,7 @@ ALTER TABLE `parking_violations`
 -- AUTO_INCREMENT for table `public_chat_messages`
 --
 ALTER TABLE `public_chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `public_chat_mutes`

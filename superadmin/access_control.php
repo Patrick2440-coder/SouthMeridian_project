@@ -225,361 +225,353 @@ foreach ($positions as $position) {
     }
 }
 ?>
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Access Control</title>
-  <link rel="shortcut icon" type="image/png" href="../assets/images/logos/favicon.png" />
-  <link rel="stylesheet" href="../superadmin/assets/css/styles.min.css" />
+  <title>Superadmin - Access Control</title>
+
+  <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/core.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/icon-font.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/style.css">
+
   <style>
-    .perm-switch {
-      transform: scale(1.12);
-      cursor: pointer;
-    }
-    .module-col {
-      min-width: 200px;
-      font-weight: 700;
-    }
-    .sticky-header th {
-      position: sticky;
-      top: 0;
-      background: #fff;
-      z-index: 2;
-      box-shadow: 0 1px 0 rgba(0,0,0,.06);
-    }
     .summary-card {
-      border: 1px solid #e9ecef;
-      border-radius: 12px;
-      padding: 14px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
       background: #fff;
       height: 100%;
     }
+
     .summary-number {
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 28px;
+      font-weight: 800;
       color: #077f46;
       line-height: 1;
     }
+
     .summary-label {
       font-size: 13px;
-      color: #6c757d;
-      margin-top: 4px;
+      color: #64748b;
+      margin-top: 6px;
+      font-weight: 600;
     }
-    .table-wrap {
-      max-height: 70vh;
+
+    .module-col {
+      min-width: 220px;
+      font-weight: 700;
+      position: sticky;
+      left: 0;
+      background: #fff;
+      z-index: 3;
+    }
+
+    .matrix-wrap {
       overflow: auto;
-      border: 1px solid #e9ecef;
-      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      background: #fff;
+      max-height: 72vh;
     }
-    .page-note {
-      font-size: 14px;
-      color: #6c757d;
+
+    .matrix-table {
+      min-width: 1100px;
+      margin-bottom: 0;
     }
-    
+
+    .matrix-table thead th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 4;
+      box-shadow: inset 0 -1px 0 #e5e7eb;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .matrix-table tbody td {
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .matrix-table tbody tr:hover td {
+      background: #fafafa;
+    }
+
+    .matrix-table tbody tr:hover td.module-col {
+      background: #fafafa;
+    }
+
+    .perm-switch {
+      transform: scale(1.15);
+      cursor: pointer;
+    }
+
+    .badge-soft {
+      padding: .35rem .6rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
+    .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+    .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mini-note {
+      color: #64748b;
+      font-size: 13px;
+    }
   </style>
 </head>
+
 <body>
-  <div class="page-wrapper" id="main-wrapper" data-layout="vertical" data-navbarbg="skin6" data-sidebartype="full"
-       data-sidebar-position="fixed" data-header-position="fixed">
-
-    <div class="app-topstrip py-6 px-3 w-100 d-lg-flex align-items-center justify-content-between" style="background-color: #077f46;">
-      <div class="d-flex align-items-center justify-content-center gap-5 mb-2 mb-lg-0">
-        <a class="d-flex justify-content-center" href="#">
-          <img src="assets/images/logos/logo-wrappixel.svg" alt="" width="150">
-        </a>
-      </div>
+  <div class="header">
+    <div class="header-left">
+      <div class="menu-icon dw dw-menu"></div>
     </div>
 
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.php" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
+    <div class="header-right">
+      <div class="user-info-dropdown">
+        <div class="dropdown">
+          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
+            <span class="user-icon">
+              <img src="../admin/vendors/images/photo1.jpg" alt="">
+            </span>
+            <span class="user-name">Superadmin</span>
           </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
-          </div>
-        </div>
-
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link has-arrow collapsed"
-                 href="#userMgmtMenu"
-                 data-bs-toggle="collapse"
-                 role="button"
-                 aria-expanded="false"
-                 aria-controls="userMgmtMenu">
-                <i class="ti ti-users"></i>
-                <span class="hide-menu">User Management</span>
-              </a>
-
-              <ul id="userMgmtMenu" class="collapse first-level">
-                <li class="sidebar-item">
-                  <a href="./user_management.php" class="sidebar-link">
-                    <i class="ti ti-home"></i>
-                    <span class="hide-menu">Homeowners</span>
-                  </a>
-                </li>
-
-                <li class="sidebar-item">
-                  <a href="./phase_management.php" class="sidebar-link">
-                    <i class="ti ti-shield-check"></i>
-                    <span class="hide-menu">Officers</span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link active" href="./access_control.php" aria-expanded="false">
-                <i class="ti ti-lock-access"></i>
-                <span class="hide-menu">Access Control</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </aside>
-
-    <div class="body-wrapper">
-      <header class="app-header">
-        <nav class="navbar navbar-expand-lg navbar-light">
-          <ul class="navbar-nav">
-            <li class="nav-item d-block d-xl-none">
-              <a class="nav-link sidebartoggler" id="headerCollapse" href="javascript:void(0)">
-                <i class="ti ti-menu-2"></i>
-              </a>
-            </li>
-          </ul>
-
-          <div class="navbar-collapse justify-content-end px-0" id="navbarNav">
-            <ul class="navbar-nav flex-row ms-auto align-items-center justify-content-end">
-              <li class="nav-item dropdown">
-                <a class="nav-link" href="javascript:void(0)" id="drop2" data-bs-toggle="dropdown" aria-expanded="false">
-                  <img src="./assets/images/profile/user-1.jpg" alt="" width="35" height="35" class="rounded-circle">
-                </a>
-                <div class="dropdown-menu dropdown-menu-end dropdown-menu-animate-up" aria-labelledby="drop2">
-                  <div class="message-body">
-                    <a href="./profile.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-user fs-6"></i>
-                      <p class="mb-0 fs-3">My Profile</p>
-                    </a>
-                    <a href="./logs.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-list-check fs-6"></i>
-                      <p class="mb-0 fs-3">Activity Logs</p>
-                    </a>
-                    <a href="../index.php" class="btn btn-outline-primary mx-3 mt-2 d-block">Logout</a>
-                  </div>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </nav>
-      </header>
-
-      <div class="body-wrapper-inner">
-        <div class="container-fluid">
-
-          <div class="card mb-4">
-            <div class="card-body">
-              <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div>
-                  <h1 class="card-title mb-1">Officers Access Control</h1>
-                </div>
-                <div class="text-end">
-                  <div class="fw-semibold">Positions: <?= count($positions) ?></div>
-                  <div class="text-muted small">Modules: <?= count($modules) ?></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <?php if ($success): ?>
-            <div class="alert alert-success"><?= esc($success) ?></div>
-          <?php endif; ?>
-
-          <?php if ($error): ?>
-            <div class="alert alert-danger"><?= esc($error) ?></div>
-          <?php endif; ?>
-
-          <div class="row mb-4">
-            <?php foreach ($positions as $position): ?>
-              <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
-                <div class="summary-card">
-                  <div class="summary-number"><?= (int)$summaryCounts[$position] ?></div>
-                  <div class="summary-label"><?= esc($position) ?> allowed modules</div>
-                </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-
-          <div class="card">
-            <div class="card-body">
-              <form method="post" id="accessControlForm">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                  <div>
-                    <h5 class="mb-1">Permission Matrix</h5>
-                    <div class="text-muted small">Turn module access on or off for each officer position.</div>
-                  </div>
-
-                  <div class="d-flex gap-2">
-<button type="button" class="btn btn-outline-warning" id="resetDefaultsBtn">
-Reset to Defaults
-</button>
-                    <button type="submit" name="save_access_control" class="btn btn-success">
-                      Save Access Control
-                    </button>
-                  </div>
-                </div>
-
-                <div class="table-wrap">
-                  <table class="table table-bordered align-middle text-center mb-0">
-                    <thead class="sticky-header">
-                      <tr>
-                        <th class="module-col text-start">Module</th>
-                        <?php foreach ($positions as $position): ?>
-                          <th><?= esc($position) ?></th>
-                        <?php endforeach; ?>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <?php foreach ($modules as $module): ?>
-                        <tr>
-                          <td class="text-start fw-semibold"><?= esc($module['module_name']) ?></td>
-                          <?php foreach ($positions as $position): ?>
-                            <?php
-                              $moduleKey = (string)$module['module_key'];
-                              $checked = !empty($matrix[$position][$moduleKey]);
-                              $field = 'perm_' . md5($position . '|' . $moduleKey);
-                            ?>
-                            <td>
-                              <div class="form-check form-switch d-flex justify-content-center">
-                                <input
-                                  class="form-check-input perm-switch"
-                                  type="checkbox"
-                                  name="<?= esc($field) ?>"
-                                  id="<?= esc($field) ?>"
-                                  <?= $checked ? 'checked' : '' ?>
-                                >
-                              </div>
-                            </td>
-                          <?php endforeach; ?>
-                        </tr>
-                      <?php endforeach; ?>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-end gap-2">
-                  <button type="submit" name="reset_defaults" class="btn btn-outline-warning"
-                          onclick="return confirm('Reset all permissions to default settings?');">
-                    Reset to Defaults
-                  </button>
-                  <button type="submit" name="save_access_control" class="btn btn-success">
-                    Save Access Control
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div class="py-6 px-6 text-center">
-            <p>
-              © <span>Copyright</span>
-              <strong class="px-1 sitename">South Meridian Homes</strong>
-              <span>All Rights Reserved</span>
-            </p>
+          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
+            <a class="dropdown-item" href="logs.html"><i class="dw dw-list3"></i> Activity Logs</a>
+            <a class="dropdown-item" href="../index.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-<!-- Reset Confirmation Modal -->
-<div class="modal fade" id="resetConfirmModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+  <?php include 'superadmin_sidebar.php'; ?>
 
-      <div class="modal-header">
-        <h5 class="modal-title">Reset Permissions</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <div class="mobile-menu-overlay"></div>
+
+  <div class="main-container">
+    <div class="pd-ltr-20">
+
+      <div class="page-header mb-20">
+        <div class="row">
+          <div class="col-md-12 col-sm-12">
+            <div class="title"><h4>Officers Access Control</h4></div>
+            <div class="text-secondary">
+              Manage module permissions for each HOA officer position.
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="modal-body">
-        Are you sure you want to reset all officer permissions to default settings?
+      <div class="row">
+        <div class="col-lg-8 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p mb-20">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <img src="../admin/vendors/images/banner-img.png" alt="">
+              </div>
+              <div class="col-md-8">
+                <h4 class="font-20 weight-500 mb-10 text-capitalize">
+                  <div class="weight-600 font-30 text-blue">Access Control Panel</div>
+                </h4>
+                <p class="font-18 max-width-600">
+                  Turn access on or off for each position and control which modules officers can use inside the system.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h4 class="h5 mb-0">Quick Summary</h4>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Officer Positions</span>
+              <span class="badge-soft badge-soft-info"><?= count($positions) ?></span>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">System Modules</span>
+              <span class="badge-soft badge-soft-success"><?= count($modules) ?></span>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Default Profiles</span>
+              <span class="badge-soft badge-soft-warning">Ready</span>
+            </div>
+
+            <div class="mt-3 mini-note">
+              Use the matrix below to update access, then save your changes.
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">
-          Cancel
-        </button>
+      <?php if ($success): ?>
+        <div class="alert alert-success"><?= esc($success) ?></div>
+      <?php endif; ?>
 
-        <button class="btn btn-danger" id="confirmReset">
-          Reset Permissions
-        </button>
+      <?php if ($error): ?>
+        <div class="alert alert-danger"><?= esc($error) ?></div>
+      <?php endif; ?>
+
+      <div class="row">
+        <?php foreach ($positions as $position): ?>
+          <div class="col-xl-2 col-lg-4 col-md-6 mb-30">
+            <div class="summary-card">
+              <div class="summary-number"><?= (int)$summaryCounts[$position] ?></div>
+              <div class="summary-label"><?= esc($position) ?> allowed modules</div>
+            </div>
+          </div>
+        <?php endforeach; ?>
       </div>
 
+      <div class="card-box mb-30 p-3">
+        <form method="post" id="accessControlForm">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+            <div>
+              <h5 class="mb-1">Permission Matrix</h5>
+              <div class="mini-note">Enable or disable modules per officer position.</div>
+            </div>
+
+            <div class="top-actions">
+              <button type="button" class="btn btn-outline-warning" id="resetDefaultsBtn">
+                Reset to Defaults
+              </button>
+              <button type="submit" name="save_access_control" class="btn btn-success">
+                Save Access Control
+              </button>
+            </div>
+          </div>
+
+          <div class="matrix-wrap">
+            <table class="table table-bordered table-hover matrix-table">
+              <thead>
+                <tr>
+                  <th class="module-col text-left">Module</th>
+                  <?php foreach ($positions as $position): ?>
+                    <th><?= esc($position) ?></th>
+                  <?php endforeach; ?>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($modules as $module): ?>
+                  <tr>
+                    <td class="module-col text-left"><?= esc($module['module_name']) ?></td>
+                    <?php foreach ($positions as $position): ?>
+                      <?php
+                        $moduleKey = (string)$module['module_key'];
+                        $checked = !empty($matrix[$position][$moduleKey]);
+                        $field = 'perm_' . md5($position . '|' . $moduleKey);
+                      ?>
+                      <td>
+                        <div class="custom-control custom-switch d-flex justify-content-center">
+                          <input
+                            type="checkbox"
+                            class="custom-control-input perm-switch"
+                            name="<?= esc($field) ?>"
+                            id="<?= esc($field) ?>"
+                            <?= $checked ? 'checked' : '' ?>
+                          >
+                          <label class="custom-control-label" for="<?= esc($field) ?>"></label>
+                        </div>
+                      </td>
+                    <?php endforeach; ?>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-outline-warning" id="resetDefaultsBtnBottom">
+              Reset to Defaults
+            </button>
+            <button type="submit" name="save_access_control" class="btn btn-success">
+              Save Access Control
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="footer-wrap pd-20 mb-20 card-box">
+        © Copyright South Meridian Homes All Rights Reserved
+      </div>
     </div>
   </div>
-</div>
-  <script src="./assets/libs/jquery/dist/jquery.min.js"></script>
-  <script src="./assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./assets/js/sidebarmenu.js"></script>
-  <script src="./assets/js/app.min.js"></script>
-  <script src="./assets/libs/simplebar/dist/simplebar.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
-  
+
+  <!-- Reset Confirmation Modal -->
+  <div class="modal fade" id="resetConfirmModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Reset Permissions</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          Are you sure you want to reset all officer permissions to default settings?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirmReset">Reset Permissions</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../admin/vendors/scripts/core.js"></script>
+  <script src="../admin/vendors/scripts/script.min.js"></script>
+  <script src="../admin/vendors/scripts/process.js"></script>
+  <script src="../admin/vendors/scripts/layout-settings.js"></script>
+
   <script>
+    function openResetModal() {
+      $('#resetConfirmModal').modal('show');
+    }
 
-document.getElementById("resetDefaultsBtn").addEventListener("click", function(){
-  const modal = new bootstrap.Modal(document.getElementById("resetConfirmModal"));
-  modal.show();
-});
+    $('#resetDefaultsBtn, #resetDefaultsBtnBottom').on('click', function () {
+      openResetModal();
+    });
 
-document.getElementById("confirmReset").addEventListener("click", function(){
+    $('#confirmReset').on('click', function () {
+      const form = document.getElementById('accessControlForm');
 
-  const form = document.getElementById("accessControlForm");
+      const existing = form.querySelector('input[name="reset_defaults"]');
+      if (existing) existing.remove();
 
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "reset_defaults";
-  input.value = "1";
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'reset_defaults';
+      input.value = '1';
+      form.appendChild(input);
 
-  form.appendChild(input);
-
-  form.submit();
-
-});
-
-</script>
+      form.submit();
+    });
+  </script>
 </body>
 </html>

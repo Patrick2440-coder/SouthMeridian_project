@@ -11,7 +11,7 @@ $conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function nfmt($n){ return number_format((float)$n, 0); }
-function money($n){ return number_format((float)$n, 2); }
+function money($n){ return '₱' . number_format((float)$n, 2); }
 
 // ===================== DATE RANGES =====================
 $now = new DateTime("now");
@@ -20,7 +20,6 @@ $today = $now->format("Y-m-d");
 $start7 = (new DateTime("now"))->modify("-6 days")->format("Y-m-d 00:00:00");
 $startPrev7 = (new DateTime("now"))->modify("-13 days")->format("Y-m-d 00:00:00");
 $endPrev7 = (new DateTime("now"))->modify("-7 days")->format("Y-m-d 23:59:59");
-
 $start30 = (new DateTime("now"))->modify("-29 days")->format("Y-m-d 00:00:00");
 
 // ===================== KPIs =====================
@@ -29,19 +28,19 @@ $start30 = (new DateTime("now"))->modify("-29 days")->format("Y-m-d 00:00:00");
 $approved_homeowners = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM homeowners WHERE status='approved'");
 $stmt->execute();
-$approved_homeowners = (int)$stmt->get_result()->fetch_assoc()['c'];
+$approved_homeowners = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
-// Total homeowners (all statuses)
+// Total homeowners
 $total_homeowners = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM homeowners");
 $stmt->execute();
-$total_homeowners = (int)$stmt->get_result()->fetch_assoc()['c'];
+$total_homeowners = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
 $active_homeowners_pct = ($total_homeowners > 0) ? round(($approved_homeowners / $total_homeowners) * 100) : 0;
 
-// “Active Voters” -> using “active participants” as distinct payers in last 30 days
+// Active participants last 30 days
 $active_participants_30d = 0;
 $stmt = $conn->prepare("
   SELECT COUNT(DISTINCT homeowner_id) AS c
@@ -50,10 +49,10 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("s", $start30);
 $stmt->execute();
-$active_participants_30d = (int)$stmt->get_result()->fetch_assoc()['c'];
+$active_participants_30d = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
-// Weekly dues collected (last 7 days) and comparison (previous 7 days)
+// Weekly dues
 $dues_week = 0.0;
 $stmt = $conn->prepare("
   SELECT COALESCE(SUM(amount),0) AS s
@@ -62,9 +61,10 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("s", $start7);
 $stmt->execute();
-$dues_week = (float)$stmt->get_result()->fetch_assoc()['s'];
+$dues_week = (float)($stmt->get_result()->fetch_assoc()['s'] ?? 0);
 $stmt->close();
 
+// Previous weekly dues
 $dues_prev_week = 0.0;
 $stmt = $conn->prepare("
   SELECT COALESCE(SUM(amount),0) AS s
@@ -73,7 +73,7 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("ss", $startPrev7, $endPrev7);
 $stmt->execute();
-$dues_prev_week = (float)$stmt->get_result()->fetch_assoc()['s'];
+$dues_prev_week = (float)($stmt->get_result()->fetch_assoc()['s'] ?? 0);
 $stmt->close();
 
 $dues_change_pct = 0;
@@ -83,7 +83,7 @@ if ($dues_prev_week > 0) {
   $dues_change_pct = 100;
 }
 
-// Maintenance expenses logged this week
+// Maintenance expenses this week
 $maintenance_expenses_week = 0;
 $stmt = $conn->prepare("
   SELECT COUNT(*) AS c
@@ -92,10 +92,10 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("s", $start7);
 $stmt->execute();
-$maintenance_expenses_week = (int)$stmt->get_result()->fetch_assoc()['c'];
+$maintenance_expenses_week = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
-// Community concerns this week -> parking violations issued this week
+// Parking violations this week
 $concerns_week = 0;
 $stmt = $conn->prepare("
   SELECT COUNT(*) AS c
@@ -104,34 +104,36 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("s", $start7);
 $stmt->execute();
-$concerns_week = (int)$stmt->get_result()->fetch_assoc()['c'];
+$concerns_week = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
-// Pending approvals notifications
+// Pending items
 $pending_homeowners = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM homeowners WHERE status='pending'");
 $stmt->execute();
-$pending_homeowners = (int)$stmt->get_result()->fetch_assoc()['c'];
+$pending_homeowners = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
 $pending_permits = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM parking_permits WHERE status='pending'");
 $stmt->execute();
-$pending_permits = (int)$stmt->get_result()->fetch_assoc()['c'];
+$pending_permits = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
 $pending_reports = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM finance_report_requests WHERE status='pending'");
 $stmt->execute();
-$pending_reports = (int)$stmt->get_result()->fetch_assoc()['c'];
+$pending_reports = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 $stmt->close();
 
 $notif_total = $pending_homeowners + $pending_permits + $pending_reports;
 
-// Chart data: approved homeowners per phase
+// ===================== CHART DATA =====================
 $phases = ['Phase 1','Phase 2','Phase 3'];
 $approved_by_phase = array_fill_keys($phases, 0);
+$active_by_phase = array_fill_keys($phases, 0);
 
+// Approved homeowners by phase
 $stmt = $conn->prepare("
   SELECT phase, COUNT(*) AS c
   FROM homeowners
@@ -146,8 +148,7 @@ while ($row = $res->fetch_assoc()) {
 }
 $stmt->close();
 
-// Chart data: active participants per phase (distinct payers last 30 days)
-$active_by_phase = array_fill_keys($phases, 0);
+// Active participants by phase
 $stmt = $conn->prepare("
   SELECT phase, COUNT(DISTINCT homeowner_id) AS c
   FROM finance_payments
@@ -163,402 +164,631 @@ while ($row = $res->fetch_assoc()) {
 }
 $stmt->close();
 
-// Table: latest homeowners
+// Last 6 months collections/expenses/homeowners for chart
+$labels = [];
+$keys   = [];
+
+for ($i = 5; $i >= 0; $i--) {
+  $ts = strtotime(date('Y-m-01') . " -$i months");
+  $labels[] = date('M Y', $ts);
+  $keys[]   = date('Y-m', $ts);
+}
+
+$fromDate = date('Y-m-01', strtotime(date('Y-m-01') . " -5 months"));
+$toDate   = date('Y-m-t');
+
+$collectionsByKey = array_fill_keys($keys, 0.0);
+$stmt = $conn->prepare("
+  SELECT DATE_FORMAT(paid_at,'%Y-%m') ym, COALESCE(SUM(amount),0) total
+  FROM finance_payments
+  WHERE status='paid'
+    AND paid_at >= ?
+    AND paid_at < DATE_ADD(?, INTERVAL 1 DAY)
+  GROUP BY ym
+");
+$stmt->bind_param("ss", $fromDate, $toDate);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($r = $res->fetch_assoc()) {
+  $ym = (string)$r['ym'];
+  if (isset($collectionsByKey[$ym])) $collectionsByKey[$ym] = (float)$r['total'];
+}
+$stmt->close();
+
+$expensesByKey = array_fill_keys($keys, 0.0);
+$stmt = $conn->prepare("
+  SELECT DATE_FORMAT(expense_date,'%Y-%m') ym, COALESCE(SUM(amount),0) total
+  FROM finance_expenses
+  WHERE expense_date >= ?
+    AND expense_date <= ?
+  GROUP BY ym
+");
+$stmt->bind_param("ss", $fromDate, $toDate);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($r = $res->fetch_assoc()) {
+  $ym = (string)$r['ym'];
+  if (isset($expensesByKey[$ym])) $expensesByKey[$ym] = (float)$r['total'];
+}
+$stmt->close();
+
+$newHOByKey = array_fill_keys($keys, 0);
+$stmt = $conn->prepare("
+  SELECT DATE_FORMAT(created_at,'%Y-%m') ym, COUNT(*) c
+  FROM homeowners
+  WHERE created_at >= ?
+    AND created_at < DATE_ADD(?, INTERVAL 1 DAY)
+  GROUP BY ym
+");
+$stmt->bind_param("ss", $fromDate, $toDate);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($r = $res->fetch_assoc()) {
+  $ym = (string)$r['ym'];
+  if (isset($newHOByKey[$ym])) $newHOByKey[$ym] = (int)$r['c'];
+}
+$stmt->close();
+
+$chartCollections = array_values($collectionsByKey);
+$chartExpenses    = array_values($expensesByKey);
+$chartNewHO       = array_values($newHOByKey);
+
+// ===================== TABLES =====================
+
+// Latest homeowners
 $latest_homeowners = [];
 $stmt = $conn->prepare("
-  SELECT first_name, middle_name, last_name, phase, house_lot_number, status, created_at
+  SELECT id, first_name, middle_name, last_name, phase, house_lot_number, status, created_at
   FROM homeowners
   ORDER BY created_at DESC
-  LIMIT 10
+  LIMIT 100
 ");
 $stmt->execute();
 $res = $stmt->get_result();
 while ($row = $res->fetch_assoc()) $latest_homeowners[] = $row;
 $stmt->close();
-?>
-<!doctype html>
-<html lang="en">
 
+// Recent admins/officers
+$latest_officers = [];
+if ($result = $conn->query("
+  SELECT id, full_name, email, role, phase, position
+  FROM admins
+  ORDER BY id DESC
+  LIMIT 20
+")) {
+  while ($row = $result->fetch_assoc()) $latest_officers[] = $row;
+  $result->close();
+}
+?>
+<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Super Admin</title>
-  <link rel="shortcut icon" type="image/png" href="../assets/images/logos/favicon.png" />
-  <link rel="stylesheet" href="../superadmin/assets/css/styles.min.css" />
+  <title>Superadmin Dashboard</title>
+
+  <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/core.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/icon-font.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/src/plugins/datatables/css/dataTables.bootstrap4.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/src/plugins/datatables/css/responsive.bootstrap4.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/style.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    .kpi-card .icon { font-size: 28px; opacity: .9; }
+    .kpi-value { font-size: 28px; font-weight: 800; }
+    .kpi-label { color: #64748b; font-weight: 700; }
+
+    .badge-soft {
+      padding: .35rem .6rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
+    .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
+    .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+    .badge-soft-secondary { background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; }
+    .badge-soft-danger { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+
+    .sidebar-menu .dropdown-toggle:hover,
+    .sidebar-menu .show > .dropdown-toggle {
+      background: #077f46;
+      color: #fff !important;
+    }
+
+    .sidebar-menu .submenu li a:hover,
+    .sidebar-menu .submenu li a.active {
+      background: rgba(7,127,70,.10);
+      color: #077f46 !important;
+      font-weight: 700;
+    }
+
+    .table-action-btn {
+      min-width: 38px;
+    }
+  </style>
 </head>
 
 <body>
-  <div class="page-wrapper" id="main-wrapper" data-layout="vertical" data-navbarbg="skin6" data-sidebartype="full"
-    data-sidebar-position="fixed" data-header-position="fixed">
-
-    <div class="app-topstrip py-6 px-3 w-100 d-lg-flex align-items-center justify-content-between" style="background-color: #077f46;">
-      <div class="d-flex align-items-center justify-content-center gap-5 mb-2 mb-lg-0">
-        <a class="d-flex justify-content-center" href="#">
-          <img src="assets/images/logos/logo-wrappixel.svg" alt="" width="150">
-        </a>
-      </div>
+  <div class="header">
+    <div class="header-left">
+      <div class="menu-icon dw dw-menu"></div>
     </div>
 
-    <!-- Sidebar Start -->
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.php" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
+    <div class="header-right">
+      <div class="user-notification">
+        <div class="dropdown">
+          <a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
+            <i class="icon-copy dw dw-notification"></i>
+            <?php if ($notif_total > 0): ?>
+              <span class="badge notification-active"></span>
+            <?php endif; ?>
           </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
+          <div class="dropdown-menu dropdown-menu-right">
+            <div class="notification-list mx-h-350 customscroll">
+              <ul>
+                <li>
+                  <a href="user_management.php">
+                    <h3>Pending Homeowners</h3>
+                    <p><?= (int)$pending_homeowners ?> waiting for approval</p>
+                  </a>
+                </li>
+                <li>
+                  <a href="#">
+                    <h3>Pending Parking Permits</h3>
+                    <p><?= (int)$pending_permits ?> waiting for review</p>
+                  </a>
+                </li>
+                <li>
+                  <a href="#">
+                    <h3>Pending Finance Reports</h3>
+                    <p><?= (int)$pending_reports ?> pending requests</p>
+                  </a>
+                </li>
+                <?php if ($notif_total === 0): ?>
+                  <li>
+                    <a href="#">
+                      <h3>No Pending Items</h3>
+                      <p>Everything is updated.</p>
+                    </a>
+                  </li>
+                <?php endif; ?>
+              </ul>
+            </div>
           </div>
         </div>
-
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link active" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link has-arrow collapsed"
-                href="#userMgmtMenu"
-                data-bs-toggle="collapse"
-                role="button"
-                aria-expanded="false"
-                aria-controls="userMgmtMenu">
-                <i class="ti ti-users"></i>
-                <span class="hide-menu">User Management</span>
-              </a>
-
-              <ul id="userMgmtMenu" class="collapse first-level">
-                <li class="sidebar-item">
-                  <a href="./user_management.php" class="sidebar-link">
-                    <i class="ti ti-home"></i>
-                    <span class="hide-menu">Homeowners</span>
-                  </a>
-                </li>
-
-                <li class="sidebar-item">
-                  <a href="./phase_management.php" class="sidebar-link">
-                    <i class="ti ti-shield-check"></i>
-                    <span class="hide-menu">Officers</span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./access_control.php" aria-expanded="false">
-                <i class="ti ti-lock-access"></i>
-                <span class="hide-menu">Access Control</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
       </div>
-    </aside>
 
-    <div class="body-wrapper">
-      <header class="app-header">
-        <nav class="navbar navbar-expand-lg navbar-light">
-          <ul class="navbar-nav">
-            <li class="nav-item d-block d-xl-none">
-              <a class="nav-link sidebartoggler" id="headerCollapse" href="javascript:void(0)">
-                <i class="ti ti-menu-2"></i>
-              </a>
-            </li>
-
-            <li class="nav-item dropdown">
-              <a class="nav-link" href="javascript:void(0)" id="drop1" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <?php if ($notif_total > 0): ?>
-                  <div class="notification bg-primary rounded-circle"></div>
-                <?php endif; ?>
-              </a>
-              <div class="dropdown-menu dropdown-menu-animate-up" aria-labelledby="drop1">
-                <div class="px-3 py-2 border-bottom">
-                  <strong class="fs-3">Notifications</strong>
-                  <div class="text-muted fs-2">Pending items</div>
-                </div>
-                <div class="message-body">
-                  <a href="./user_management.php" class="dropdown-item d-flex justify-content-between align-items-center">
-                    <span>Pending homeowners</span>
-                    <span class="badge bg-warning text-dark"><?= (int)$pending_homeowners ?></span>
-                  </a>
-                  <a href="#" class="dropdown-item d-flex justify-content-between align-items-center">
-                    <span>Pending parking permits</span>
-                    <span class="badge bg-warning text-dark"><?= (int)$pending_permits ?></span>
-                  </a>
-                  <a href="#" class="dropdown-item d-flex justify-content-between align-items-center">
-                    <span>Pending finance reports</span>
-                    <span class="badge bg-warning text-dark"><?= (int)$pending_reports ?></span>
-                  </a>
-                  <?php if ($notif_total === 0): ?>
-                    <div class="dropdown-item text-muted">No pending items.</div>
-                  <?php endif; ?>
-                </div>
-              </div>
-            </li>
-          </ul>
-
-          <div class="navbar-collapse justify-content-end px-0" id="navbarNav">
-            <ul class="navbar-nav flex-row ms-auto align-items-center justify-content-end">
-              <li class="nav-item dropdown">
-                <a class="nav-link" href="javascript:void(0)" id="drop2" data-bs-toggle="dropdown" aria-expanded="false">
-                  <img src="./assets/images/profile/user-1.jpg" alt="" width="35" height="35" class="rounded-circle">
-                </a>
-                <div class="dropdown-menu dropdown-menu-end dropdown-menu-animate-up" aria-labelledby="drop2">
-                  <div class="message-body">
-                    <a href="./profile.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-user fs-6"></i>
-                      <p class="mb-0 fs-3">My Profile</p>
-                    </a>
-                    <a href="./logs.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-list-check fs-6"></i>
-                      <p class="mb-0 fs-3">Activity Logs</p>
-                    </a>
-                    <a href="../index.php" class="btn btn-outline-primary mx-3 mt-2 d-block">Logout</a>
-                  </div>
-                </div>
-              </li>
-            </ul>
+      <div class="user-info-dropdown">
+        <div class="dropdown">
+          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
+            <span class="user-icon">
+              <img src="../admin/vendors/images/photo1.jpg" alt="">
+            </span>
+            <span class="user-name">Superadmin</span>
+          </a>
+          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
+            <a class="dropdown-item" href="logs.html"><i class="dw dw-list3"></i> Activity Logs</a>
+            <a class="dropdown-item" href="../index.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
-        </nav>
-      </header>
-
-      <div class="body-wrapper-inner">
-        <div class="container-fluid">
-          <div class="row">
-            <div class="col-lg-8">
-              <div class="card w-100">
-                <div class="card-body">
-                  <div class="d-md-flex align-items-center">
-                    <div>
-                      <h4 class="card-title">Overview</h4>
-                      <p class="text-muted mb-0">Approved homeowners and active participants (last 30 days)</p>
-                    </div>
-                    <div class="ms-auto">
-                      <ul class="list-unstyled mb-0">
-                        <li class="list-inline-item text-primary">
-                          <span class="round-8 text-bg-primary rounded-circle me-1 d-inline-block"></span>
-                          Approved Homeowners: <strong><?= nfmt($approved_homeowners) ?></strong>
-                        </li>
-                        <li class="list-inline-item text-info">
-                          <span class="round-8 text-bg-info rounded-circle me-1 d-inline-block"></span>
-                          Active Participants: <strong><?= nfmt($active_participants_30d) ?></strong>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                  <div id="sales-overview" class="mt-4 mx-n6"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-4">
-              <div class="card overflow-hidden">
-                <div class="card-body pb-0">
-                  <div class="d-flex align-items-start">
-                    <div>
-                      <h4 class="card-title">Weekly HOA Stats</h4>
-                      <p class="card-subtitle">Computed from your database</p>
-                    </div>
-                    <div class="ms-auto">
-                      <div class="dropdown">
-                        <a href="javascript:void(0)" class="text-muted" id="hoa-weekly-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                          <i class="ti ti-dots fs-7"></i>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="hoa-weekly-dropdown">
-                          <li><a class="dropdown-item" href="./user_management.php">View Homeowners</a></li>
-                          <li><a class="dropdown-item" href="#">Finance</a></li>
-                          <li><a class="dropdown-item" href="#">Settings</a></li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="mt-4 pb-3 d-flex align-items-center">
-                    <span class="btn btn-primary rounded-circle round-48 hstack justify-content-center">
-                      <i class="ti ti-cash fs-6"></i>
-                    </span>
-                    <div class="ms-3">
-                      <h5 class="mb-0 fw-bolder fs-4">₱ <?= money($dues_week) ?></h5>
-                      <span class="text-muted fs-3">Dues collected (last 7 days)</span>
-                    </div>
-                    <div class="ms-auto">
-                      <?php
-                        $badgeClass = ($dues_change_pct >= 0) ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger";
-                        $badgeText  = ($dues_change_pct >= 0) ? ("+" . $dues_change_pct . "%") : ($dues_change_pct . "%");
-                      ?>
-                      <span class="badge <?= $badgeClass ?>"><?= esc($badgeText) ?></span>
-                    </div>
-                  </div>
-
-                  <div class="py-3 d-flex align-items-center">
-                    <span class="btn btn-warning rounded-circle round-48 hstack justify-content-center">
-                      <i class="ti ti-users fs-6"></i>
-                    </span>
-                    <div class="ms-3">
-                      <h5 class="mb-0 fw-bolder fs-4"><?= (int)$active_homeowners_pct ?>%</h5>
-                      <span class="text-muted fs-3">Approved homeowners (of total)</span>
-                    </div>
-                    <div class="ms-auto">
-                      <span class="badge bg-secondary-subtle text-muted"><?= nfmt($approved_homeowners) ?>/<?= nfmt($total_homeowners) ?></span>
-                    </div>
-                  </div>
-
-                  <div class="py-3 d-flex align-items-center">
-                    <span class="btn btn-success rounded-circle round-48 hstack justify-content-center">
-                      <i class="ti ti-tool fs-6"></i>
-                    </span>
-                    <div class="ms-3">
-                      <h5 class="mb-0 fw-bolder fs-4"><?= nfmt($maintenance_expenses_week) ?></h5>
-                      <span class="text-muted fs-3">Maintenance expenses logged (7 days)</span>
-                    </div>
-                    <div class="ms-auto">
-                      <span class="badge bg-success-subtle text-success">Updated</span>
-                    </div>
-                  </div>
-
-                  <div class="pt-3 mb-7 d-flex align-items-center">
-                    <span class="btn btn-secondary rounded-circle round-48 hstack justify-content-center">
-                      <i class="ti ti-message-report fs-6"></i>
-                    </span>
-                    <div class="ms-3">
-                      <h5 class="mb-0 fw-bolder fs-4"><?= nfmt($concerns_week) ?></h5>
-                      <span class="text-muted fs-3">Parking violations issued (7 days)</span>
-                    </div>
-                    <div class="ms-auto">
-                      <span class="badge bg-warning-subtle text-warning">Monitor</span>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-
-            <div class="col-12">
-              <div class="card">
-                <div class="card-body">
-                  <div class="d-md-flex align-items-center">
-                    <div>
-                      <h4 class="card-title">Latest Homeowners</h4>
-                      <p class="text-muted mb-0">Newest registrations from your homeowners table</p>
-                    </div>
-                  </div>
-
-                  <div class="table-responsive mt-4">
-                    <table class="table mb-0 text-nowrap varient-table align-middle fs-3">
-                      <thead>
-                        <tr>
-                          <th scope="col" class="px-0 text-muted">Name</th>
-                          <th scope="col" class="px-0 text-muted">Phase / Lot</th>
-                          <th scope="col" class="px-0 text-muted">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <?php if (empty($latest_homeowners)): ?>
-                          <tr>
-                            <td colspan="3" class="text-muted">No homeowners found.</td>
-                          </tr>
-                        <?php else: ?>
-                          <?php foreach ($latest_homeowners as $h): ?>
-                            <?php
-                              $full = trim($h['first_name'].' '.$h['middle_name'].' '.$h['last_name']);
-                              $phaseLot = trim($h['phase'].' • '.$h['house_lot_number']);
-
-                              $status = (string)$h['status'];
-                              $badge = 'bg-secondary';
-                              if ($status === 'approved') $badge = 'bg-success';
-                              elseif ($status === 'pending') $badge = 'bg-warning text-dark';
-                              elseif ($status === 'rejected') $badge = 'bg-danger';
-                            ?>
-                            <tr>
-                              <td class="px-0">
-                                <div class="d-flex align-items-center">
-                                  <img src="./assets/images/profile/user-1.jpg" class="rounded-circle" width="40" alt="user" />
-                                  <div class="ms-3">
-                                    <h6 class="mb-0 fw-bolder"><?= esc($full) ?></h6>
-                                    <span class="text-muted"><?= esc(date("M d, Y", strtotime($h['created_at']))) ?></span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td class="px-0"><?= esc($phaseLot) ?></td>
-                              <td class="px-0">
-                                <span class="badge <?= $badge ?>"><?= esc(ucfirst($status)) ?></span>
-                              </td>
-                            </tr>
-                          <?php endforeach; ?>
-                        <?php endif; ?>
-                      </tbody>
-                    </table>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="py-6 px-6 text-center">
-            <p>
-              © <span>Copyright</span>
-              <strong class="px-1 sitename">South Meridian Homes</strong>
-              <span>All Rights Reserved</span>
-            </p>
-          </div>
-
         </div>
       </div>
     </div>
   </div>
 
-  <script src="./assets/libs/jquery/dist/jquery.min.js"></script>
-  <script src="./assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./assets/js/sidebarmenu.js"></script>
-  <script src="./assets/js/app.min.js"></script>
-  <script src="./assets/libs/apexcharts/dist/apexcharts.min.js"></script>
-  <script src="./assets/libs/simplebar/dist/simplebar.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
+  <?php include 'superadmin_sidebar.php'; ?>
+  
+  <div class="mobile-menu-overlay"></div>
+
+  <div class="main-container">
+    <div class="pd-ltr-20">
+
+      <div class="page-header mb-20">
+        <div class="row">
+          <div class="col-md-12 col-sm-12">
+            <div class="title"><h4>Superadmin Dashboard</h4></div>
+            <div class="text-secondary">
+              Logged in as: <b>Superadmin</b> |
+              Scope: <b>All Phases</b>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP ROW -->
+      <div class="row">
+        <div class="col-lg-7 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p mb-20">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <img src="../admin/vendors/images/banner-img.png" alt="">
+              </div>
+              <div class="col-md-8">
+                <h4 class="font-20 weight-500 mb-10 text-capitalize">
+                  <div class="weight-600 font-30 text-blue">Welcome, Superadmin!</div>
+                </h4>
+                <p class="font-18 max-width-600">
+                  Live overview of all phases — homeowners, approvals, collections, expenses, active participants, and system-wide pending items.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h4 class="h5 mb-0">Quick Summary</h4>
+            </div>
+
+            <div class="mb-15">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-secondary">Pending Homeowners</span>
+                <span class="badge-soft badge-soft-warning"><?= nfmt($pending_homeowners) ?></span>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-secondary">Pending Parking Permits</span>
+                <span class="badge-soft badge-soft-warning"><?= nfmt($pending_permits) ?></span>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-secondary">Pending Finance Reports</span>
+                <span class="badge-soft badge-soft-warning"><?= nfmt($pending_reports) ?></span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span class="font-weight-bold">Total Pending Items</span>
+                <span class="badge-soft badge-soft-danger"><?= nfmt($notif_total) ?></span>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="mb-2 text-secondary">Phase Approvals</div>
+            <?php foreach ($phases as $p): ?>
+              <div class="d-flex justify-content-between mb-2">
+                <span><?= esc($p) ?></span>
+                <span class="badge-soft badge-soft-success"><?= nfmt($approved_by_phase[$p]) ?> approved</span>
+              </div>
+            <?php endforeach; ?>
+
+            <div class="mt-3">
+              <a href="user_management.php" class="text-primary font-weight-bold">Open User Management →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI CARDS -->
+      <div class="row">
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Approved Homeowners</div>
+                <div class="kpi-value"><?= nfmt($approved_homeowners) ?></div>
+              </div>
+              <div class="icon text-success"><i class="dw dw-user"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">System-wide approved records</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Total Homeowners</div>
+                <div class="kpi-value"><?= nfmt($total_homeowners) ?></div>
+              </div>
+              <div class="icon text-primary"><i class="dw dw-group"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">All statuses included</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Active Participants</div>
+                <div class="kpi-value"><?= nfmt($active_participants_30d) ?></div>
+              </div>
+              <div class="icon text-info"><i class="dw dw-analytics-21"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Distinct payers in last 30 days</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Pending Items</div>
+                <div class="kpi-value"><?= nfmt($notif_total) ?></div>
+              </div>
+              <div class="icon text-danger"><i class="dw dw-bell"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Homeowners, permits, reports</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECOND KPI ROW -->
+      <div class="row">
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Weekly Dues</div>
+                <div class="kpi-value"><?= money($dues_week) ?></div>
+              </div>
+              <div class="icon text-success"><i class="dw dw-money-1"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">
+              Change vs previous week:
+              <b class="<?= $dues_change_pct >= 0 ? 'text-success' : 'text-danger' ?>">
+                <?= $dues_change_pct >= 0 ? '+' : '' ?><?= (int)$dues_change_pct ?>%
+              </b>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Approved Rate</div>
+                <div class="kpi-value"><?= (int)$active_homeowners_pct ?>%</div>
+              </div>
+              <div class="icon text-primary"><i class="dw dw-check"></i></div>
+            </div>
+            <div class="mt-2 text-secondary"><?= nfmt($approved_homeowners) ?> of <?= nfmt($total_homeowners) ?> homeowners</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Maintenance Logs</div>
+                <div class="kpi-value"><?= nfmt($maintenance_expenses_week) ?></div>
+              </div>
+              <div class="icon text-warning"><i class="dw dw-tools"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Recorded in the last 7 days</div>
+          </div>
+        </div>
+
+        <div class="col-xl-3 col-lg-6 col-md-6 mb-30">
+          <div class="card-box pd-20 kpi-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="kpi-label">Parking Violations</div>
+                <div class="kpi-value"><?= nfmt($concerns_week) ?></div>
+              </div>
+              <div class="icon text-danger"><i class="dw dw-warning"></i></div>
+            </div>
+            <div class="mt-2 text-secondary">Issued in the last 7 days</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHART -->
+      <div class="row">
+        <div class="col-xl-12 mb-30">
+          <div class="card-box height-100-p pd-20">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h2 class="h4 mb-0">Operations Overview (Last 6 Months)</h2>
+              <span class="badge-soft badge-soft-info">Collections vs Expenses + New Homeowners</span>
+            </div>
+            <canvas id="activityChart" height="95"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHASE COMPARISON -->
+      <div class="row">
+        <div class="col-xl-12 mb-30">
+          <div class="card-box height-100-p pd-20">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h2 class="h4 mb-0">Phase Comparison</h2>
+              <span class="badge-soft badge-soft-secondary">Approved Homeowners vs Active Participants</span>
+            </div>
+            <canvas id="phaseChart" height="90"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOMEOWNERS TABLE -->
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">Latest Homeowners</h5>
+          <a class="btn btn-sm btn-outline-primary" href="user_management.php">Open User Management</a>
+        </div>
+
+        <div class="table-responsive">
+          <table id="homeownersTable" class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phase</th>
+                <th>Blk/Lot</th>
+                <th>Status</th>
+                <th>Registered</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!empty($latest_homeowners)): ?>
+                <?php foreach ($latest_homeowners as $h): ?>
+                  <?php
+                    $full = trim((string)$h['first_name'].' '.(string)$h['middle_name'].' '.(string)$h['last_name']);
+                    $status = (string)$h['status'];
+                    $badge = 'badge-soft-secondary';
+                    if ($status === 'approved') $badge = 'badge-soft-success';
+                    elseif ($status === 'pending') $badge = 'badge-soft-warning';
+                    elseif ($status === 'rejected') $badge = 'badge-soft-danger';
+                  ?>
+                  <tr>
+                    <td><?= (int)$h['id'] ?></td>
+                    <td><?= esc($full) ?></td>
+                    <td><?= esc((string)$h['phase']) ?></td>
+                    <td><?= esc((string)$h['house_lot_number']) ?></td>
+                    <td><span class="badge-soft <?= esc($badge) ?>"><?= esc(ucfirst($status)) ?></span></td>
+                    <td><?= esc((string)$h['created_at']) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <tr><td colspan="6" class="text-center text-secondary">No homeowners found.</td></tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- OFFICERS TABLE -->
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">Latest Officers / Admins</h5>
+          <a class="btn btn-sm btn-outline-success" href="phase_management.php">Open Officers Module</a>
+        </div>
+
+        <div class="table-responsive">
+          <table id="officersTable" class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Phase</th>
+                <th>Position</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!empty($latest_officers)): ?>
+                <?php foreach ($latest_officers as $a): ?>
+                  <tr>
+                    <td><?= (int)$a['id'] ?></td>
+                    <td><?= esc((string)$a['full_name']) ?></td>
+                    <td><?= esc((string)$a['email']) ?></td>
+                    <td><?= esc((string)$a['role']) ?></td>
+                    <td><?= esc((string)$a['phase']) ?></td>
+                    <td><?= esc((string)$a['position']) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <tr><td colspan="6" class="text-center text-secondary">No officer/admin records found.</td></tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footer-wrap pd-20 mb-20 card-box">
+        © Copyright South Meridian Homes All Rights Reserved
+      </div>
+    </div>
+  </div>
+
+  <script src="../admin/vendors/scripts/core.js"></script>
+  <script src="../admin/vendors/scripts/script.min.js"></script>
+  <script src="../admin/vendors/scripts/process.js"></script>
+  <script src="../admin/vendors/scripts/layout-settings.js"></script>
+
+  <script src="../admin/src/plugins/datatables/js/jquery.dataTables.min.js"></script>
+  <script src="../admin/src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
+  <script src="../admin/src/plugins/datatables/js/dataTables.responsive.min.js"></script>
+  <script src="../admin/src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
 
   <script>
-    const phases = <?= json_encode($phases) ?>;
+    $(document).ready(function () {
+      $('#homeownersTable').DataTable({
+        responsive: true,
+        pageLength: 10,
+        order: [[5, 'desc']]
+      });
+
+      $('#officersTable').DataTable({
+        responsive: true,
+        pageLength: 10,
+        order: [[0, 'desc']]
+      });
+    });
+
+    // Operations chart
+    const labels = <?= json_encode($labels) ?>;
+    const collections = <?= json_encode($chartCollections) ?>;
+    const expenses = <?= json_encode($chartExpenses) ?>;
+    const newHO = <?= json_encode($chartNewHO) ?>;
+
+    const ctx = document.getElementById('activityChart').getContext('2d');
+    new Chart(ctx, {
+      data: {
+        labels,
+        datasets: [
+          { type: 'bar',  label: 'Collections (Paid)', data: collections, borderWidth: 1 },
+          { type: 'bar',  label: 'Expenses', data: expenses, borderWidth: 1 },
+          { type: 'line', label: 'New Homeowners (Registrations)', data: newHO, borderWidth: 2, tension: 0.25, yAxisID: 'y2' }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true } },
+        scales: {
+          y:  { beginAtZero: true, title: { display: true, text: 'Amount (₱)' } },
+          y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Count' } }
+        }
+      }
+    });
+
+    // Phase comparison chart
+    const phaseLabels = <?= json_encode($phases) ?>;
     const approvedByPhase = <?= json_encode(array_values($approved_by_phase)) ?>;
     const activeByPhase = <?= json_encode(array_values($active_by_phase)) ?>;
 
-    const options = {
-      chart: { type: 'bar', height: 320, toolbar: { show: false } },
-      series: [
-        { name: 'Approved Homeowners', data: approvedByPhase },
-        { name: 'Active Participants (30 days)', data: activeByPhase }
-      ],
-      xaxis: { categories: phases },
-      plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
-      dataLabels: { enabled: false },
-      legend: { position: 'top' }
-    };
-
-    const el = document.querySelector("#sales-overview");
-    if (el) new ApexCharts(el, options).render();
+    const ctx2 = document.getElementById('phaseChart').getContext('2d');
+    new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: phaseLabels,
+        datasets: [
+          {
+            label: 'Approved Homeowners',
+            data: approvedByPhase,
+            borderWidth: 1
+          },
+          {
+            label: 'Active Participants (30 days)',
+            data: activeByPhase,
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Count' }
+          }
+        }
+      }
+    });
   </script>
 </body>
 </html>

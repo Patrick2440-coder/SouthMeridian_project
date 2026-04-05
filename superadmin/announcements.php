@@ -37,14 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   } elseif (!in_array($target, $allowedTarget, true)) {
     $err = "Invalid target phase.";
   } else {
-    // If target is ALL phases -> store as phase='Superadmin' (visible to all phases)
+    // You currently store all superadmin announcements as phase='Superadmin'
     $phase = 'Superadmin';
-
-    // Keep audience as 'all' for dashboard visibility
     $audience = 'all';
     $audience_value = null;
-
-    // end_date: allow null
     $endOrNull = ($end === '') ? null : $end;
 
     $stmt = $conn->prepare("
@@ -74,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-// List latest posted announcements (superadmin & phase-specific made by superadmin)
+// List latest posted announcements
 $rows = [];
 $stmt = $conn->prepare("
   SELECT id, phase, title, category, priority, start_date, end_date, created_at
@@ -89,244 +85,321 @@ $res = $stmt->get_result();
 while ($r = $res->fetch_assoc()) $rows[] = $r;
 $stmt->close();
 ?>
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Super Admin - Announcements</title>
-  <link rel="shortcut icon" type="image/png" href="../assets/images/logos/favicon.png" />
-  <link rel="stylesheet" href="../superadmin/assets/css/styles.min.css" />
-</head>
-<body>
-  <div class="page-wrapper" id="main-wrapper" data-layout="vertical" data-navbarbg="skin6" data-sidebartype="full"
-    data-sidebar-position="fixed" data-header-position="fixed">
+  <title>Superadmin - Announcements</title>
 
-    <!-- Topstrip -->
-    <div class="app-topstrip py-6 px-3 w-100 d-lg-flex align-items-center justify-content-between" style="background-color: #077f46;">
-      <div class="d-flex align-items-center justify-content-center gap-5 mb-2 mb-lg-0">
-        <a class="d-flex justify-content-center" href="./dashboard.php">
-          <img src="assets/images/logos/logo-wrappixel.svg" alt="" width="150">
-        </a>
-      </div>
+  <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/core.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/icon-font.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/style.css">
+
+  <style>
+    .summary-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+      background: #fff;
+      height: 100%;
+    }
+
+    .summary-number {
+      font-size: 28px;
+      font-weight: 800;
+      color: #077f46;
+      line-height: 1;
+    }
+
+    .summary-label {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+
+    .badge-soft {
+      padding: .35rem .6rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
+    .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+    .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
+    .badge-soft-danger  { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+    .badge-soft-secondary { background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; }
+
+    .mini-note {
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    textarea.form-control {
+      min-height: 160px;
+      resize: vertical;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <div class="header-left">
+      <div class="menu-icon dw dw-menu"></div>
     </div>
 
-  <!-- Sidebar Start -->
-    <!-- Sidebar Start -->
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.php" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
+    <div class="header-right">
+      <div class="user-info-dropdown">
+        <div class="dropdown">
+          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
+            <span class="user-icon">
+              <img src="../admin/vendors/images/photo1.jpg" alt="">
+            </span>
+            <span class="user-name">Superadmin</span>
           </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
+          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
+            <a class="dropdown-item" href="logs.html"><i class="dw dw-list3"></i> Activity Logs</a>
+            <a class="dropdown-item" href="../index.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
         </div>
-
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link active" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link has-arrow collapsed"
-                href="#userMgmtMenu"
-                data-bs-toggle="collapse"
-                role="button"
-                aria-expanded="false"
-                aria-controls="userMgmtMenu">
-                <i class="ti ti-users"></i>
-                <span class="hide-menu">User Management</span>
-              </a>
-
-              <ul id="userMgmtMenu" class="collapse first-level">
-                <li class="sidebar-item">
-                  <a href="./user_management.php" class="sidebar-link">
-                    <i class="ti ti-home"></i>
-                    <span class="hide-menu">Homeowners</span>
-                  </a>
-                </li>
-
-                <li class="sidebar-item">
-                  <a href="./phase_management.php" class="sidebar-link">
-                    <i class="ti ti-shield-check"></i>
-                    <span class="hide-menu">Officers</span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./access_control.php" aria-expanded="false">
-                <i class="ti ti-lock-access"></i>
-                <span class="hide-menu">Access Control</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
       </div>
-    </aside>
-    <div class="body-wrapper">
-      <header class="app-header">
-        <nav class="navbar navbar-expand-lg navbar-light">
-          <div class="navbar-collapse justify-content-end px-0">
-            <ul class="navbar-nav flex-row ms-auto align-items-center justify-content-end">
-              <li class="nav-item">
-                <a href="../index.php" class="btn btn-outline-primary">Logout</a>
-              </li>
-            </ul>
-          </div>
-        </nav>
-      </header>
-
-      <div class="body-wrapper-inner">
-        <div class="container-fluid">
-
-          <div class="card">
-            <div class="card-body">
-              <h4 class="card-title">Post Announcement</h4>
-              <p class="text-muted mb-4">Announcements posted as <b>ALL phases</b> will be visible in every phase dashboard.</p>
-
-              <?php if ($err): ?>
-                <div class="alert alert-danger"><?= esc($err) ?></div>
-              <?php endif; ?>
-              <?php if ($ok): ?>
-                <div class="alert alert-success"><?= esc($ok) ?></div>
-              <?php endif; ?>
-
-              <form method="POST" class="row g-3">
-                <div class="col-md-6">
-                  <label class="form-label">Title</label>
-                  <input type="text" name="title" class="form-control" required maxlength="255">
-                </div>
-
-                <div class="col-md-3">
-                  <label class="form-label">Category</label>
-                  <select name="category" class="form-select">
-                    <option value="general">General</option>
-                    <option value="maintenance">Maintenance</option>
-                    <option value="meeting">Meeting</option>
-                    <option value="emergency">Emergency</option>
-                  </select>
-                </div>
-
-                <div class="col-md-3">
-                  <label class="form-label">Priority</label>
-                  <select name="priority" class="form-select">
-                    <option value="normal">Normal</option>
-                    <option value="important">Important</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-
-                <div class="col-md-4">
-                  <label class="form-label">Target</label>
-                  <select name="target_phase" class="form-select">
-                    <option value="ALL">All Phases (Recommended)</option>
-                    <option value="Phase 1">Phase 1 only</option>
-                    <option value="Phase 2">Phase 2 only</option>
-                    <option value="Phase 3">Phase 3 only</option>
-                  </select>
-                </div>
-
-                <div class="col-md-4">
-                  <label class="form-label">Start Date</label>
-                  <input type="date" name="start_date" class="form-control" value="<?= esc(date('Y-m-d')) ?>" required>
-                </div>
-
-                <div class="col-md-4">
-                  <label class="form-label">End Date (optional)</label>
-                  <input type="date" name="end_date" class="form-control">
-                </div>
-
-                <div class="col-12">
-                  <label class="form-label">Message</label>
-                  <textarea name="message" class="form-control" rows="5" required></textarea>
-                </div>
-
-                <div class="col-12">
-                  <button class="btn btn-primary">
-                    <i class="ti ti-send"></i> Publish
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div class="card mt-4">
-            <div class="card-body">
-              <h4 class="card-title">Your Latest Posts</h4>
-              <div class="table-responsive mt-3">
-                <table class="table align-middle text-nowrap">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Phase</th>
-                      <th>Title</th>
-                      <th>Priority</th>
-                      <th>Dates</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php if (!$rows): ?>
-                      <tr><td colspan="6" class="text-muted">No announcements yet.</td></tr>
-                    <?php else: ?>
-                      <?php foreach ($rows as $r): ?>
-                        <tr>
-                          <td><?= (int)$r['id'] ?></td>
-                          <td><?= esc($r['phase']) ?></td>
-                          <td><?= esc($r['title']) ?></td>
-                          <td><?= esc($r['priority']) ?></td>
-                          <td>
-                            <?= esc($r['start_date']) ?>
-                            <?php if (!empty($r['end_date'])): ?> → <?= esc($r['end_date']) ?><?php endif; ?>
-                          </td>
-                          <td><?= esc($r['created_at']) ?></td>
-                        </tr>
-                      <?php endforeach; ?>
-                    <?php endif; ?>
-                  </tbody>
-                </table>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-      </div>
-
     </div>
   </div>
 
-  <script src="./assets/libs/jquery/dist/jquery.min.js"></script>
-  <script src="./assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./assets/js/sidebarmenu.js"></script>
-  <script src="./assets/js/app.min.js"></script>
-  <script src="./assets/libs/simplebar/dist/simplebar.js"></script>
+  <?php include 'superadmin_sidebar.php'; ?>
+
+  <div class="mobile-menu-overlay"></div>
+
+  <div class="main-container">
+    <div class="pd-ltr-20">
+
+      <div class="page-header mb-20">
+        <div class="row">
+          <div class="col-md-12 col-sm-12">
+            <div class="title"><h4>Announcements</h4></div>
+            <div class="text-secondary">
+              Create and manage superadmin announcements for all phase dashboards.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP ROW -->
+      <div class="row">
+        <div class="col-lg-8 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p mb-20">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <img src="../admin/vendors/images/banner-img.png" alt="">
+              </div>
+              <div class="col-md-8">
+                <h4 class="font-20 weight-500 mb-10 text-capitalize">
+                  <div class="weight-600 font-30 text-blue">Announcement Center</div>
+                </h4>
+                <p class="font-18 max-width-600">
+                  Publish important updates, maintenance notices, meetings, and emergency alerts visible across the community system.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h4 class="h5 mb-0">Quick Summary</h4>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Latest Posts Loaded</span>
+              <span class="badge-soft badge-soft-info"><?= count($rows) ?></span>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Posting Scope</span>
+              <span class="badge-soft badge-soft-success">Superadmin</span>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Recommended Target</span>
+              <span class="badge-soft badge-soft-warning">All Phases</span>
+            </div>
+
+            <div class="mt-3 mini-note">
+              Announcements posted here are intended for broad visibility across dashboards.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <?php if ($err): ?>
+        <div class="alert alert-danger"><?= esc($err) ?></div>
+      <?php endif; ?>
+
+      <?php if ($ok): ?>
+        <div class="alert alert-success"><?= esc($ok) ?></div>
+      <?php endif; ?>
+
+      <!-- POST FORM -->
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+          <div>
+            <h5 class="mb-1">Post Announcement</h5>
+            <div class="mini-note">Create a new announcement and publish it to the dashboard.</div>
+          </div>
+        </div>
+
+        <form method="POST">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Title</label>
+              <input
+                type="text"
+                name="title"
+                class="form-control"
+                required
+                maxlength="255"
+                value="<?= esc($_POST['title'] ?? '') ?>"
+              >
+            </div>
+
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Category</label>
+              <select name="category" class="form-control">
+                <option value="general" <?= (($_POST['category'] ?? '') === 'general') ? 'selected' : '' ?>>General</option>
+                <option value="maintenance" <?= (($_POST['category'] ?? '') === 'maintenance') ? 'selected' : '' ?>>Maintenance</option>
+                <option value="meeting" <?= (($_POST['category'] ?? '') === 'meeting') ? 'selected' : '' ?>>Meeting</option>
+                <option value="emergency" <?= (($_POST['category'] ?? '') === 'emergency') ? 'selected' : '' ?>>Emergency</option>
+              </select>
+            </div>
+
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Priority</label>
+              <select name="priority" class="form-control">
+                <option value="normal" <?= (($_POST['priority'] ?? '') === 'normal') ? 'selected' : '' ?>>Normal</option>
+                <option value="important" <?= (($_POST['priority'] ?? '') === 'important') ? 'selected' : '' ?>>Important</option>
+                <option value="urgent" <?= (($_POST['priority'] ?? '') === 'urgent') ? 'selected' : '' ?>>Urgent</option>
+              </select>
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Target</label>
+              <select name="target_phase" class="form-control">
+                <option value="ALL" <?= (($_POST['target_phase'] ?? 'ALL') === 'ALL') ? 'selected' : '' ?>>All Phases (Recommended)</option>
+                <option value="Phase 1" <?= (($_POST['target_phase'] ?? '') === 'Phase 1') ? 'selected' : '' ?>>Phase 1 only</option>
+                <option value="Phase 2" <?= (($_POST['target_phase'] ?? '') === 'Phase 2') ? 'selected' : '' ?>>Phase 2 only</option>
+                <option value="Phase 3" <?= (($_POST['target_phase'] ?? '') === 'Phase 3') ? 'selected' : '' ?>>Phase 3 only</option>
+              </select>
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Start Date</label>
+              <input
+                type="date"
+                name="start_date"
+                class="form-control"
+                value="<?= esc($_POST['start_date'] ?? date('Y-m-d')) ?>"
+                required
+              >
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <label class="form-label">End Date (optional)</label>
+              <input
+                type="date"
+                name="end_date"
+                class="form-control"
+                value="<?= esc($_POST['end_date'] ?? '') ?>"
+              >
+            </div>
+
+            <div class="col-12 mb-3">
+              <label class="form-label">Message</label>
+              <textarea name="message" class="form-control" rows="6" required><?= esc($_POST['message'] ?? '') ?></textarea>
+            </div>
+
+            <div class="col-12">
+              <button class="btn btn-primary">
+                <i class="dw dw-paper-plane1"></i> Publish Announcement
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- LATEST POSTS -->
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">Your Latest Posts</h5>
+          <span class="text-secondary">Showing last 20 records</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Phase</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Dates</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (!$rows): ?>
+                <tr>
+                  <td colspan="7" class="text-center text-secondary">No announcements yet.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($rows as $r): ?>
+                  <?php
+                    $priorityClass = 'badge-soft-secondary';
+                    if ($r['priority'] === 'urgent') $priorityClass = 'badge-soft-danger';
+                    elseif ($r['priority'] === 'important') $priorityClass = 'badge-soft-warning';
+                    elseif ($r['priority'] === 'normal') $priorityClass = 'badge-soft-info';
+                  ?>
+                  <tr>
+                    <td><?= (int)$r['id'] ?></td>
+                    <td><?= esc($r['phase']) ?></td>
+                    <td><?= esc($r['title']) ?></td>
+                    <td><?= esc(ucfirst($r['category'])) ?></td>
+                    <td><span class="badge-soft <?= esc($priorityClass) ?>"><?= esc(ucfirst($r['priority'])) ?></span></td>
+                    <td>
+                      <?= esc($r['start_date']) ?>
+                      <?php if (!empty($r['end_date'])): ?>
+                        → <?= esc($r['end_date']) ?>
+                      <?php endif; ?>
+                    </td>
+                    <td><?= esc($r['created_at']) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footer-wrap pd-20 mb-20 card-box">
+        © Copyright South Meridian Homes All Rights Reserved
+      </div>
+    </div>
+  </div>
+
+  <script src="../admin/vendors/scripts/core.js"></script>
+  <script src="../admin/vendors/scripts/script.min.js"></script>
+  <script src="../admin/vendors/scripts/process.js"></script>
+  <script src="../admin/vendors/scripts/layout-settings.js"></script>
 </body>
 </html>

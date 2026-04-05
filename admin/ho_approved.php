@@ -30,6 +30,35 @@ function phase_prefix(string $phase): string {
   return $n > 0 ? ('P'.$n) : 'P';
 }
 
+function file_ext(string $path): string {
+  return strtolower(pathinfo($path, PATHINFO_EXTENSION));
+}
+
+function is_image_file(string $path): bool {
+  return in_array(file_ext($path), ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
+}
+
+function is_pdf_file(string $path): bool {
+  return file_ext($path) === 'pdf';
+}
+
+function document_url(string $path): string {
+  $path = trim($path);
+  if ($path === '') return '';
+
+  $path = str_replace('\\', '/', $path);
+
+  if (preg_match('~^https?://~i', $path)) {
+    return esc($path);
+  }
+
+  if (strpos($path, 'uploads/') === 0) {
+    return esc('../' . $path);
+  }
+
+  return esc($path);
+}
+
 if (empty($_SESSION['csrf_delete_homeowner'])) {
   $_SESSION['csrf_delete_homeowner'] = bin2hex(random_bytes(32));
 }
@@ -47,6 +76,357 @@ $admin_role  = $admin['role'] ?? '';
 
 if (!isset($permissions) || !is_array($permissions)) {
   $permissions = [];
+}
+
+/* =========================
+   AJAX: VIEW HOMEOWNER PROFILE
+   ========================= */
+if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
+  $id = (int)($_GET['id'] ?? 0);
+
+  if ($id <= 0) {
+    http_response_code(400);
+    echo '<div class="p-4"><div class="alert alert-danger mb-0">Invalid homeowner ID.</div></div>';
+    exit;
+  }
+
+  if ($admin_role === 'superadmin') {
+    $stmt = $conn->prepare("
+      SELECT *
+      FROM homeowners
+      WHERE id=?
+      LIMIT 1
+    ");
+    $stmt->bind_param("i", $id);
+  } else {
+    $stmt = $conn->prepare("
+      SELECT *
+      FROM homeowners
+      WHERE id=? AND phase=?
+      LIMIT 1
+    ");
+    $stmt->bind_param("is", $id, $admin_phase);
+  }
+
+  $stmt->execute();
+  $homeowner = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$homeowner) {
+    http_response_code(404);
+    echo '<div class="p-4"><div class="alert alert-danger mb-0">Homeowner not found or access denied.</div></div>';
+    exit;
+  }
+
+  $memberStmt = $conn->prepare("
+    SELECT id, first_name, middle_name, last_name, relation
+    FROM household_members
+    WHERE homeowner_id = ?
+    ORDER BY id ASC
+  ");
+  $memberStmt->bind_param("i", $id);
+  $memberStmt->execute();
+  $memberResult = $memberStmt->get_result();
+  $householdMembers = [];
+  while ($member = $memberResult->fetch_assoc()) {
+    $householdMembers[] = $member;
+  }
+  $memberStmt->close();
+
+  $tenantStmt = $conn->prepare("
+    SELECT id, first_name, middle_name, last_name, email, contact_number,
+           house_lot_number, lease_start, lease_end, status, registered_at
+    FROM tenants
+    WHERE homeowner_id = ?
+    ORDER BY registered_at DESC, id DESC
+  ");
+  $tenantStmt->bind_param("i", $id);
+  $tenantStmt->execute();
+  $tenantResult = $tenantStmt->get_result();
+  $tenants = [];
+  while ($tenant = $tenantResult->fetch_assoc()) {
+    $tenants[] = $tenant;
+  }
+  $tenantStmt->close();
+
+  $fullName = trim(
+    ($homeowner['first_name'] ?? '') . ' ' .
+    ($homeowner['middle_name'] ?? '') . ' ' .
+    ($homeowner['last_name'] ?? '')
+  );
+
+  $displayId = trim((string)($homeowner['public_id'] ?? ''));
+  if ($displayId === '') {
+    $prefix = phase_prefix((string)($homeowner['phase'] ?? ''));
+    $displayId = $prefix . (int)$homeowner['id'];
+  }
+
+  $fullAddress = trim(implode(', ', array_filter([
+    $homeowner['phase'] ?? '',
+    $homeowner['house_lot_number'] ?? ''
+  ], fn($v) => trim((string)$v) !== '')));
+
+  $createdAt = !empty($homeowner['created_at']) ? date('F d, Y h:i A', strtotime($homeowner['created_at'])) : '-';
+  $lat = $homeowner['latitude'] ?? '';
+  $lng = $homeowner['longitude'] ?? '';
+  ?>
+  <div class="container-fluid p-4">
+    <div class="row g-4">
+      <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-body text-center">
+            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                 style="width:90px;height:90px;background:#077f46;color:#fff;font-size:32px;font-weight:700;">
+              <?= esc(strtoupper(substr((string)($homeowner['first_name'] ?? 'H'), 0, 1))) ?>
+            </div>
+            <h4 class="mb-1"><?= esc($fullName) ?></h4>
+            <div class="text-muted mb-2"><?= esc($displayId) ?></div>
+            <span class="badge bg-success"><?= esc(ucfirst((string)($homeowner['status'] ?? 'approved'))) ?></span>
+
+            <hr>
+
+            <div class="text-start small">
+              <div class="mb-2"><strong>Phase:</strong> <?= esc($homeowner['phase'] ?? '-') ?></div>
+              <div class="mb-2"><strong>House/Lot:</strong> <?= esc($homeowner['house_lot_number'] ?? '-') ?></div>
+              <div class="mb-2"><strong>Email:</strong> <?= esc($homeowner['email'] ?? '-') ?></div>
+              <div class="mb-2"><strong>Contact:</strong> <?= esc($homeowner['contact_number'] ?? '-') ?></div>
+              <div class="mb-2"><strong>Registered:</strong> <?= esc($createdAt) ?></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-8">
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Homeowner Details</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">First Name</label>
+                <div class="fw-semibold"><?= esc($homeowner['first_name'] ?? '-') ?></div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Middle Name</label>
+                <div class="fw-semibold"><?= esc($homeowner['middle_name'] ?? '-') ?></div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Last Name</label>
+                <div class="fw-semibold"><?= esc($homeowner['last_name'] ?? '-') ?></div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Email</label>
+                <div class="fw-semibold"><?= esc($homeowner['email'] ?? '-') ?></div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Contact Number</label>
+                <div class="fw-semibold"><?= esc($homeowner['contact_number'] ?? '-') ?></div>
+              </div>
+
+              <div class="col-md-12">
+                <label class="form-label text-muted small mb-1">Address</label>
+                <div class="fw-semibold"><?= esc($fullAddress !== '' ? $fullAddress : '-') ?></div>
+              </div>
+
+              <?php if (!empty($homeowner['barangay']) || !empty($homeowner['city_municipality']) || !empty($homeowner['province']) || !empty($homeowner['region']) || !empty($homeowner['zip_code']) || !empty($homeowner['country']) || !empty($homeowner['other_location_info']) || !empty($homeowner['exact_location'])): ?>
+              <div class="col-md-12">
+                <label class="form-label text-muted small mb-1">Complete Address</label>
+                <div class="fw-semibold">
+                  <?= esc(trim(implode(', ', array_filter([
+                    $homeowner['house_lot_number'] ?? '',
+                    $homeowner['barangay'] ?? '',
+                    $homeowner['city_municipality'] ?? '',
+                    $homeowner['province'] ?? '',
+                    $homeowner['region'] ?? '',
+                    $homeowner['zip_code'] ?? '',
+                    $homeowner['country'] ?? '',
+                    $homeowner['other_location_info'] ?? '',
+                    $homeowner['exact_location'] ?? ''
+                  ], fn($v) => trim((string)$v) !== '')))) ?>
+                </div>
+              </div>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Household Members</h6>
+          </div>
+          <div class="card-body">
+            <?php if (!empty($householdMembers)): ?>
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:70px;">#</th>
+                      <th>Name</th>
+                      <th style="width:180px;">Relation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($householdMembers as $index => $member): ?>
+                      <?php
+                        $memberName = trim(
+                          ($member['first_name'] ?? '') . ' ' .
+                          ($member['middle_name'] ?? '') . ' ' .
+                          ($member['last_name'] ?? '')
+                        );
+                      ?>
+                      <tr>
+                        <td><?= $index + 1 ?></td>
+                        <td><?= esc($memberName) ?></td>
+                        <td><?= esc($member['relation'] ?? '-') ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php else: ?>
+              <div class="text-muted">No household members found.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Registered Tenants</h6>
+            <small class="text-muted">List of tenants registered by this homeowner</small>
+          </div>
+          <div class="card-body">
+            <?php if (!empty($tenants)): ?>
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:70px;">#</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Contact No.</th>
+                      <th>House/Lot</th>
+                      <th>Lease Period</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($tenants as $index => $tenant): ?>
+                      <?php
+                        $tenantName = trim(
+                          ($tenant['first_name'] ?? '') . ' ' .
+                          ($tenant['middle_name'] ?? '') . ' ' .
+                          ($tenant['last_name'] ?? '')
+                        );
+                        $leaseStart = !empty($tenant['lease_start']) ? date('M d, Y', strtotime($tenant['lease_start'])) : '—';
+                        $leaseEnd   = !empty($tenant['lease_end']) ? date('M d, Y', strtotime($tenant['lease_end'])) : '—';
+                        $tenantStatus = ucfirst((string)($tenant['status'] ?? 'inactive'));
+                        $statusClass = strtolower((string)($tenant['status'] ?? 'inactive')) === 'active' ? 'success' : 'secondary';
+                      ?>
+                      <tr>
+                        <td><?= $index + 1 ?></td>
+                        <td><?= esc($tenantName) ?></td>
+                        <td><?= esc($tenant['email'] ?? '-') ?></td>
+                        <td><?= esc($tenant['contact_number'] ?? '-') ?></td>
+                        <td><?= esc($tenant['house_lot_number'] ?? '-') ?></td>
+                        <td><?= esc($leaseStart . ' to ' . $leaseEnd) ?></td>
+                        <td><span class="badge bg-<?= $statusClass ?>"><?= esc($tenantStatus) ?></span></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php else: ?>
+              <div class="text-muted">No registered tenants found for this homeowner.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Map Location</h6>
+          </div>
+          <div class="card-body">
+            <?php if ($lat !== '' && $lng !== ''): ?>
+              <div id="coverMap"
+                   data-lat="<?= esc($lat) ?>"
+                   data-lng="<?= esc($lng) ?>"
+                   style="height: 360px; border-radius: 12px; overflow: hidden;"></div>
+            <?php else: ?>
+              <div class="text-muted">No map location available.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Uploaded Documents</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-4">
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-2">Valid ID</label>
+                <?php if (!empty($homeowner['valid_id_path'])): ?>
+                  <?php $validIdPath = document_url($homeowner['valid_id_path']); ?>
+                  <div class="border rounded-3 overflow-hidden bg-light">
+                    <div class="p-2 text-center" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+                      <?php if (is_image_file($homeowner['valid_id_path'])): ?>
+                        <img src="<?= $validIdPath ?>" alt="Valid ID"
+                             style="max-width:100%; max-height:210px; object-fit:contain; cursor:pointer;"
+                             onclick="window.open('<?= $validIdPath ?>','_blank')">
+                      <?php elseif (is_pdf_file($homeowner['valid_id_path'])): ?>
+                        <iframe src="<?= $validIdPath ?>" style="width:100%; height:210px; border:0;"></iframe>
+                      <?php else: ?>
+                        <div class="text-muted">Preview not available for this file type.</div>
+                      <?php endif; ?>
+                    </div>
+                    <div class="p-2 border-top bg-white text-center">
+                      <a href="<?= $validIdPath ?>" target="_blank" class="btn btn-outline-primary btn-sm">
+                        Open Valid ID
+                      </a>
+                    </div>
+                  </div>
+                <?php else: ?>
+                  <div class="text-muted">No file uploaded.</div>
+                <?php endif; ?>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-2">Proof of Billing</label>
+                <?php if (!empty($homeowner['proof_of_billing_path'])): ?>
+                  <?php $proofPath = document_url($homeowner['proof_of_billing_path']); ?>
+                  <div class="border rounded-3 overflow-hidden bg-light">
+                    <div class="p-2 text-center" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+                      <?php if (is_image_file($homeowner['proof_of_billing_path'])): ?>
+                        <img src="<?= $proofPath ?>" alt="Proof of Billing"
+                             style="max-width:100%; max-height:210px; object-fit:contain; cursor:pointer;"
+                             onclick="window.open('<?= $proofPath ?>','_blank')">
+                      <?php elseif (is_pdf_file($homeowner['proof_of_billing_path'])): ?>
+                        <iframe src="<?= $proofPath ?>" style="width:100%; height:210px; border:0;"></iframe>
+                      <?php else: ?>
+                        <div class="text-muted">Preview not available for this file type.</div>
+                      <?php endif; ?>
+                    </div>
+                    <div class="p-2 border-top bg-white text-center">
+                      <a href="<?= $proofPath ?>" target="_blank" class="btn btn-outline-primary btn-sm">
+                        Open Proof of Billing
+                      </a>
+                    </div>
+                  </div>
+                <?php else: ?>
+                  <div class="text-muted">No file uploaded.</div>
+                <?php endif; ?>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <?php
+  exit;
 }
 
 /* =========================
@@ -103,7 +483,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
   try {
     $conn->begin_transaction();
 
-    // delete child rows first
     $stmt = $conn->prepare("DELETE FROM household_members WHERE homeowner_id=?");
     $stmt->bind_param("i", $deleteId);
     $stmt->execute();
@@ -121,7 +500,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 
     $conn->commit();
 
-    // optional cleanup of uploaded files after successful commit
     $rootPath = dirname(__DIR__) . DIRECTORY_SEPARATOR;
     foreach (['valid_id_path', 'proof_of_billing_path'] as $fileField) {
       $dbPath = trim((string)($target[$fileField] ?? ''));
@@ -194,6 +572,7 @@ $resultApproved = $sqlApproved->get_result();
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
+		.btn-action-wrap{display:flex;gap:6px;flex-wrap:wrap;}
 		.access-toast {
 		  position: fixed;
 		  top: 20px;
@@ -299,8 +678,8 @@ $resultApproved = $sqlApproved->get_result();
 										$prefix = phase_prefix($rowPhase);
 										$displayId = $prefix . (int)$row['id'];
 									}
-                  					$rowName = trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''));
-                  					$rowAddress = trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''));
+									$rowName = trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''));
+									$rowAddress = trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''));
 								?>
 								<tr id="homeownerRow<?= (int)$row['id'] ?>">
 									<td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
@@ -456,44 +835,51 @@ $resultApproved = $sqlApproved->get_result();
 
 			let coverMapInstance = null;
 
-function initCoverMapIfAny() {
-	const mapEl = document.getElementById('coverMap');
-	if (!mapEl || typeof L === 'undefined') return;
+			function destroyCoverMap() {
+				if (coverMapInstance) {
+					coverMapInstance.remove();
+					coverMapInstance = null;
+				}
+			}
 
-	const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
-	const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
-	if (!isFinite(lat) || !isFinite(lng)) return;
+			function initCoverMapIfAny() {
+				const mapEl = document.getElementById('coverMap');
+				if (!mapEl || typeof L === 'undefined') return;
 
-	destroyCoverMap();
+				const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
+				const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
+				if (!isFinite(lat) || !isFinite(lng)) return;
 
-	coverMapInstance = L.map(mapEl, {
-		center: [lat, lng],
-		zoom: 18,
-		zoomControl: true,
-		attributionControl: true
-	});
+				destroyCoverMap();
 
-	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		maxZoom: 19,
-		subdomains: ['a', 'b', 'c'],
-		attribution: '&copy; OpenStreetMap contributors'
-	}).addTo(coverMapInstance);
+				coverMapInstance = L.map(mapEl, {
+					center: [lat, lng],
+					zoom: 18,
+					zoomControl: true,
+					attributionControl: true
+				});
 
-	L.marker([lat, lng]).addTo(coverMapInstance);
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					maxZoom: 19,
+					subdomains: ['a', 'b', 'c'],
+					attribution: '&copy; OpenStreetMap contributors'
+				}).addTo(coverMapInstance);
 
-	setTimeout(function () {
-		if (coverMapInstance) {
-			coverMapInstance.invalidateSize(true);
-			coverMapInstance.setView([lat, lng], 18);
-		}
-	}, 300);
+				L.marker([lat, lng]).addTo(coverMapInstance);
 
-	setTimeout(function () {
-		if (coverMapInstance) {
-			coverMapInstance.invalidateSize(true);
-		}
-	}, 800);
-}
+				setTimeout(function () {
+					if (coverMapInstance) {
+						coverMapInstance.invalidateSize(true);
+						coverMapInstance.setView([lat, lng], 18);
+					}
+				}, 300);
+
+				setTimeout(function () {
+					if (coverMapInstance) {
+						coverMapInstance.invalidateSize(true);
+					}
+				}, 800);
+			}
 
 			$(document).on('click','.viewHomeownerBtn', function(e){
 				e.preventDefault();
@@ -503,7 +889,7 @@ function initCoverMapIfAny() {
 				content.innerHTML = `<div class="p-4 text-muted fw-semibold">Loading...</div>`;
 				modal.show();
 
-				$.get('HO-management.php', { ajax:'homeowner_profile', id:id, _:Date.now() })
+				$.get('ho_approved.php', { ajax:'homeowner_profile', id:id, _:Date.now() })
 					.done(function(html){ content.innerHTML = html; initCoverMapIfAny(); })
 					.fail(function(xhr){
 						content.innerHTML = `<div class="p-4"><div class="alert alert-danger mb-0">Failed to load profile. HTTP ${xhr.status}</div></div>`;

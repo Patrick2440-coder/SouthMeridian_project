@@ -53,7 +53,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
 
   ensure_phase_rows($conn, $phase, $SINGLE_POSITIONS);
 
-  // ================= FETCH =================
   if ($action === 'fetch') {
     $stmt = $conn->prepare("
       SELECT id, position, officer_name, officer_email, is_active
@@ -85,19 +84,11 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     foreach ($POSITIONS as $pos) {
       if ($pos === 'Board of Director') {
         $officers = $grouped[$pos] ?? [];
-        if (!$officers) {
-          $rows[] = [
-            'position' => $pos,
-            'is_multi' => 1,
-            'officers' => []
-          ];
-        } else {
-          $rows[] = [
-            'position' => $pos,
-            'is_multi' => 1,
-            'officers' => $officers
-          ];
-        }
+        $rows[] = [
+          'position' => $pos,
+          'is_multi' => 1,
+          'officers' => $officers
+        ];
       } else {
         $officer = $grouped[$pos][0] ?? ['id'=>0,'name'=>'','email'=>'','active'=>1];
         $rows[] = [
@@ -115,7 +106,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     exit;
   }
 
-  // ================= ASSIGN =================
   if ($action === 'assign') {
     $position = $_POST['position'] ?? '';
     $name     = trim($_POST['name'] ?? '');
@@ -135,7 +125,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     }
 
     if ($position === 'Board of Director') {
-      // prevent exact duplicate
       $stmt = $conn->prepare("
         SELECT id
         FROM hoa_officers
@@ -167,7 +156,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       exit;
     }
 
-    // single-seat positions
     $stmt = $conn->prepare("
       UPDATE hoa_officers
       SET officer_name=?, officer_email=?, is_active=1
@@ -183,7 +171,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
       exit;
     }
 
-    // sync admin full_name if President
     if ($position === 'President') {
       $stmt = $conn->prepare("
         UPDATE admins
@@ -200,7 +187,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     exit;
   }
 
-  // ================= TOGGLE =================
   if ($action === 'toggle') {
     $position = $_POST['position'] ?? '';
     $id = (int)($_POST['id'] ?? 0);
@@ -244,7 +230,6 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     exit;
   }
 
-  // ================= DELETE BOARD DIRECTOR =================
   if ($action === 'delete_board') {
     $id = (int)($_POST['id'] ?? 0);
     if ($id <= 0) {
@@ -273,252 +258,265 @@ if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
 $selectedPhase = $_GET['phase'] ?? 'Phase 1';
 if (!in_array($selectedPhase, ['Phase 1','Phase 2','Phase 3'], true)) $selectedPhase = 'Phase 1';
 ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
+
+// summary counts
+$totalAssigned = 0;
+$totalActive = 0;
+$totalDirectors = 0;
+
+$stmt = $conn->prepare("
+  SELECT
+    SUM(CASE WHEN officer_name IS NOT NULL AND officer_name <> '' THEN 1 ELSE 0 END) AS assigned_count,
+    SUM(CASE WHEN is_active = 1 AND officer_name IS NOT NULL AND officer_name <> '' THEN 1 ELSE 0 END) AS active_count,
+    SUM(CASE WHEN position = 'Board of Director' THEN 1 ELSE 0 END) AS director_count
+  FROM hoa_officers
+  WHERE phase=?
+");
+$stmt->bind_param("s", $selectedPhase);
+$stmt->execute();
+$summary = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$totalAssigned = (int)($summary['assigned_count'] ?? 0);
+$totalActive = (int)($summary['active_count'] ?? 0);
+$totalDirectors = (int)($summary['director_count'] ?? 0);
 ?>
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Super Admin | Phase Management</title>
-  <link rel="shortcut icon" type="image/png" href="../assets/images/logos/favicon.png" />
-  <link rel="stylesheet" href="../superadmin/assets/css/styles.min.css" />
+  <title>Superadmin - Phase Management</title>
+
+  <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/core.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/icon-font.min.css">
+  <link rel="stylesheet" type="text/css" href="../admin/vendors/styles/style.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+  <style>
+    .summary-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+      background: #fff;
+      height: 100%;
+    }
+    .summary-number {
+      font-size: 28px;
+      font-weight: 800;
+      color: #077f46;
+      line-height: 1;
+    }
+    .summary-label {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    .badge-soft {
+      padding: .35rem .6rem;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-block;
+    }
+    .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
+    .badge-soft-secondary { background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; }
+    .mini-note {
+      color: #64748b;
+      font-size: 13px;
+    }
+    .action-btns .btn {
+      margin: 2px;
+    }
+    .phase-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+  </style>
 </head>
 
 <body>
-  <div class="page-wrapper" id="main-wrapper" data-layout="vertical" data-navbarbg="skin6" data-sidebartype="full"
-    data-sidebar-position="fixed" data-header-position="fixed">
-
-    <div class="app-topstrip py-6 px-3 w-100 d-lg-flex align-items-center justify-content-between"
-      style="background-color: #077f46;">
-      <div class="d-flex align-items-center justify-content-center gap-5 mb-2 mb-lg-0">
-        <a class="d-flex justify-content-center" href="#">
-          <img src="assets/images/logos/logo-wrappixel.svg" alt="" width="150">
-        </a>
-      </div>
+  <div class="header">
+    <div class="header-left">
+      <div class="menu-icon dw dw-menu"></div>
     </div>
 
-    <!-- Sidebar Start -->
-    <!-- Sidebar Start -->
-    <aside class="left-sidebar">
-      <div>
-        <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="./dashboard.php" class="text-nowrap logo-img">
-            <img src="assets/images/logos/logo.svg" alt="" />
+    <div class="header-right">
+      <div class="user-info-dropdown">
+        <div class="dropdown">
+          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
+            <span class="user-icon">
+              <img src="../admin/vendors/images/photo1.jpg" alt="">
+            </span>
+            <span class="user-name">Superadmin</span>
           </a>
-          <div class="close-btn d-xl-none d-block sidebartoggler cursor-pointer" id="sidebarCollapse">
-            <i class="ti ti-x fs-6"></i>
+          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
+            <a class="dropdown-item" href="logs.html"><i class="dw dw-list3"></i> Activity Logs</a>
+            <a class="dropdown-item" href="../index.php"><i class="dw dw-logout"></i> Log Out</a>
           </div>
-        </div>
-
-        <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
-          <ul id="sidebarnav">
-            <li class="nav-small-cap">
-              <iconify-icon icon="solar:menu-dots-linear" class="nav-small-cap-icon fs-4"></iconify-icon>
-              <span class="hide-menu">Home</span>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link active" href="./dashboard.php" aria-expanded="false">
-                <i class="ti ti-layout-dashboard"></i>
-                <span class="hide-menu">Dashboard</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link has-arrow collapsed"
-                href="#userMgmtMenu"
-                data-bs-toggle="collapse"
-                role="button"
-                aria-expanded="false"
-                aria-controls="userMgmtMenu">
-                <i class="ti ti-users"></i>
-                <span class="hide-menu">User Management</span>
-              </a>
-
-              <ul id="userMgmtMenu" class="collapse first-level">
-                <li class="sidebar-item">
-                  <a href="./user_management.php" class="sidebar-link">
-                    <i class="ti ti-home"></i>
-                    <span class="hide-menu">Homeowners</span>
-                  </a>
-                </li>
-
-                <li class="sidebar-item">
-                  <a href="./phase_management.php" class="sidebar-link">
-                    <i class="ti ti-shield-check"></i>
-                    <span class="hide-menu">Officers</span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./access_control.php" aria-expanded="false">
-                <i class="ti ti-lock-access"></i>
-                <span class="hide-menu">Access Control</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./announcements.php" aria-expanded="false">
-                <i class="ti ti-bell"></i>
-                <span class="hide-menu">Announcements</span>
-              </a>
-            </li>
-
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="./voting.php" aria-expanded="false">
-                <i class="ti ti-checkbox"></i>
-                <span class="hide-menu">Voting Management</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <div class="body-wrapper">
-      <header class="app-header">
-        <nav class="navbar navbar-expand-lg navbar-light">
-          <ul class="navbar-nav">
-            <li class="nav-item d-block d-xl-none">
-              <a class="nav-link sidebartoggler " id="headerCollapse" href="javascript:void(0)">
-                <i class="ti ti-menu-2"></i>
-              </a>
-            </li>
-          </ul>
-          <div class="navbar-collapse justify-content-end px-0" id="navbarNav">
-            <ul class="navbar-nav flex-row ms-auto align-items-center justify-content-end">
-              <li class="nav-item dropdown">
-                <a class="nav-link " href="javascript:void(0)" id="drop2" data-bs-toggle="dropdown"
-                  aria-expanded="false">
-                  <img src="./assets/images/profile/user-1.jpg" alt="" width="35" height="35" class="rounded-circle">
-                </a>
-                <div class="dropdown-menu dropdown-menu-end dropdown-menu-animate-up" aria-labelledby="drop2">
-                  <div class="message-body">
-                    <a href="./profile.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-user fs-6"></i>
-                      <p class="mb-0 fs-3">My Profile</p>
-                    </a>
-                    <a href="./logs.html" class="d-flex align-items-center gap-2 dropdown-item">
-                      <i class="ti ti-list-check fs-6"></i>
-                      <p class="mb-0 fs-3">Activity Logs</p>
-                    </a>
-                    <a href="./authentication-login.html" class="btn btn-outline-primary mx-3 mt-2 d-block">Logout</a>
-                  </div>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </nav>
-      </header>
-
-      <div class="body-wrapper-inner">
-        <div class="container-fluid">
-
-          <div class="row mt-4">
-            <div class="col-12">
-              <div class="card bg-white shadow-sm">
-                <div class="card-body">
-                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <div>
-                      <h5 class="card-title mb-1">Phase Management</h5>
-                      <p class="text-muted mb-0">Current HOA officers per phase</p>
-                    </div>
-
-                    <div class="d-flex align-items-center gap-2">
-                      <label class="mb-0 small text-muted">Select Phase:</label>
-                      <select id="phaseSelect" class="form-select form-select-sm" style="width: 140px;">
-                        <option value="Phase 1" <?= $selectedPhase==='Phase 1'?'selected':''; ?>>Phase 1</option>
-                        <option value="Phase 2" <?= $selectedPhase==='Phase 2'?'selected':''; ?>>Phase 2</option>
-                        <option value="Phase 3" <?= $selectedPhase==='Phase 3'?'selected':''; ?>>Phase 3</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <hr class="my-3">
-
-                  <div class="table-responsive">
-                    <table class="table table-bordered align-middle mb-0">
-                      <thead class="table-light">
-                        <tr>
-                          <th style="width: 18%;">Position</th>
-                          <th>Assigned Officer</th>
-                          <th>Email</th>
-                          <th style="width: 12%;">Status</th>
-                          <th style="width: 24%;">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody id="rolesTbody"></tbody>
-                    </table>
-                  </div>
-
-                  <div id="msgBox" class="mt-3"></div>
-
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="py-6 px-6 text-center">
-            <p>
-              © <span>Copyright</span>
-              <strong class="px-1 sitename">South Meridian Homes</strong>
-              <span>All Rights Reserved</span>
-            </p>
-          </div>
-
         </div>
       </div>
     </div>
   </div>
 
+  <?php include 'superadmin_sidebar.php'; ?>
+
+  <div class="mobile-menu-overlay"></div>
+
+  <div class="main-container">
+    <div class="pd-ltr-20">
+
+      <div class="page-header mb-20">
+        <div class="row">
+          <div class="col-md-12 col-sm-12">
+            <div class="title"><h4>Phase Management</h4></div>
+            <div class="text-secondary">
+              Manage HOA officers and board members for each phase.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-lg-8 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p mb-20">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <img src="../admin/vendors/images/banner-img.png" alt="">
+              </div>
+              <div class="col-md-8">
+                <h4 class="font-20 weight-500 mb-10 text-capitalize">
+                  <div class="weight-600 font-30 text-blue">Officer Assignment Panel</div>
+                </h4>
+                <p class="font-18 max-width-600">
+                  Assign, activate, deactivate, and manage HOA officers per phase, including multiple Board of Directors entries.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12 mb-30">
+          <div class="card-box pd-20 height-100-p">
+            <div class="d-flex justify-content-between align-items-center mb-10">
+              <h4 class="h5 mb-0">Quick Summary</h4>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Selected Phase</span>
+              <span class="badge-soft badge-soft-secondary"><?= esc($selectedPhase) ?></span>
+            </div>
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Assigned Officers</span>
+              <span class="badge-soft badge-soft-success"><?= $totalAssigned ?></span>
+            </div>
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Active Officers</span>
+              <span class="badge-soft badge-soft-success"><?= $totalActive ?></span>
+            </div>
+            <div class="mb-2 d-flex justify-content-between">
+              <span class="text-secondary">Board Directors</span>
+              <span class="badge-soft badge-soft-secondary"><?= $totalDirectors ?></span>
+            </div>
+
+            <div class="mt-3 mini-note">
+              Switch phase from the table section to load another set of officers.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-box mb-30 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+          <div>
+            <h5 class="mb-1">Current HOA Officers</h5>
+            <div class="mini-note">Manage assignments and status per selected phase.</div>
+          </div>
+
+          <div class="phase-tools">
+            <label class="mb-0 text-secondary">Select Phase:</label>
+            <select id="phaseSelect" class="form-control" style="width: 150px;">
+              <option value="Phase 1" <?= $selectedPhase==='Phase 1'?'selected':''; ?>>Phase 1</option>
+              <option value="Phase 2" <?= $selectedPhase==='Phase 2'?'selected':''; ?>>Phase 2</option>
+              <option value="Phase 3" <?= $selectedPhase==='Phase 3'?'selected':''; ?>>Phase 3</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 18%;">Position</th>
+                <th>Assigned Officer</th>
+                <th>Email</th>
+                <th style="width: 12%;">Status</th>
+                <th style="width: 24%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rolesTbody"></tbody>
+          </table>
+        </div>
+
+        <div id="msgBox" class="mt-3"></div>
+      </div>
+
+      <div class="footer-wrap pd-20 mb-20 card-box">
+        © Copyright South Meridian Homes All Rights Reserved
+      </div>
+    </div>
+  </div>
+
   <!-- Assign Modal -->
-  <div class="modal fade" id="assignModal" tabindex="-1" aria-labelledby="assignModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+  <div class="modal fade" id="assignModal" tabindex="-1" role="dialog" aria-labelledby="assignModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="assignModalLabel">Assign Officer</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
         <div class="modal-body">
           <form id="assignForm">
             <input type="hidden" id="modalPositionKey" />
-            <div class="mb-3">
-              <label class="form-label">Selected Phase</label>
+            <div class="form-group">
+              <label>Selected Phase</label>
               <input type="text" class="form-control" id="modalPhase" readonly>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Position</label>
+            <div class="form-group">
+              <label>Position</label>
               <input type="text" class="form-control" id="modalPosition" readonly>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Officer Name</label>
+            <div class="form-group">
+              <label>Officer Name</label>
               <input type="text" class="form-control" id="modalOfficerName" placeholder="Type name..." required>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Officer Email</label>
+            <div class="form-group">
+              <label>Officer Email</label>
               <input type="email" class="form-control" id="modalOfficerEmail" placeholder="name@gmail.com" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">Save Assignment</button>
+            <button type="submit" class="btn btn-primary btn-block">Save Assignment</button>
           </form>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <script src="./assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./assets/js/sidebarmenu.js"></script>
-  <script src="./assets/js/app.min.js"></script>
-  <script src="./assets/libs/apexcharts/dist/apexcharts.min.js"></script>
-  <script src="./assets/libs/simplebar/dist/simplebar.js"></script>
-  <script src="./assets/js/dashboard.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
+  <script src="../admin/vendors/scripts/core.js"></script>
+  <script src="../admin/vendors/scripts/script.min.js"></script>
+  <script src="../admin/vendors/scripts/process.js"></script>
+  <script src="../admin/vendors/scripts/layout-settings.js"></script>
 
   <script>
     const msgBox = document.getElementById('msgBox');
@@ -530,8 +528,8 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
 
     function statusBadge(isActive) {
       return isActive
-        ? `<span class="badge bg-success">Active</span>`
-        : `<span class="badge bg-secondary">Not Active</span>`;
+        ? `<span class="badge badge-success">Active</span>`
+        : `<span class="badge badge-secondary">Not Active</span>`;
     }
 
     function renderRows(rows, phase) {
@@ -545,15 +543,15 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
           if (officers.length === 0) {
             const tr = document.createElement("tr");
             tr.innerHTML = `
-              <td class="fw-semibold">${r.position}</td>
+              <td class="font-weight-bold">${r.position}</td>
               <td><span class="text-muted">No assigned Board of Directors</span></td>
               <td><span class="text-muted">N/A</span></td>
-              <td><span class="badge bg-secondary">N/A</span></td>
-              <td>
+              <td><span class="badge badge-secondary">N/A</span></td>
+              <td class="action-btns">
                 <button type="button"
                   class="btn btn-sm btn-primary"
-                  data-bs-toggle="modal"
-                  data-bs-target="#assignModal"
+                  data-toggle="modal"
+                  data-target="#assignModal"
                   data-position="${r.position}"
                   data-current-name=""
                   data-current-email="">
@@ -570,13 +568,13 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
 
               const tr = document.createElement("tr");
               tr.innerHTML = `
-                <td class="fw-semibold">${idx === 0 ? r.position : ''}</td>
+                <td class="font-weight-bold">${idx === 0 ? r.position : ''}</td>
                 <td>${name ? name : `<span class="text-muted">Not assigned</span>`}</td>
                 <td>${email ? email : `<span class="text-muted">N/A</span>`}</td>
                 <td>${statusBadge(active)}</td>
-                <td>
+                <td class="action-btns">
                   <button type="button"
-                    class="btn btn-sm btn-outline-secondary me-1"
+                    class="btn btn-sm btn-outline-secondary"
                     onclick="toggleBoardActive('${phase}', ${parseInt(officer.id,10)})">
                     ${active ? 'Set Not Active' : 'Set Active'}
                   </button>
@@ -589,9 +587,9 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
 
                   ${idx === officers.length - 1 ? `
                     <button type="button"
-                      class="btn btn-sm btn-primary ms-1"
-                      data-bs-toggle="modal"
-                      data-bs-target="#assignModal"
+                      class="btn btn-sm btn-primary"
+                      data-toggle="modal"
+                      data-target="#assignModal"
                       data-position="Board of Director"
                       data-current-name=""
                       data-current-email="">
@@ -603,7 +601,6 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
               tbody.appendChild(tr);
             });
           }
-
           return;
         }
 
@@ -613,15 +610,15 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
 
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td class="fw-semibold">${r.position}</td>
+          <td class="font-weight-bold">${r.position}</td>
           <td>${name ? name : `<span class="text-muted">Not assigned</span>`}</td>
           <td>${email ? email : `<span class="text-muted">N/A</span>`}</td>
           <td>${statusBadge(active)}</td>
-          <td>
+          <td class="action-btns">
             <button type="button"
-              class="btn btn-sm btn-primary me-1"
-              data-bs-toggle="modal"
-              data-bs-target="#assignModal"
+              class="btn btn-sm btn-primary"
+              data-toggle="modal"
+              data-target="#assignModal"
               data-position="${r.position}"
               data-current-name="${name.replace(/"/g,'&quot;')}"
               data-current-email="${email.replace(/"/g,'&quot;')}">
@@ -696,17 +693,16 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
       });
 
       const assignModal = document.getElementById("assignModal");
-      assignModal.addEventListener("show.bs.modal", function (event) {
-        const btn = event.relatedTarget;
+      $('#assignModal').on('show.bs.modal', function (event) {
+        const btn = $(event.relatedTarget);
         const phase = phaseSelect.value;
-        const position = btn.getAttribute("data-position");
+        const position = btn.data("position");
 
-        document.getElementById("modalPhase").value = phase;
-        document.getElementById("modalPosition").value = position;
-        document.getElementById("modalPositionKey").value = position;
-
-        document.getElementById("modalOfficerName").value = btn.getAttribute("data-current-name") || "";
-        document.getElementById("modalOfficerEmail").value = btn.getAttribute("data-current-email") || "";
+        $("#modalPhase").val(phase);
+        $("#modalPosition").val(position);
+        $("#modalPositionKey").val(position);
+        $("#modalOfficerName").val(btn.data("current-name") || "");
+        $("#modalOfficerEmail").val(btn.data("current-email") || "");
       });
 
       document.getElementById("assignForm").addEventListener("submit", function (e) {
@@ -724,9 +720,7 @@ ensure_phase_rows($conn, $selectedPhase, $SINGLE_POSITIONS);
           }
           showMsg('success', res.message || 'Officer assigned');
           fetchPhase(phase);
-
-          const modalInstance = bootstrap.Modal.getInstance(document.getElementById("assignModal"));
-          modalInstance.hide();
+          $('#assignModal').modal('hide');
         }, 'json');
       });
     });

@@ -19,7 +19,11 @@ function safe_ext(string $name): string {
   return preg_replace('/[^a-z0-9]+/','', $ext);
 }
 
-function save_upload(string $field, string $baseDir): ?string {
+function normalize_web_path(string $path): string {
+  return str_replace('\\', '/', $path);
+}
+
+function save_upload(string $field, string $fsBaseDir, string $dbBaseDir): ?string {
   if (empty($_FILES[$field]) || $_FILES[$field]['error'] === UPLOAD_ERR_NO_FILE) return null;
   if ($_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
 
@@ -30,15 +34,29 @@ function save_upload(string $field, string $baseDir): ?string {
   $allowed = ['pdf','jpg','jpeg','png'];
   if (!in_array($ext, $allowed, true)) return null;
 
-  if (!is_dir($baseDir)) {
-    if (!mkdir($baseDir, 0777, true) && !is_dir($baseDir)) return null;
+  if (!is_dir($fsBaseDir)) {
+    if (!mkdir($fsBaseDir, 0777, true) && !is_dir($fsBaseDir)) return null;
   }
 
-  $newName = time().'_'.bin2hex(random_bytes(6)).'.'.$ext;
-  $destFs  = rtrim($baseDir,'/').'/'.$newName;
+  $newName   = time().'_'.bin2hex(random_bytes(6)).'.'.$ext;
+  $destFs    = rtrim($fsBaseDir, '/\\').DIRECTORY_SEPARATOR.$newName;
+  $destDbRel = normalize_web_path(rtrim($dbBaseDir, '/\\').'/'.$newName);
 
   if (!move_uploaded_file($tmp, $destFs)) return null;
-  return $destFs;
+  return $destDbRel;
+}
+
+function write_contract_file(string $html, string $fsBaseDir, string $dbBaseDir): ?string {
+  if (!is_dir($fsBaseDir)) {
+    if (!mkdir($fsBaseDir, 0777, true) && !is_dir($fsBaseDir)) return null;
+  }
+
+  $fileName = 'parking_contract_'.time().'_'.bin2hex(random_bytes(4)).'.html';
+  $destFs   = rtrim($fsBaseDir, '/\\').DIRECTORY_SEPARATOR.$fileName;
+  $destDb   = normalize_web_path(rtrim($dbBaseDir, '/\\').'/'.$fileName);
+
+  if (file_put_contents($destFs, $html) === false) return null;
+  return $destDb;
 }
 
 function computePermitDates(string $duration, ?string $baseStart = null): array {
@@ -320,6 +338,10 @@ $renewalWindowDays = 30;
 $activePage = basename($_SERVER['PHP_SELF']);
 $parkingOpen = in_array($activePage, ['homeowner_parking.php','homeowner_parking_permit.php'], true);
 
+$adminRootFs = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') . DIRECTORY_SEPARATOR . 'project' . DIRECTORY_SEPARATOR . 'admin';
+$parkingUploadFsRoot  = $adminRootFs . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'parking_permits';
+$contractUploadFsRoot = $adminRootFs . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'parking_contracts';
+
 /*
   Active permit
 */
@@ -450,7 +472,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permit'])) {
     $currentStatusPermit = $latestOpenCheck;
     $hasOpenRequest = true;
   } elseif ($requestRenewId > 0 && !$isRenewalRequest) {
-    // message already set above
   } else {
     $plate       = strtoupper(trim((string)($_POST['plate_no'] ?? '')));
     $vehicleType = strtolower(trim((string)($_POST['vehicle_type'] ?? '')));
@@ -480,11 +501,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permit'])) {
 
       [$previewFrom, $previewUntil] = computePermitDates($duration, $baseStart);
 
-      $dir = "uploads/parking_permits/".$hid;
-      if (!is_dir($dir)) @mkdir($dir, 0777, true);
+      $parkingFsDir = $parkingUploadFsRoot;
+      $parkingDbDir = 'uploads/parking_permits';
 
-      $vehicle_front_path = save_upload('vehicle_front', $dir);
-      $vehicle_back_path  = save_upload('vehicle_back', $dir);
+      $vehicle_front_path = save_upload('vehicle_front', $parkingFsDir, $parkingDbDir);
+      $vehicle_back_path  = save_upload('vehicle_back', $parkingFsDir, $parkingDbDir);
 
       $missing = [];
       if (!$vehicle_front_path) $missing[] = "Vehicle Front Picture";
@@ -493,11 +514,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permit'])) {
       if ($missing) {
         set_msg($msg,$msgType,"danger","Missing or invalid required uploads: ".implode(", ", $missing));
       } else {
-        $contractDir = "uploads/parking_contracts/".$hid;
-        if (!is_dir($contractDir)) @mkdir($contractDir, 0777, true);
-
-        $contractFileName = 'parking_contract_'.time().'_'.bin2hex(random_bytes(4)).'.html';
-        $contractPath = rtrim($contractDir, '/').'/'.$contractFileName;
+        $contractFsDir = $contractUploadFsRoot;
+        $contractDbDir = 'uploads/parking_contracts';
 
         $contractHtml = build_contract_html([
           'hoa_name'               => 'South Meridian Homes Salitran',
@@ -517,7 +535,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permit'])) {
           'valid_until'            => $previewUntil,
         ]);
 
-        if (file_put_contents($contractPath, $contractHtml) === false) {
+        $contractPath = write_contract_file($contractHtml, $contractFsDir, $contractDbDir);
+
+        if (!$contractPath) {
           set_msg($msg,$msgType,"danger","Failed to generate parking permit contract.");
         } else {
           $validFrom     = $previewFrom;

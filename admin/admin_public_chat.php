@@ -38,6 +38,112 @@ function esc($v){
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
+function normalizeWebPath(string $path): string {
+  $path = str_replace('\\', '/', $path);
+  $path = preg_replace('#/+#', '/', $path);
+  return $path;
+}
+
+function fixChatAttachmentPath(?string $path): string {
+  $path = trim((string)$path);
+  if ($path === '') return '';
+
+  $path = str_replace('\\', '/', $path);
+  $path = preg_replace('#/+#', '/', $path);
+
+  if (strpos($path, '../homeowner/uploads/chat_files/') === 0) {
+    return $path;
+  }
+
+  if (strpos($path, 'uploads/chat_files/') === 0) {
+    return '../homeowner/' . $path;
+  }
+
+  if (strpos($path, 'homeowner/uploads/chat_files/') !== false) {
+    $pos = strpos($path, 'homeowner/uploads/chat_files/');
+    return '../' . substr($path, $pos);
+  }
+
+  return $path;
+}
+
+function isImageMime(?string $mime): bool {
+  if (!$mime) return false;
+  return in_array(strtolower($mime), [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp'
+  ], true);
+}
+
+function uploadChatAttachment(array $file): array {
+  if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+    return ['success' => true, 'uploaded' => false];
+  }
+
+  if ($file['error'] !== UPLOAD_ERR_OK) {
+    return ['success' => false, 'message' => 'Failed to upload file.'];
+  }
+
+  if (!is_uploaded_file($file['tmp_name'])) {
+    return ['success' => false, 'message' => 'Invalid uploaded file.'];
+  }
+
+  $maxSize = 10 * 1024 * 1024; // 10MB
+  if ((int)$file['size'] > $maxSize) {
+    return ['success' => false, 'message' => 'File must not exceed 10MB.'];
+  }
+
+  $finfo = finfo_open(FILEINFO_MIME_TYPE);
+  $mime  = finfo_file($finfo, $file['tmp_name']);
+  finfo_close($finfo);
+
+  $allowed = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain'
+  ];
+
+  if (!in_array(strtolower((string)$mime), $allowed, true)) {
+    return ['success' => false, 'message' => 'Only JPG, PNG, GIF, WEBP, PDF, DOC, DOCX, XLS, XLSX, and TXT files are allowed.'];
+  }
+
+  $uploadDirFs = dirname(__DIR__) . '/homeowner/uploads/chat_files/';
+  $uploadDirWeb = '../homeowner/uploads/chat_files/';
+
+  if (!is_dir($uploadDirFs)) {
+    if (!mkdir($uploadDirFs, 0777, true) && !is_dir($uploadDirFs)) {
+      return ['success' => false, 'message' => 'Upload folder could not be created.'];
+    }
+  }
+
+  $originalName = basename((string)$file['name']);
+  $safeName = preg_replace('/[^A-Za-z0-9_\.-]/', '_', $originalName);
+  $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
+  $newName = time() . '_' . bin2hex(random_bytes(4)) . ($ext ? '.' . $ext : '');
+  $destFs = $uploadDirFs . $newName;
+
+  if (!move_uploaded_file($file['tmp_name'], $destFs)) {
+    return ['success' => false, 'message' => 'Failed to save uploaded file.'];
+  }
+
+  $webPath = normalizeWebPath($uploadDirWeb . $newName);
+
+  return [
+    'success' => true,
+    'uploaded' => true,
+    'attachment_name' => $originalName,
+    'attachment_path' => $webPath,
+    'attachment_type' => strtolower((string)$mime)
+  ];
+}
+
 /* =========================
    3) ADMIN INFO
    ========================= */
@@ -84,6 +190,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           pcm.phase,
           pcm.homeowner_id,
           pcm.message,
+          pcm.attachment_name,
+          pcm.attachment_path,
+          pcm.attachment_type,
           pcm.created_at,
           h.first_name,
           h.middle_name,
@@ -109,6 +218,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             pcm.phase,
             pcm.homeowner_id,
             pcm.message,
+            pcm.attachment_name,
+            pcm.attachment_path,
+            pcm.attachment_type,
             pcm.created_at,
             h.first_name,
             h.middle_name,
@@ -149,6 +261,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         'email' => (string)($r['email'] ?? ''),
         'lot' => (string)($r['house_lot_number'] ?? ''),
         'message' => (string)($r['message'] ?? ''),
+        'attachment_name' => (string)($r['attachment_name'] ?? ''),
+        'attachment_path' => fixChatAttachmentPath($r['attachment_path'] ?? ''),
+        'attachment_type' => (string)($r['attachment_type'] ?? ''),
+        'is_image' => isImageMime($r['attachment_type'] ?? ''),
         'created_at' => date('M d, Y h:i A', strtotime((string)$r['created_at'])),
         'is_muted' => ((int)$r['is_muted'] === 1),
         'mute_reason' => (string)($r['mute_reason'] ?? '')
@@ -275,7 +391,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             AND hom2.homeowner_id = h.id
           ORDER BY hom2.id DESC
           LIMIT 1
-        ) AS last_message
+        ) AS last_message,
+        (
+          SELECT hom3.attachment_name
+          FROM homeowner_officer_messages hom3
+          WHERE hom3.phase = ?
+            AND hom3.admin_id = ?
+            AND hom3.homeowner_id = h.id
+          ORDER BY hom3.id DESC
+          LIMIT 1
+        ) AS last_attachment_name
       FROM homeowner_officer_messages hom
       JOIN homeowners h ON h.id = hom.homeowner_id
       WHERE hom.phase = ?
@@ -283,7 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       GROUP BY h.id, h.first_name, h.middle_name, h.last_name, h.house_lot_number, h.email
       ORDER BY last_message_at DESC, h.last_name ASC, h.first_name ASC
     ");
-    $stmt->bind_param("sisi", $phase, $adminId, $phase, $adminId);
+    $stmt->bind_param("sisisi", $phase, $adminId, $phase, $adminId, $phase, $adminId);
     $stmt->execute();
     $res = $stmt->get_result();
 
@@ -295,12 +420,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         (string)($r['last_name'] ?? '')
       );
 
+      $lastMessage = (string)($r['last_message'] ?? '');
+      $lastAttachmentName = (string)($r['last_attachment_name'] ?? '');
+
+      if ($lastMessage === '' && $lastAttachmentName !== '') {
+        $lastMessage = 'Attachment: ' . $lastAttachmentName;
+      }
+
       $threads[] = [
         'homeowner_id'   => (int)$r['homeowner_id'],
         'name'           => $full,
         'email'          => (string)($r['email'] ?? ''),
         'lot'            => (string)($r['house_lot_number'] ?? ''),
-        'last_message'   => (string)($r['last_message'] ?? ''),
+        'last_message'   => $lastMessage,
         'last_message_at'=> $r['last_message_at'] ? date('M d, Y h:i A', strtotime((string)$r['last_message_at'])) : '',
         'unread_count'   => (int)($r['unread_count'] ?? 0)
       ];
@@ -341,7 +473,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($lastId > 0) {
       $stmt = $conn->prepare("
-        SELECT id, sender_type, message, created_at
+        SELECT id, sender_type, message, attachment_name, attachment_path, attachment_type, created_at
         FROM homeowner_officer_messages
         WHERE phase=?
           AND admin_id=?
@@ -353,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } else {
       $stmt = $conn->prepare("
         SELECT * FROM (
-          SELECT id, sender_type, message, created_at
+          SELECT id, sender_type, message, attachment_name, attachment_path, attachment_type, created_at
           FROM homeowner_officer_messages
           WHERE phase=?
             AND admin_id=?
@@ -375,7 +507,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         'id' => (int)$r['id'],
         'mine' => ((string)$r['sender_type'] === 'admin'),
         'sender_type' => (string)$r['sender_type'],
-        'message' => (string)$r['message'],
+        'message' => (string)($r['message'] ?? ''),
+        'attachment_name' => (string)($r['attachment_name'] ?? ''),
+        'attachment_path' => fixChatAttachmentPath($r['attachment_path'] ?? ''),
+        'attachment_type' => (string)($r['attachment_type'] ?? ''),
+        'is_image' => isImageMime($r['attachment_type'] ?? ''),
         'created_at' => date('M d, Y h:i A', strtotime((string)$r['created_at']))
       ];
     }
@@ -418,13 +554,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $message = trim((string)($_POST['message'] ?? ''));
     $message = preg_replace('/\s+/', ' ', $message);
 
+    $upload = uploadChatAttachment($_FILES['attachment'] ?? []);
+    if (!$upload['success']) {
+      echo json_encode(['success'=>false,'message'=>$upload['message']]);
+      exit;
+    }
+
+    $hasFile = !empty($upload['uploaded']);
+
     if ($homeownerId <= 0) {
       echo json_encode(['success'=>false,'message'=>'Invalid homeowner.']);
       exit;
     }
 
-    if ($message === '') {
-      echo json_encode(['success'=>false,'message'=>'Message cannot be empty.']);
+    if ($message === '' && !$hasFile) {
+      echo json_encode(['success'=>false,'message'=>'Message or attachment is required.']);
       exit;
     }
 
@@ -449,12 +593,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       exit;
     }
 
+    $attachmentName = $upload['attachment_name'] ?? null;
+    $attachmentPath = $upload['attachment_path'] ?? null;
+    $attachmentType = $upload['attachment_type'] ?? null;
+
     $stmt = $conn->prepare("
       INSERT INTO homeowner_officer_messages
-      (phase, homeowner_id, admin_id, sender_type, message, is_read_by_homeowner, is_read_by_admin)
-      VALUES (?, ?, ?, 'admin', ?, 0, 1)
+      (phase, homeowner_id, admin_id, sender_type, message, attachment_name, attachment_path, attachment_type, is_read_by_homeowner, is_read_by_admin)
+      VALUES (?, ?, ?, 'admin', ?, ?, ?, ?, 0, 1)
     ");
-    $stmt->bind_param("siis", $phase, $homeownerId, $adminId, $message);
+    $stmt->bind_param("siissss", $phase, $homeownerId, $adminId, $message, $attachmentName, $attachmentPath, $attachmentType);
     $ok = $stmt->execute();
     $stmt->close();
 
@@ -865,6 +1013,39 @@ $stmt->close();
       border-radius:16px 16px 6px 16px;
     }
 
+    .attachment-box{
+      margin-top:10px;
+    }
+
+    .attachment-image{
+      max-width:260px;
+      width:100%;
+      display:block;
+      border-radius:12px;
+      cursor:pointer;
+      background:#fff;
+      border:1px solid rgba(0,0,0,.08);
+    }
+
+    .attachment-link{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      text-decoration:none;
+      font-weight:700;
+      padding:10px 12px;
+      border-radius:12px;
+      background:#f8fafc;
+      color:#0f172a;
+      border:1px solid #dbe3ea;
+    }
+
+    .conv-row.mine .attachment-link{
+      background:rgba(255,255,255,.14);
+      color:#fff;
+      border-color:rgba(255,255,255,.24);
+    }
+
     .conversation-foot{
       padding:14px 16px;
       border-top:1px solid #e5e7eb;
@@ -877,6 +1058,13 @@ $stmt->close();
       align-items:flex-end;
     }
 
+    .reply-composer{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
     .reply-input{
       flex:1;
       min-height:52px;
@@ -887,6 +1075,57 @@ $stmt->close();
       padding:12px 14px;
       font-weight:600;
       outline:none;
+    }
+
+    .reply-tools{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .reply-tool-btn{
+      border:1px solid #dbe3ea;
+      background:#fff;
+      color:#0f172a;
+      border-radius:12px;
+      min-width:44px;
+      height:44px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      padding:0 12px;
+      font-weight:700;
+    }
+
+    .reply-selected-file{
+      display:none;
+      align-items:center;
+      gap:8px;
+      background:#f8fafc;
+      border:1px solid #dbe3ea;
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:.86rem;
+      font-weight:700;
+      max-width:100%;
+    }
+
+    .reply-selected-file-name{
+      max-width:220px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .reply-clear-file{
+      border:none;
+      background:transparent;
+      color:#dc2626;
+      cursor:pointer;
+      font-size:1rem;
+      line-height:1;
     }
 
     .reply-send{
@@ -972,6 +1211,50 @@ $stmt->close();
       color: #334155;
     }
 
+    .image-preview-modal{
+      display:none;
+      position:fixed;
+      inset:0;
+      background:rgba(15,23,42,.82);
+      z-index:12000;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+
+    .image-preview-box{
+      position:relative;
+      max-width:min(96vw, 1100px);
+      max-height:90vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .image-preview-box img{
+      max-width:100%;
+      max-height:90vh;
+      border-radius:16px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);
+      background:#fff;
+    }
+
+    .image-preview-close{
+      position:absolute;
+      top:-14px;
+      right:-14px;
+      width:42px;
+      height:42px;
+      border:none;
+      border-radius:50%;
+      background:#fff;
+      color:#111827;
+      font-size:24px;
+      line-height:1;
+      cursor:pointer;
+      box-shadow:0 8px 24px rgba(0,0,0,.25);
+    }
+
     .access-toast {
       position: fixed;
       top: 20px;
@@ -1034,6 +1317,14 @@ $stmt->close();
       .reply-send{
         min-width:50px;
         padding:0 14px;
+      }
+
+      .attachment-image{
+        max-width:210px;
+      }
+
+      .reply-selected-file-name{
+        max-width:140px;
       }
     }
   </style>
@@ -1188,20 +1479,41 @@ $stmt->close();
             </div>
 
             <div class="conversation-foot">
-              <form id="replyForm" class="reply-form">
-                <textarea
-                  id="replyMessage"
-                  class="reply-input"
-                  placeholder="Select a homeowner first..."
-                  maxlength="1000"
-                  disabled
-                  required
-                ></textarea>
+              <form id="replyForm" class="reply-form" enctype="multipart/form-data">
+                <div class="reply-composer">
+                  <textarea
+                    id="replyMessage"
+                    class="reply-input"
+                    placeholder="Select a homeowner first..."
+                    maxlength="1000"
+                    disabled
+                  ></textarea>
+
+                  <div class="reply-tools">
+                    <input type="file" id="replyAttachment" hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+                    <input type="file" id="replyCamera" hidden accept="image/*" capture="environment">
+
+                    <button type="button" class="reply-tool-btn" id="replyAttachBtn" title="Attach file" disabled>
+                      <i class="dw dw-attachment"></i>
+                    </button>
+
+                    <button type="button" class="reply-tool-btn" id="replyCameraBtn" title="Open camera" disabled>
+                      <i class="dw dw-camera"></i>
+                    </button>
+
+                    <div class="reply-selected-file" id="replySelectedFile">
+                      <i class="dw dw-paperclip"></i>
+                      <span class="reply-selected-file-name" id="replySelectedFileName"></span>
+                      <button type="button" class="reply-clear-file" id="replyClearFile">&times;</button>
+                    </div>
+                  </div>
+                </div>
+
                 <button type="submit" class="reply-send" id="replySendBtn" disabled>
                   <i class="dw dw-paper-plane1"></i>
                 </button>
               </form>
-              <div class="refresh-note mt-2">Max 1000 characters. Only you and that homeowner can see this conversation.</div>
+              <div class="refresh-note mt-2">Max 1000 characters. Only you and that homeowner can see this conversation. You may also attach image or file up to 10MB.</div>
             </div>
           </div>
         </div>
@@ -1284,6 +1596,13 @@ $stmt->close();
     </div>
   </div>
 
+  <div class="image-preview-modal" id="imagePreviewModal">
+    <div class="image-preview-box">
+      <button type="button" class="image-preview-close" id="imagePreviewClose">&times;</button>
+      <img src="" alt="Preview" id="imagePreviewFull">
+    </div>
+  </div>
+
   <script src="vendors/scripts/core.js"></script>
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
@@ -1306,6 +1625,18 @@ $stmt->close();
     const replyMessage = document.getElementById('replyMessage');
     const replySendBtn = document.getElementById('replySendBtn');
 
+    const replyAttachBtn = document.getElementById('replyAttachBtn');
+    const replyCameraBtn = document.getElementById('replyCameraBtn');
+    const replyAttachment = document.getElementById('replyAttachment');
+    const replyCamera = document.getElementById('replyCamera');
+    const replySelectedFile = document.getElementById('replySelectedFile');
+    const replySelectedFileName = document.getElementById('replySelectedFileName');
+    const replyClearFile = document.getElementById('replyClearFile');
+
+    const imagePreviewModal = document.getElementById('imagePreviewModal');
+    const imagePreviewFull = document.getElementById('imagePreviewFull');
+    const imagePreviewClose = document.getElementById('imagePreviewClose');
+
     let lastId = 0;
     let isFetching = false;
 
@@ -1324,6 +1655,52 @@ $stmt->close();
         .replaceAll("'", '&#039;');
     }
 
+    function normalizePath(path){
+      return String(path || '').replace(/\\/g, '/');
+    }
+
+    function isImageAttachment(obj){
+      const type = String(obj?.attachment_type || '').toLowerCase();
+      return ['image/jpeg','image/jpg','image/png','image/gif','image/webp'].includes(type);
+    }
+
+    function renderAttachmentHtml(obj, mine = false){
+      const path = normalizePath(obj?.attachment_path || '');
+      const name = escapeHtml(obj?.attachment_name || 'Attachment');
+      if (!path) return '';
+
+      if (isImageAttachment(obj)) {
+        return `
+          <div class="attachment-box">
+            <img src="${escapeHtml(path)}" alt="${name}" class="attachment-image previewable-image" data-src="${escapeHtml(path)}">
+          </div>
+        `;
+      }
+
+      return `
+        <div class="attachment-box">
+          <a href="${escapeHtml(path)}" target="_blank" class="attachment-link">
+            <i class="dw dw-file"></i>
+            <span>${name}</span>
+          </a>
+        </div>
+      `;
+    }
+
+    function openImagePreview(src){
+      if (!src || !imagePreviewModal || !imagePreviewFull) return;
+      imagePreviewFull.src = src;
+      imagePreviewModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeImagePreview(){
+      if (!imagePreviewModal || !imagePreviewFull) return;
+      imagePreviewModal.style.display = 'none';
+      imagePreviewFull.src = '';
+      document.body.style.overflow = '';
+    }
+
     async function postJSON(action, payload = {}) {
       const fd = new FormData();
       fd.append('action', action);
@@ -1332,6 +1709,14 @@ $stmt->close();
       const res = await fetch('admin_public_chat.php', {
         method: 'POST',
         body: fd
+      });
+      return await res.json();
+    }
+
+    async function postFormData(formData) {
+      const res = await fetch('admin_public_chat.php', {
+        method: 'POST',
+        body: formData
       });
       return await res.json();
     }
@@ -1366,7 +1751,8 @@ $stmt->close();
             }
           </div>
         </div>
-        <div class="msg-text">${escapeHtml(m.message || '')}</div>
+        <div class="msg-text">${m.message ? escapeHtml(m.message || '') : ''}</div>
+        ${renderAttachmentHtml(m)}
         ${
           m.is_muted
             ? `<div class="mute-badge">
@@ -1515,7 +1901,10 @@ $stmt->close();
             <span>•</span>
             <span>${escapeHtml(m.created_at || '')}</span>
           </div>
-          <div class="conv-bubble">${escapeHtml(m.message || '').replace(/\n/g, '<br>')}</div>
+          <div class="conv-bubble">
+            ${m.message ? escapeHtml(m.message || '').replace(/\n/g, '<br>') : ''}
+            ${renderAttachmentHtml(m, m.mine)}
+          </div>
         </div>
       `;
       return row;
@@ -1529,14 +1918,43 @@ $stmt->close();
       conversationBody.scrollTop = conversationBody.scrollHeight;
     }
 
+    function updateReplyComposerState(){
+      const enabled = !!selectedHomeownerId;
+      replyMessage.disabled = !enabled;
+      replySendBtn.disabled = !enabled;
+      replyAttachBtn.disabled = !enabled;
+      replyCameraBtn.disabled = !enabled;
+      replyMessage.placeholder = enabled ? 'Type your reply here...' : 'Select a homeowner first...';
+    }
+
+    function updateReplySelectedFileUI(file){
+      if (!file) {
+        replySelectedFile.style.display = 'none';
+        replySelectedFileName.textContent = '';
+        return;
+      }
+      replySelectedFile.style.display = 'inline-flex';
+      replySelectedFileName.textContent = file.name || 'Selected file';
+    }
+
+    function clearReplySelectedFiles(){
+      if (replyAttachment) replyAttachment.value = '';
+      if (replyCamera) replyCamera.value = '';
+      updateReplySelectedFileUI(null);
+    }
+
+    function getReplySelectedFile(){
+      if (replyCamera?.files?.length) return replyCamera.files[0];
+      if (replyAttachment?.files?.length) return replyAttachment.files[0];
+      return null;
+    }
+
     async function loadConversation(initial = false){
       if (!selectedHomeownerId) {
         conversationBody.innerHTML = '<div class="chat-empty" id="conversationEmpty">Select a homeowner from the left to view messages.</div>';
-        replyMessage.disabled = true;
-        replySendBtn.disabled = true;
-        replyMessage.placeholder = 'Select a homeowner first...';
         convTitle.textContent = 'Officer Private Chat';
         convSub.textContent = 'Select a homeowner to open the conversation.';
+        updateReplyComposerState();
         return;
       }
 
@@ -1564,9 +1982,7 @@ $stmt->close();
         convTitle.textContent = homeowner.name || 'Officer Private Chat';
         convSub.textContent = `${homeowner.lot || '—'} • ${homeowner.email || '—'}`;
 
-        replyMessage.disabled = false;
-        replySendBtn.disabled = false;
-        replyMessage.placeholder = 'Type your reply here...';
+        updateReplyComposerState();
 
         if (initial) {
           conversationBody.innerHTML = '';
@@ -1605,23 +2021,61 @@ $stmt->close();
 
       selectedHomeownerId = Number(item.getAttribute('data-homeowner-id') || 0);
       officerLastId = 0;
+      clearReplySelectedFiles();
       refreshThreadActiveState();
       loadConversation(true);
+    });
+
+    replyAttachBtn?.addEventListener('click', function(){
+      if (replyAttachBtn.disabled) return;
+      replyAttachment?.click();
+    });
+
+    replyCameraBtn?.addEventListener('click', function(){
+      if (replyCameraBtn.disabled) return;
+      replyCamera?.click();
+    });
+
+    replyAttachment?.addEventListener('change', function(){
+      if (this.files && this.files[0]) {
+        if (replyCamera) replyCamera.value = '';
+        updateReplySelectedFileUI(this.files[0]);
+      } else {
+        updateReplySelectedFileUI(getReplySelectedFile());
+      }
+    });
+
+    replyCamera?.addEventListener('change', function(){
+      if (this.files && this.files[0]) {
+        if (replyAttachment) replyAttachment.value = '';
+        updateReplySelectedFileUI(this.files[0]);
+      } else {
+        updateReplySelectedFileUI(getReplySelectedFile());
+      }
+    });
+
+    replyClearFile?.addEventListener('click', function(){
+      clearReplySelectedFiles();
     });
 
     replyForm?.addEventListener('submit', async function(e){
       e.preventDefault();
 
       const message = (replyMessage.value || '').trim();
-      if (!selectedHomeownerId || !message) return;
+      const selectedFile = getReplySelectedFile();
+
+      if (!selectedHomeownerId || (!message && !selectedFile)) return;
 
       replySendBtn.disabled = true;
 
       try {
-        const res = await postJSON('send_officer_reply', {
-          homeowner_id: selectedHomeownerId,
-          message
-        });
+        const fd = new FormData();
+        fd.append('action', 'send_officer_reply');
+        fd.append('homeowner_id', selectedHomeownerId);
+        fd.append('message', message);
+        if (selectedFile) fd.append('attachment', selectedFile);
+
+        const res = await postFormData(fd);
 
         if (!res.success) {
           openNoticeModal('Reply Failed', res.message || 'Failed to send reply.');
@@ -1629,6 +2083,7 @@ $stmt->close();
         }
 
         replyMessage.value = '';
+        clearReplySelectedFiles();
         await loadConversation(false);
         scrollConversationBottom();
         await loadThreads();
@@ -1644,6 +2099,27 @@ $stmt->close();
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         replyForm.requestSubmit();
+      }
+    });
+
+    imagePreviewClose?.addEventListener('click', closeImagePreview);
+
+    imagePreviewModal?.addEventListener('click', function(e){
+      if (e.target === imagePreviewModal) {
+        closeImagePreview();
+      }
+    });
+
+    document.addEventListener('click', function(e){
+      const img = e.target.closest('.previewable-image');
+      if (!img) return;
+      const src = img.getAttribute('data-src') || img.getAttribute('src');
+      openImagePreview(src);
+    });
+
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') {
+        closeImagePreview();
       }
     });
 
@@ -1860,6 +2336,7 @@ $stmt->close();
       }
     });
 
+    updateReplyComposerState();
     loadMessages(true);
     loadThreads();
 

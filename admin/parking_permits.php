@@ -32,20 +32,52 @@ function esc($v): string
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
-function phase_code(string $phase): string
+function normalize_asset_url(?string $path): string
 {
-    return $phase === 'Phase 1' ? 'P1' : ($phase === 'Phase 2' ? 'P2' : ($phase === 'Phase 3' ? 'P3' : 'PX'));
+    $path = trim((string)$path);
+    if ($path === '') return '';
+
+    $path = str_replace('\\', '/', $path);
+
+    if (preg_match('~^https?://~i', $path)) {
+        return $path;
+    }
+
+    $marker = '/uploads/';
+    $pos = stripos($path, $marker);
+    if ($pos !== false) {
+        return substr($path, $pos + 1);
+    }
+
+    if (stripos($path, 'uploads/') === 0) {
+        return $path;
+    }
+
+    return ltrim($path, '/');
+}
+
+function fail_flash(&$flash, &$flashType, string $msg): void
+{
+    $flash = $msg;
+    $flashType = "danger";
 }
 
 function next_permit_no(mysqli $conn, string $phase): string
 {
-    $prefix = phase_code($phase) . "-";
+    $prefixMap = [
+        'Phase 1' => 'P1-',
+        'Phase 2' => 'P2-',
+        'Phase 3' => 'P3-',
+    ];
+
+    $prefix = $prefixMap[$phase] ?? 'PX-';
 
     $stmt = $conn->prepare("
         SELECT permit_no
         FROM parking_permits
         WHERE phase = ?
           AND permit_no IS NOT NULL
+          AND permit_no <> ''
           AND permit_no LIKE CONCAT(?, '%')
         ORDER BY id DESC
         LIMIT 1
@@ -55,23 +87,13 @@ function next_permit_no(mysqli $conn, string $phase): string
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    $n = 0;
-    if ($row && !empty($row['permit_no'])) {
-        $parts = explode("-", (string)$row['permit_no']);
-        $last = end($parts);
-        if (ctype_digit((string)$last)) {
-            $n = (int)$last;
-        }
+    $nextNumber = 1;
+
+    if ($row && !empty($row['permit_no']) && preg_match('/(\d+)$/', $row['permit_no'], $m)) {
+        $nextNumber = ((int)$m[1]) + 1;
     }
 
-    $n++;
-    return $prefix . str_pad((string)$n, 3, "0", STR_PAD_LEFT);
-}
-
-function fail_flash(&$flash, &$flashType, string $msg): void
-{
-    $flash = $msg;
-    $flashType = "danger";
+    return $prefix . str_pad((string)$nextNumber, 3, '0', STR_PAD_LEFT);
 }
 
 function is_image_file(string $path): bool
@@ -92,9 +114,7 @@ $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc() ?: ['email' => '', 'full_name' => '', 'phase' => 'Phase 1', 'role' => $adminRole];
 $stmt->close();
 
-$adminEmail = (string)($me['email'] ?? '');
-$adminName  = trim((string)($me['full_name'] ?? ''));
-$myPhase    = (string)($me['phase'] ?? 'Phase 1');
+$myPhase = (string)($me['phase'] ?? 'Phase 1');
 
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
 $phase = in_array($myPhase, $allowedPhases, true) ? $myPhase : 'Phase 1';
@@ -115,7 +135,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $conn->prepare("
                     SELECT
                         id,
+                        status,
                         payment_status,
+                        permit_no,
                         vehicle_front_path,
                         vehicle_back_path
                     FROM parking_permits
@@ -130,109 +152,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$p) {
                     fail_flash($flash, $flashType, "Permit request not found or already processed.");
                 } else {
-                    $missing = [];
-                    if (empty($p['vehicle_front_path'])) $missing[] = "Vehicle Front Picture";
-                    if (empty($p['vehicle_back_path'])) $missing[] = "Vehicle Back Picture";
+                    $currentPaymentStatus = strtolower((string)($p['payment_status'] ?? 'unpaid'));
 
-                    if ($missing) {
-                        fail_flash($flash, $flashType, "Cannot approve. Missing requirements: " . implode(", ", $missing));
+                    if (!in_array($currentPaymentStatus, ['unpaid', 'failed', ''], true)) {
+                        fail_flash($flash, $flashType, "This request is already approved for payment or already paid.");
                     } else {
-                        $currentPaymentStatus = strtolower((string)($p['payment_status'] ?? 'unpaid'));
-                        $nextPaymentStatus = $currentPaymentStatus;
+                        $missing = [];
+                        if (empty($p['vehicle_front_path'])) $missing[] = "Vehicle Front Picture";
+                        if (empty($p['vehicle_back_path'])) $missing[] = "Vehicle Back Picture";
 
-                        if (in_array($currentPaymentStatus, ['', 'unpaid', 'not paid'], true)) {
-                            $nextPaymentStatus = 'for payment';
-                        }
-
-                        $stmt = $conn->prepare("
-                            UPDATE parking_permits
-                            SET payment_status=?,
-                                approved_by_admin_id=?,
-                                approved_at=NOW(),
-                                rejected_reason=NULL
-                            WHERE id=? AND phase=? AND status='pending'
-                        ");
-                        $stmt->bind_param("siis", $nextPaymentStatus, $adminId, $id, $phase);
-                        $stmt->execute();
-
-                        if ($stmt->affected_rows <= 0) {
-                            fail_flash($flash, $flashType, "Approval failed.");
+                        if ($missing) {
+                            fail_flash($flash, $flashType, "Cannot approve. Missing requirements: " . implode(", ", $missing));
                         } else {
-                            $flash = "Requirements approved. Homeowner/Tenant may now proceed to payment.";
-                            $flashType = "success";
+                            $permitNo = !empty($p['permit_no']) ? (string)$p['permit_no'] : next_permit_no($conn, $phase);
+
+                            $stmt = $conn->prepare("
+                                UPDATE parking_permits
+                                SET permit_no=?,
+                                    payment_status='for payment',
+                                    approved_by_admin_id=?,
+                                    approved_at=NOW(),
+                                    rejected_reason=NULL
+                                WHERE id=? AND phase=? AND status='pending'
+                            ");
+                            $stmt->bind_param("siis", $permitNo, $adminId, $id, $phase);
+                            $stmt->execute();
+
+                            if ($stmt->affected_rows <= 0) {
+                                fail_flash($flash, $flashType, "Approval failed.");
+                            } else {
+                                $flash = "Requirements approved. Permit no. {$permitNo} created. Homeowner/Tenant may now proceed to payment.";
+                                $flashType = "success";
+                            }
+                            $stmt->close();
                         }
-                        $stmt->close();
                     }
-                }
-            }
-        }
-
-        if ($action === 'activate') {
-            $id = (int)($_POST['id'] ?? 0);
-            $valid_from  = (string)($_POST['valid_from'] ?? '');
-            $valid_until = (string)($_POST['valid_until'] ?? '');
-
-            if ($id <= 0 || $valid_from === '' || $valid_until === '') {
-                fail_flash($flash, $flashType, "Invalid activation request.");
-            } elseif ($valid_until < $valid_from) {
-                fail_flash($flash, $flashType, "Valid Until cannot be earlier than Valid From.");
-            } else {
-                $conn->begin_transaction();
-
-                try {
-                    $stmt = $conn->prepare("
-                        SELECT
-                            id,
-                            payment_status,
-                            payment_method,
-                            permit_no
-                        FROM parking_permits
-                        WHERE id=? AND phase=? AND status='pending'
-                        LIMIT 1
-                        FOR UPDATE
-                    ");
-                    $stmt->bind_param("is", $id, $phase);
-                    $stmt->execute();
-                    $p = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-
-                    if (!$p) {
-                        throw new Exception("Permit request not found or already processed.");
-                    }
-
-                    if (strtolower((string)($p['payment_status'] ?? 'unpaid')) !== 'paid') {
-                        throw new Exception("Cannot activate. Payment is not yet marked as paid.");
-                    }
-
-                    $permitNo = !empty($p['permit_no']) ? (string)$p['permit_no'] : next_permit_no($conn, $phase);
-
-                    $stmt = $conn->prepare("
-                        UPDATE parking_permits
-                        SET status='active',
-                            permit_no=?,
-                            valid_from=?,
-                            valid_until=?,
-                            approved_by_admin_id=?,
-                            approved_at=NOW(),
-                            rejected_reason=NULL,
-                            revoked_reason=NULL
-                        WHERE id=? AND phase=? AND status='pending'
-                    ");
-                    $stmt->bind_param("sssiis", $permitNo, $valid_from, $valid_until, $adminId, $id, $phase);
-                    $stmt->execute();
-
-                    if ($stmt->affected_rows <= 0) {
-                        $stmt->close();
-                        throw new Exception("Activation failed.");
-                    }
-                    $stmt->close();
-
-                    $conn->commit();
-                    $flash = "Permit activated and issued (#{$permitNo}).";
-                    $flashType = "success";
-                } catch (Throwable $e) {
-                    $conn->rollback();
-                    fail_flash($flash, $flashType, $e->getMessage());
                 }
             }
         }
@@ -245,23 +199,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 fail_flash($flash, $flashType, "Reject reason is required.");
             } else {
                 $stmt = $conn->prepare("
-                    UPDATE parking_permits
-                    SET status='rejected',
-                        rejected_reason=?,
-                        approved_by_admin_id=?,
-                        approved_at=NOW()
+                    SELECT payment_status
+                    FROM parking_permits
                     WHERE id=? AND phase=? AND status='pending'
+                    LIMIT 1
                 ");
-                $stmt->bind_param("siis", $reason, $adminId, $id, $phase);
+                $stmt->bind_param("is", $id, $phase);
                 $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
 
-                if ($stmt->affected_rows <= 0) {
+                if (!$row) {
                     fail_flash($flash, $flashType, "Permit request not found or already processed.");
                 } else {
-                    $flash = "Permit request rejected.";
-                    $flashType = "success";
+                    $currentPaymentStatus = strtolower((string)($row['payment_status'] ?? 'unpaid'));
+
+                    if (!in_array($currentPaymentStatus, ['unpaid', 'failed', ''], true)) {
+                        fail_flash($flash, $flashType, "Only fresh requests can be rejected.");
+                    } else {
+                        $stmt = $conn->prepare("
+                            UPDATE parking_permits
+                            SET status='rejected',
+                                rejected_reason=?,
+                                approved_by_admin_id=?,
+                                approved_at=NOW()
+                            WHERE id=? AND phase=? AND status='pending'
+                        ");
+                        $stmt->bind_param("siis", $reason, $adminId, $id, $phase);
+                        $stmt->execute();
+
+                        if ($stmt->affected_rows <= 0) {
+                            fail_flash($flash, $flashType, "Permit request not found or already processed.");
+                        } else {
+                            $flash = "Permit request rejected.";
+                            $flashType = "success";
+                        }
+                        $stmt->close();
+                    }
                 }
+            }
+        }
+
+        if ($action === 'delete_permit') {
+            $id = (int)($_POST['id'] ?? 0);
+
+            if ($id <= 0) {
+                fail_flash($flash, $flashType, "Invalid delete request.");
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT payment_status
+                    FROM parking_permits
+                    WHERE id=? AND phase=? AND status='pending'
+                    LIMIT 1
+                ");
+                $stmt->bind_param("is", $id, $phase);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
                 $stmt->close();
+
+                if (!$row) {
+                    fail_flash($flash, $flashType, "Permit not found.");
+                } else {
+                    $currentPaymentStatus = strtolower((string)($row['payment_status'] ?? 'unpaid'));
+
+                    if (!in_array($currentPaymentStatus, ['for payment', 'paid'], true)) {
+                        fail_flash($flash, $flashType, "Only approved or paid pending permits can be deleted.");
+                    } else {
+                        $stmt = $conn->prepare("
+                            DELETE FROM parking_permits
+                            WHERE id=? AND phase=? AND status='pending'
+                            LIMIT 1
+                        ");
+                        $stmt->bind_param("is", $id, $phase);
+                        $stmt->execute();
+
+                        if ($stmt->affected_rows <= 0) {
+                            fail_flash($flash, $flashType, "Delete failed.");
+                        } else {
+                            $flash = "Permit deleted successfully.";
+                            $flashType = "success";
+                        }
+                        $stmt->close();
+                    }
+                }
             }
         }
 
@@ -545,14 +565,14 @@ $stmt->close();
                 <li><b>Picture of Vehicle (Back)</b></li>
             </ul>
             <div class="req-note">
-                Note: Initial approval only checks the required vehicle photos. Online payments update the permit to paid automatically after successful checkout.
+                Note: Admin checks requirements first. If approved, the request stays pending while waiting for payment.
             </div>
         </div>
 
         <div class="card-box mb-30 p-3">
             <ul class="nav nav-tabs" role="tablist">
                 <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabPending" role="tab">Pending Requests (<?= count($pendingRows) ?>)</a></li>
-                <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabActive" role="tab">Active Permits (<?= count($activeRows) ?>)</a></li>
+                <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabActive" role="tab">Permits (<?= count($activeRows) ?>)</a></li>
                 <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabAll" role="tab">All Permits</a></li>
             </ul>
 
@@ -594,14 +614,15 @@ $stmt->close();
                                 $payBadge = 'badge-soft-warning';
                                 if ($pay === 'paid') $payBadge = 'badge-soft-success';
                                 elseif ($pay === 'failed') $payBadge = 'badge-soft-danger';
-                                elseif (in_array($pay, ['waived', 'for payment', 'for verification'], true)) $payBadge = 'badge-soft-info';
+                                elseif (in_array($pay, ['waived', 'for payment'], true)) $payBadge = 'badge-soft-info';
 
+                                $isFreshRequest = in_array($pay, ['unpaid', 'failed', ''], true);
+                                $showDeleteOnly = in_array($pay, ['for payment', 'paid'], true);
                                 $canApprove = ($missingCount === 0);
-                                $canActivate = ($pay === 'paid');
 
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
-                                    'permit_no' => $r['permit_no'] ?? '—',
+                                    'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
                                     'homeowner' => $name,
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
@@ -654,51 +675,22 @@ $stmt->close();
 
                                         <button class="btn btn-sm btn-outline-primary btnReq"
                                                 data-json='<?= esc(json_encode([
-                                                    "Picture of Vehicle (Front)" => $r['vehicle_front_path'] ?? "",
-                                                    "Picture of Vehicle (Back)" => $r['vehicle_back_path'] ?? "",
+                                                    "Picture of Vehicle (Front)" => normalize_asset_url($r['vehicle_front_path'] ?? ""),
+                                                    "Picture of Vehicle (Back)" => normalize_asset_url($r['vehicle_back_path'] ?? ""),
                                                 ], JSON_UNESCAPED_SLASHES)) ?>'
+                                                data-id="<?= (int)$r['id'] ?>"
                                                 data-name="<?= esc($name) ?>"
                                                 data-plate="<?= esc($r['plate_no'] ?? '') ?>"
                                                 data-payment="<?= esc($r['payment_status'] ?? 'unpaid') ?>"
-                                                data-method="<?= esc($r['payment_method'] ?? '') ?>">
+                                                data-method="<?= esc($r['payment_method'] ?? '') ?>"
+                                                data-can-approve="<?= $canApprove ? '1' : '0' ?>"
+                                                data-is-fresh="<?= $isFreshRequest ? '1' : '0' ?>"
+                                                data-show-delete="<?= $showDeleteOnly ? '1' : '0' ?>">
                                             <i class="dw dw-file"></i> Requirements
-                                        </button>
-
-                                        <button class="btn btn-sm btn-success btnApprove"
-                                                data-id="<?= (int)$r['id'] ?>"
-                                                data-name="<?= esc($name) ?>"
-                                                data-plate="<?= esc($r['plate_no'] ?? '') ?>"
-                                                data-payment="<?= esc($r['payment_status'] ?? 'unpaid') ?>"
-                                                <?= $canApprove ? '' : 'disabled title="Complete required documents first."' ?>>
-                                            <i class="dw dw-check"></i> Approve
-                                        </button>
-
-                                        <?php if ($canActivate): ?>
-                                            <button class="btn btn-sm btn-primary btnActivate"
-                                                    data-id="<?= (int)$r['id'] ?>"
-                                                    data-name="<?= esc($name) ?>"
-                                                    data-plate="<?= esc($r['plate_no'] ?? '') ?>"
-                                                    data-payment="<?= esc($r['payment_status'] ?? 'unpaid') ?>">
-                                                <i class="dw dw-shield"></i> Activate
-                                            </button>
-                                        <?php else: ?>
-                                            <button class="btn btn-sm btn-primary" disabled title="Payment must be marked as paid before activation.">
-                                                <i class="dw dw-shield"></i> Activate
-                                            </button>
-                                        <?php endif; ?>
-
-                                        <button class="btn btn-sm btn-danger btnReject"
-                                                data-id="<?= (int)$r['id'] ?>"
-                                                data-name="<?= esc($name) ?>"
-                                                data-plate="<?= esc($r['plate_no'] ?? '') ?>">
-                                            <i class="dw dw-delete-3"></i> Reject
                                         </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$pendingRows): ?>
-                                <tr><td colspan="9" class="text-center text-secondary">No pending permit requests.</td></tr>
-                            <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -737,7 +729,7 @@ $stmt->close();
 
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
-                                    'permit_no' => $r['permit_no'] ?? '—',
+                                    'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
                                     'homeowner' => $name,
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
@@ -761,7 +753,7 @@ $stmt->close();
                                 ?>
                                 <tr>
                                     <td><?= (int)$r['id'] ?></td>
-                                    <td><span class="badge-soft badge-soft-info"><?= esc($r['permit_no'] ?? '—') ?></span></td>
+                                    <td><span class="badge-soft badge-soft-info"><?= esc(!empty($r['permit_no']) ? $r['permit_no'] : '—') ?></span></td>
                                     <td><?= esc($name) ?></td>
                                     <td><?= esc($r['plate_no'] ?? '') ?></td>
                                     <td><?= esc(ucfirst((string)($r['vehicle_type'] ?? ''))) ?></td>
@@ -792,9 +784,6 @@ $stmt->close();
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$activeRows): ?>
-                                <tr><td colspan="8" class="text-center text-secondary">No active permits.</td></tr>
-                            <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -836,13 +825,13 @@ $stmt->close();
                                 $payBadge = 'badge-soft-warning';
                                 if ($pay === 'paid') $payBadge = 'badge-soft-success';
                                 elseif ($pay === 'failed') $payBadge = 'badge-soft-danger';
-                                elseif (in_array($pay, ['waived', 'for payment', 'for verification'], true)) $payBadge = 'badge-soft-info';
+                                elseif (in_array($pay, ['waived', 'for payment'], true)) $payBadge = 'badge-soft-info';
 
                                 $valid = trim((string)($r['valid_from'] ?? '')) . ' → ' . trim((string)($r['valid_until'] ?? ''));
 
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
-                                    'permit_no' => $r['permit_no'] ?? '—',
+                                    'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
                                     'homeowner' => $name,
                                     'email' => $r['ho_email'] ?? '',
                                     'house_lot_number' => $r['house_lot_number'] ?? '',
@@ -866,7 +855,7 @@ $stmt->close();
                                 ?>
                                 <tr>
                                     <td><?= (int)$r['id'] ?></td>
-                                    <td><?= esc($r['permit_no'] ?? '—') ?></td>
+                                    <td><?= esc(!empty($r['permit_no']) ? $r['permit_no'] : '—') ?></td>
                                     <td><?= esc($name) ?></td>
                                     <td><?= esc($r['plate_no'] ?? '') ?></td>
                                     <td><?= esc(ucfirst((string)($r['vehicle_type'] ?? ''))) ?></td>
@@ -885,9 +874,6 @@ $stmt->close();
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$allRows): ?>
-                                <tr><td colspan="10" class="text-center text-secondary">No permits found.</td></tr>
-                            <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -914,6 +900,7 @@ $stmt->close();
                 <div class="text-secondary mb-2" id="reqInfo"></div>
                 <div class="text-secondary mb-3" id="reqPaymentInfo"></div>
                 <div id="reqList"></div>
+                <div class="mt-3" id="reqActionArea"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
@@ -950,41 +937,11 @@ $stmt->close();
             <div class="modal-body">
                 <div class="text-secondary mb-2" id="approveInfo"></div>
                 <div class="alert alert-info mb-0">
-                    This approves the submitted requirements only and allows the homeowner/tenant to proceed to payment.
+                    This approves the submitted requirements, generates the permit number, and sends the homeowner/tenant to payment while the request remains pending.
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="submit" class="btn btn-success">Approve Requirements</button>
-                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="modal fade" id="modalActivate" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <form method="POST" class="modal-content">
-            <input type="hidden" name="csrf_token" value="<?= esc($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="action" value="activate">
-            <input type="hidden" name="id" id="activateId">
-            <div class="modal-header">
-                <h5 class="modal-title">Activate Permit</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span>&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="text-secondary mb-2" id="activateInfo"></div>
-                <div class="form-group">
-                    <label>Valid From</label>
-                    <input type="date" name="valid_from" id="activateValidFrom" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>Valid Until</label>
-                    <input type="date" name="valid_until" id="activateValidUntil" class="form-control" required>
-                </div>
-                <div class="alert alert-info mb-0">Permit number will be auto-generated per phase in format like P1-001.</div>
-            </div>
-            <div class="modal-footer">
-                <button type="submit" class="btn btn-primary">Activate & Issue</button>
+                <button type="submit" class="btn btn-success">Approve</button>
                 <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
             </div>
         </form>
@@ -1010,6 +967,30 @@ $stmt->close();
             </div>
             <div class="modal-footer">
                 <button type="submit" class="btn btn-danger">Reject</button>
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDeletePermit" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <form method="POST" class="modal-content">
+            <input type="hidden" name="csrf_token" value="<?= esc($_SESSION['csrf_token']) ?>">
+            <input type="hidden" name="action" value="delete_permit">
+            <input type="hidden" name="id" id="deletePermitId">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Permit</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-secondary mb-2" id="deletePermitInfo"></div>
+                <div class="alert alert-warning mb-0">
+                    This will permanently delete the pending permit request.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-danger">Delete Permit</button>
                 <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
             </div>
         </form>
@@ -1193,26 +1174,49 @@ async function ensureDataTablesThenInit() {
         }
 
         if (jQuery.fn.DataTable) {
-            const dtPending = $('#tblPending').DataTable({
-                responsive: true,
-                pageLength: 10,
-                order: [],
-                columnDefs: [{ orderable: false, targets: 8 }]
-            });
+            let dtPending, dtActive, dtAll;
 
-            const dtActive = $('#tblActive').DataTable({
-                responsive: true,
-                pageLength: 10,
-                order: [],
-                columnDefs: [{ orderable: false, targets: 7 }]
-            });
+            if (!$.fn.DataTable.isDataTable('#tblPending')) {
+                dtPending = $('#tblPending').DataTable({
+                    responsive: true,
+                    pageLength: 10,
+                    order: [],
+                    columnDefs: [{ orderable: false, targets: 8 }],
+                    language: {
+                        emptyTable: "No pending permit requests."
+                    }
+                });
+            } else {
+                dtPending = $('#tblPending').DataTable();
+            }
 
-            const dtAll = $('#tblAll').DataTable({
-                responsive: true,
-                pageLength: 10,
-                order: [],
-                columnDefs: [{ orderable: false, targets: 9 }]
-            });
+            if (!$.fn.DataTable.isDataTable('#tblActive')) {
+                dtActive = $('#tblActive').DataTable({
+                    responsive: true,
+                    pageLength: 10,
+                    order: [],
+                    columnDefs: [{ orderable: false, targets: 7 }],
+                    language: {
+                        emptyTable: "No permits found."
+                    }
+                });
+            } else {
+                dtActive = $('#tblActive').DataTable();
+            }
+
+            if (!$.fn.DataTable.isDataTable('#tblAll')) {
+                dtAll = $('#tblAll').DataTable({
+                    responsive: true,
+                    pageLength: 10,
+                    order: [],
+                    columnDefs: [{ orderable: false, targets: 9 }],
+                    language: {
+                        emptyTable: "No permits found."
+                    }
+                });
+            } else {
+                dtAll = $('#tblAll').DataTable();
+            }
 
             $('#filterPendingName, #filterPendingPlate').on('keyup change', function() {
                 dtPending.search(
@@ -1232,13 +1236,11 @@ async function ensureDataTablesThenInit() {
                 ).draw();
             });
         } else {
-            console.warn('DataTables plugin not loaded. Using simple fallback filter.');
             simpleTableFilter('tblPending', 'filterPendingName', 'filterPendingPlate');
             simpleTableFilter('tblActive', 'filterActiveName', 'filterActivePlate');
             simpleTableFilter('tblAll', 'filterAllName', 'filterAllPlate');
         }
     } catch (e) {
-        console.warn('CDN fallback for DataTables failed. Using simple fallback filter.', e);
         simpleTableFilter('tblPending', 'filterPendingName', 'filterPendingPlate');
         simpleTableFilter('tblActive', 'filterActiveName', 'filterActivePlate');
         simpleTableFilter('tblAll', 'filterAllName', 'filterAllPlate');
@@ -1253,17 +1255,20 @@ $(function() {
         try {
             data = JSON.parse($(this).attr('data-json'));
         } catch (e) {
-            console.error('Invalid details JSON:', e);
             data = {};
         }
         openDetailsModal(data);
     });
 
     $(document).on('click', '.btnReq', function() {
+        const id = $(this).data('id');
         const name = $(this).data('name');
         const plate = $(this).data('plate');
-        const payment = $(this).data('payment') || 'unpaid';
+        const payment = String($(this).data('payment') || 'unpaid').toLowerCase();
         const method = $(this).data('method') || '—';
+        const canApprove = String($(this).data('can-approve')) === '1';
+        const isFresh = String($(this).data('is-fresh')) === '1';
+        const showDelete = String($(this).data('show-delete')) === '1';
 
         $('#reqInfo').text(`Homeowner: ${name} • Plate: ${plate}`);
         $('#reqPaymentInfo').html(`<b>Payment Status:</b> ${payment} &nbsp;&nbsp; <b>Method:</b> ${method}`);
@@ -1272,7 +1277,6 @@ $(function() {
         try {
             data = JSON.parse($(this).attr('data-json'));
         } catch (e) {
-            console.error('Invalid requirements JSON:', e);
             data = {};
         }
 
@@ -1304,41 +1308,78 @@ $(function() {
 
         html += '</tbody></table></div>';
         $('#reqList').html(html);
+
+        let actionHtml = '';
+
+        if (isFresh) {
+            if (canApprove) {
+                actionHtml += `
+                    <button type="button"
+                            class="btn btn-success btnOpenApproveFromReq mr-2"
+                            data-id="${id}"
+                            data-name="${name}"
+                            data-plate="${plate}">
+                        <i class="dw dw-check"></i> Approve
+                    </button>
+                `;
+            } else {
+                actionHtml += `
+                    <button type="button" class="btn btn-success mr-2" disabled>
+                        <i class="dw dw-check"></i> Approve
+                    </button>
+                `;
+            }
+
+            actionHtml += `
+                <button type="button"
+                        class="btn btn-danger btnOpenRejectFromReq"
+                        data-id="${id}"
+                        data-name="${name}"
+                        data-plate="${plate}">
+                    <i class="dw dw-delete-3"></i> Reject
+                </button>
+            `;
+        } else if (showDelete) {
+            actionHtml += `
+                <button type="button"
+                        class="btn btn-danger btnOpenDeletePermit"
+                        data-id="${id}"
+                        data-name="${name}"
+                        data-plate="${plate}">
+                    <i class="dw dw-trash"></i> Delete Permit
+                </button>
+            `;
+        } else {
+            actionHtml += `
+                <div class="alert alert-info mb-0">
+                    No available action for this request.
+                </div>
+            `;
+        }
+
+        $('#reqActionArea').html(actionHtml);
         $('#modalReq').modal('show');
     });
 
-    $(document).on('click', '.btnApprove:not([disabled])', function() {
+    $(document).on('click', '.btnOpenApproveFromReq', function() {
+        $('#modalReq').modal('hide');
         $('#approveId').val($(this).data('id'));
         $('#approveInfo').text(`Homeowner: ${$(this).data('name')} • Plate: ${$(this).data('plate')}`);
         $('#modalApprove').modal('show');
     });
 
-    $(document).on('click', '.btnActivate', function() {
-        const payment = String($(this).data('payment') || '').toLowerCase();
-
-        if (payment !== 'paid') {
-            alert('This permit cannot be activated yet because payment is not completed.');
-            return;
-        }
-
-        const todayObj = new Date();
-        const today = todayObj.toISOString().split('T')[0];
-
-        const nextYearObj = new Date(todayObj);
-        nextYearObj.setFullYear(nextYearObj.getFullYear() + 1);
-        const nextYearDate = nextYearObj.toISOString().split('T')[0];
-
-        $('#activateId').val($(this).data('id'));
-        $('#activateInfo').text(`Homeowner: ${$(this).data('name')} • Plate: ${$(this).data('plate')} • Payment: ${payment}`);
-        $('#activateValidFrom').val(today);
-        $('#activateValidUntil').val(nextYearDate);
-        $('#modalActivate').modal('show');
-    });
-
-    $(document).on('click', '.btnReject', function() {
+    $(document).on('click', '.btnOpenRejectFromReq', function() {
+        $('#modalReq').modal('hide');
         $('#rejectId').val($(this).data('id'));
         $('#rejectInfo').text(`Homeowner: ${$(this).data('name')} • Plate: ${$(this).data('plate')}`);
         $('#modalReject').modal('show');
+    });
+
+    $(document).on('click', '.btnOpenDeletePermit', function() {
+        $('#modalReq').modal('hide');
+        $('#deletePermitId').val($(this).data('id'));
+        $('#deletePermitInfo').text(`Homeowner: ${$(this).data('name')} • Plate: ${$(this).data('plate')}`);
+        $('#modalDeletePermit').modal('show');
     });
 
     $(document).on('click', '.btnRevoke', function() {

@@ -16,6 +16,112 @@ require_once 'tenant_module_guard.php';
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
+function normalizeWebPath(string $path): string {
+  $path = str_replace('\\', '/', $path);
+  $path = preg_replace('#/+#', '/', $path);
+  return $path;
+}
+
+function fixChatAttachmentPath(?string $path): string {
+  $path = trim((string)$path);
+  if ($path === '') return '';
+
+  $path = str_replace('\\', '/', $path);
+  $path = preg_replace('#/+#', '/', $path);
+
+  if (strpos($path, '../homeowner/uploads/chat_files/') === 0) {
+    return $path;
+  }
+
+  if (strpos($path, 'uploads/chat_files/') === 0) {
+    return '../homeowner/' . $path;
+  }
+
+  if (strpos($path, 'homeowner/uploads/chat_files/') !== false) {
+    $pos = strpos($path, 'homeowner/uploads/chat_files/');
+    return '../' . substr($path, $pos);
+  }
+
+  return $path;
+}
+
+function isImageMime(?string $mime): bool {
+  if (!$mime) return false;
+  return in_array(strtolower($mime), [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp'
+  ], true);
+}
+
+function uploadChatAttachment(array $file): array {
+  if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+    return ['success' => true, 'uploaded' => false];
+  }
+
+  if ($file['error'] !== UPLOAD_ERR_OK) {
+    return ['success' => false, 'message' => 'Failed to upload file.'];
+  }
+
+  if (!is_uploaded_file($file['tmp_name'])) {
+    return ['success' => false, 'message' => 'Invalid uploaded file.'];
+  }
+
+  $maxSize = 10 * 1024 * 1024; // 10MB
+  if ((int)$file['size'] > $maxSize) {
+    return ['success' => false, 'message' => 'File must not exceed 10MB.'];
+  }
+
+  $finfo = finfo_open(FILEINFO_MIME_TYPE);
+  $mime  = finfo_file($finfo, $file['tmp_name']);
+  finfo_close($finfo);
+
+  $allowed = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain'
+  ];
+
+  if (!in_array(strtolower((string)$mime), $allowed, true)) {
+    return ['success' => false, 'message' => 'Only JPG, PNG, GIF, WEBP, PDF, DOC, DOCX, XLS, XLSX, and TXT files are allowed.'];
+  }
+
+  $uploadDirFs = __DIR__ . '/uploads/chat_files/';
+  $uploadDirWeb = '../homeowner/uploads/chat_files/';
+
+  if (!is_dir($uploadDirFs)) {
+    if (!mkdir($uploadDirFs, 0777, true) && !is_dir($uploadDirFs)) {
+      return ['success' => false, 'message' => 'Upload folder could not be created.'];
+    }
+  }
+
+  $originalName = basename((string)$file['name']);
+  $safeName = preg_replace('/[^A-Za-z0-9_\.-]/', '_', $originalName);
+  $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
+  $newName = time() . '_' . bin2hex(random_bytes(4)) . ($ext ? '.' . $ext : '');
+  $destFs = $uploadDirFs . $newName;
+
+  if (!move_uploaded_file($file['tmp_name'], $destFs)) {
+    return ['success' => false, 'message' => 'Failed to save uploaded file.'];
+  }
+
+  $webPath = normalizeWebPath($uploadDirWeb . $newName);
+
+  return [
+    'success' => true,
+    'uploaded' => true,
+    'attachment_name' => $originalName,
+    'attachment_path' => $webPath,
+    'attachment_type' => strtolower((string)$mime)
+  ];
+}
+
 $isTenant = ($_SESSION['role'] === 'tenant');
 $tenant = null;
 $user = null;
@@ -215,8 +321,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $message = trim((string)($_POST['message'] ?? ''));
     $message = preg_replace('/\s+/', ' ', $message);
 
-    if ($message === '') {
-      echo json_encode(['success'=>false,'message'=>'Message cannot be empty.']);
+    $upload = uploadChatAttachment($_FILES['attachment'] ?? []);
+    if (!$upload['success']) {
+      echo json_encode(['success'=>false,'message'=>$upload['message']]);
+      exit;
+    }
+
+    $hasFile = !empty($upload['uploaded']);
+
+    if ($message === '' && !$hasFile) {
+      echo json_encode(['success'=>false,'message'=>'Message or attachment is required.']);
       exit;
     }
 
@@ -244,11 +358,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       exit;
     }
 
+    $attachmentName = $upload['attachment_name'] ?? null;
+    $attachmentPath = $upload['attachment_path'] ?? null;
+    $attachmentType = $upload['attachment_type'] ?? null;
+
     $stmt = $conn->prepare("
-      INSERT INTO public_chat_messages (phase, homeowner_id, message)
-      VALUES (?,?,?)
+      INSERT INTO public_chat_messages (phase, homeowner_id, message, attachment_name, attachment_path, attachment_type)
+      VALUES (?,?,?,?,?,?)
     ");
-    $stmt->bind_param("sis", $phase, $hid, $message);
+    $stmt->bind_param("sissss", $phase, $hid, $message, $attachmentName, $attachmentPath, $attachmentType);
     $ok = $stmt->execute();
     $stmt->close();
 
@@ -267,6 +385,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         SELECT
           pcm.id,
           pcm.message,
+          pcm.attachment_name,
+          pcm.attachment_path,
+          pcm.attachment_type,
           pcm.created_at,
           pcm.homeowner_id,
           h.first_name,
@@ -285,6 +406,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           SELECT
             pcm.id,
             pcm.message,
+            pcm.attachment_name,
+            pcm.attachment_path,
+            pcm.attachment_type,
             pcm.created_at,
             pcm.homeowner_id,
             h.first_name,
@@ -314,6 +438,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         'lot' => (string)($r['house_lot_number'] ?? ''),
         'initials' => strtoupper(substr($r['first_name'] ?? 'H',0,1).substr($r['last_name'] ?? 'O',0,1)),
         'message' => (string)$r['message'],
+        'attachment_name' => (string)($r['attachment_name'] ?? ''),
+        'attachment_path' => fixChatAttachmentPath($r['attachment_path'] ?? ''),
+        'attachment_type' => (string)($r['attachment_type'] ?? ''),
+        'is_image' => isImageMime($r['attachment_type'] ?? ''),
         'created_at' => date('M d, Y h:i A', strtotime($r['created_at']))
       ];
     }
@@ -339,13 +467,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $message  = trim((string)($_POST['message'] ?? ''));
     $message  = preg_replace('/\s+/', ' ', $message);
 
+    $upload = uploadChatAttachment($_FILES['attachment'] ?? []);
+    if (!$upload['success']) {
+      echo json_encode(['success'=>false,'message'=>$upload['message']]);
+      exit;
+    }
+
+    $hasFile = !empty($upload['uploaded']);
+
     if ($adminId <= 0) {
       echo json_encode(['success'=>false,'message'=>'Please select an officer.']);
       exit;
     }
 
-    if ($message === '') {
-      echo json_encode(['success'=>false,'message'=>'Message cannot be empty.']);
+    if ($message === '' && !$hasFile) {
+      echo json_encode(['success'=>false,'message'=>'Message or attachment is required.']);
       exit;
     }
 
@@ -369,6 +505,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       echo json_encode(['success'=>false,'message'=>'Selected officer is not available.']);
       exit;
     }
+
+    $attachmentName = $upload['attachment_name'] ?? null;
+    $attachmentPath = $upload['attachment_path'] ?? null;
+    $attachmentType = $upload['attachment_type'] ?? null;
 
     $selectedPosition = trim((string)$selectedOfficer['position']);
     $insertOk = true;
@@ -399,12 +539,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
       $stmt = $conn->prepare("
         INSERT INTO homeowner_officer_messages
-        (phase, homeowner_id, admin_id, sender_type, message, is_read_by_homeowner, is_read_by_admin)
-        VALUES (?, ?, ?, 'homeowner', ?, 1, 0)
+        (phase, homeowner_id, admin_id, sender_type, message, attachment_name, attachment_path, attachment_type, is_read_by_homeowner, is_read_by_admin)
+        VALUES (?, ?, ?, 'homeowner', ?, ?, ?, ?, 1, 0)
       ");
 
       foreach ($boardIds as $bid) {
-        $stmt->bind_param("siis", $phase, $hid, $bid, $message);
+        $stmt->bind_param("siissss", $phase, $hid, $bid, $message, $attachmentName, $attachmentPath, $attachmentType);
         if (!$stmt->execute()) {
           $insertOk = false;
         }
@@ -420,10 +560,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     $stmt = $conn->prepare("
       INSERT INTO homeowner_officer_messages
-      (phase, homeowner_id, admin_id, sender_type, message, is_read_by_homeowner, is_read_by_admin)
-      VALUES (?, ?, ?, 'homeowner', ?, 1, 0)
+      (phase, homeowner_id, admin_id, sender_type, message, attachment_name, attachment_path, attachment_type, is_read_by_homeowner, is_read_by_admin)
+      VALUES (?, ?, ?, 'homeowner', ?, ?, ?, ?, 1, 0)
     ");
-    $stmt->bind_param("siis", $phase, $hid, $adminId, $message);
+    $stmt->bind_param("siissss", $phase, $hid, $adminId, $message, $attachmentName, $attachmentPath, $attachmentType);
     $ok = $stmt->execute();
     $stmt->close();
 
@@ -491,7 +631,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       if ($lastId > 0) {
         $types = 'sii' . str_repeat('i', count($boardIds));
         $sql = "
-          SELECT hom.id, hom.message, hom.created_at, hom.sender_type,
+          SELECT hom.id, hom.message, hom.attachment_name, hom.attachment_path, hom.attachment_type, hom.created_at, hom.sender_type,
                  a.full_name AS admin_name, a.position AS admin_position
           FROM homeowner_officer_messages hom
           LEFT JOIN admins a ON a.id = hom.admin_id
@@ -507,7 +647,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $types = 'si' . str_repeat('i', count($boardIds));
         $sql = "
           SELECT * FROM (
-            SELECT hom.id, hom.message, hom.created_at, hom.sender_type,
+            SELECT hom.id, hom.message, hom.attachment_name, hom.attachment_path, hom.attachment_type, hom.created_at, hom.sender_type,
                    a.full_name AS admin_name, a.position AS admin_position
             FROM homeowner_officer_messages hom
             LEFT JOIN admins a ON a.id = hom.admin_id
@@ -543,6 +683,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           'role' => $mine ? ($isTenant ? 'Tenant' : 'Homeowner') : 'Board of Director',
           'initials' => $mine ? $initials : 'BD',
           'message' => (string)$r['message'],
+          'attachment_name' => (string)($r['attachment_name'] ?? ''),
+          'attachment_path' => fixChatAttachmentPath($r['attachment_path'] ?? ''),
+          'attachment_type' => (string)($r['attachment_type'] ?? ''),
+          'is_image' => isImageMime($r['attachment_type'] ?? ''),
           'created_at' => date('M d, Y h:i A', strtotime($r['created_at']))
         ];
       }
@@ -585,7 +729,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($lastId > 0) {
       $stmt = $conn->prepare("
-        SELECT hom.id, hom.message, hom.created_at, hom.sender_type,
+        SELECT hom.id, hom.message, hom.attachment_name, hom.attachment_path, hom.attachment_type, hom.created_at, hom.sender_type,
                a.full_name AS admin_name, a.position AS admin_position
         FROM homeowner_officer_messages hom
         LEFT JOIN admins a ON a.id = hom.admin_id
@@ -599,7 +743,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } else {
       $stmt = $conn->prepare("
         SELECT * FROM (
-          SELECT hom.id, hom.message, hom.created_at, hom.sender_type,
+          SELECT hom.id, hom.message, hom.attachment_name, hom.attachment_path, hom.attachment_type, hom.created_at, hom.sender_type,
                  a.full_name AS admin_name, a.position AS admin_position
           FROM homeowner_officer_messages hom
           LEFT JOIN admins a ON a.id = hom.admin_id
@@ -629,6 +773,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           ? $initials
           : strtoupper(substr($adminName ?: 'O',0,1).substr(strrchr(' '.$adminName,' ') ?: 'F',1,1)),
         'message' => (string)$r['message'],
+        'attachment_name' => (string)($r['attachment_name'] ?? ''),
+        'attachment_path' => fixChatAttachmentPath($r['attachment_path'] ?? ''),
+        'attachment_type' => (string)($r['attachment_type'] ?? ''),
+        'is_image' => isImageMime($r['attachment_type'] ?? ''),
         'created_at' => date('M d, Y h:i A', strtotime($r['created_at']))
       ];
     }
@@ -899,6 +1047,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     border-color:#bfdbfe;
   }
 
+  .chat-attachment{
+    margin-top: 10px;
+  }
+
+  .chat-image{
+    max-width: 260px;
+    width: 100%;
+    border-radius: 12px;
+    display: block;
+    border: 1px solid rgba(255,255,255,.18);
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .attachment-link{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    font-weight: 700;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.12);
+    color: inherit;
+    border: 1px solid rgba(255,255,255,.18);
+  }
+
+  .msg-row:not(.mine) .attachment-link{
+    background: #f8fafc;
+    color: #0f172a;
+    border-color: #dbe3ea;
+  }
+
   .chat-foot{
     padding: 14px 16px;
     border-top: 1px solid #eef2f7;
@@ -909,6 +1090,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     display: flex;
     gap: 10px;
     align-items: flex-end;
+  }
+
+  .composer-wrap{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .chat-input{
@@ -932,6 +1120,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     background:#f1f5f9;
     cursor:not-allowed;
     opacity:1;
+  }
+
+  .chat-tools{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .chat-tool-btn{
+    border:1px solid #dbe3ea;
+    background:#fff;
+    color:#0f172a;
+    border-radius:12px;
+    min-width:44px;
+    height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    padding:0 12px;
+    font-weight:700;
+  }
+
+  .chat-tool-btn:hover{
+    background:#f8fafc;
+  }
+
+  .selected-file-badge{
+    display:none;
+    align-items:center;
+    gap:8px;
+    background:#f8fafc;
+    border:1px solid #dbe3ea;
+    border-radius:999px;
+    padding:8px 12px;
+    font-size:.86rem;
+    font-weight:700;
+    max-width:100%;
+  }
+
+  .selected-file-name{
+    max-width:220px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .file-clear-btn{
+    border:none;
+    background:transparent;
+    color:#dc2626;
+    cursor:pointer;
+    font-size:1rem;
+    line-height:1;
   }
 
   .btn-send-chat{
@@ -1097,6 +1340,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     font-weight:600;
   }
 
+  .image-preview-modal{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(15,23,42,.82);
+    z-index:5000;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+
+  .image-preview-box{
+    position:relative;
+    max-width:min(96vw, 1100px);
+    max-height:90vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .image-preview-box img{
+    max-width:100%;
+    max-height:90vh;
+    border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+    background:#fff;
+  }
+
+  .image-preview-close{
+    position:absolute;
+    top:-14px;
+    right:-14px;
+    width:42px;
+    height:42px;
+    border:none;
+    border-radius:50%;
+    background:#fff;
+    color:#111827;
+    font-size:24px;
+    line-height:1;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+  }
+
   @media (max-width: 991.98px){
     .sidebar{
       position: fixed !important;
@@ -1175,6 +1462,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       height: 48px;
       min-width: 50px;
       padding: 0 14px;
+    }
+
+    .chat-image{
+      max-width: 210px;
+    }
+
+    .selected-file-name{
+      max-width: 140px;
     }
   }
 </style>
@@ -1334,14 +1629,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             </div>
 
             <div class="chat-foot">
-              <form class="chat-form" id="chatForm">
-                <textarea
-                  class="chat-input"
-                  id="chatMessage"
-                  placeholder="<?= $isMuted ? 'You are muted from sending public messages.' : 'Type your message here...' ?>"
-                  maxlength="1000"
-                  required
-                ></textarea>
+              <form class="chat-form" id="chatForm" enctype="multipart/form-data">
+                <div class="composer-wrap">
+                  <textarea
+                    class="chat-input"
+                    id="chatMessage"
+                    placeholder="<?= $isMuted ? 'You are muted from sending public messages.' : 'Type your message here...' ?>"
+                    maxlength="1000"
+                  ></textarea>
+
+                  <div class="chat-tools">
+                    <input type="file" id="chatAttachment" hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+                    <input type="file" id="chatCamera" hidden accept="image/*" capture="environment">
+
+                    <button type="button" class="chat-tool-btn" id="attachBtn" title="Attach file">
+                      <i class="bi bi-paperclip"></i>
+                    </button>
+
+                    <button type="button" class="chat-tool-btn" id="cameraBtn" title="Open camera">
+                      <i class="bi bi-camera-fill"></i>
+                    </button>
+
+                    <div class="selected-file-badge" id="selectedFileBadge">
+                      <i class="bi bi-file-earmark"></i>
+                      <span class="selected-file-name" id="selectedFileName"></span>
+                      <button type="button" class="file-clear-btn" id="clearFileBtn" title="Remove file">&times;</button>
+                    </div>
+                  </div>
+                </div>
+
                 <button type="submit" class="btn-send-chat" id="sendBtn" title="Send">
                   <i class="bi bi-send-fill"></i>
                 </button>
@@ -1399,7 +1715,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   </div>
 </div>
 
-<!-- MUTED INFO MODAL -->
 <div class="modalx" id="mutedInfoModal">
   <div class="box">
     <div class="boxhead">
@@ -1433,7 +1748,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   </div>
 </div>
 
-<!-- NOTICE MODAL -->
 <div class="modalx" id="noticeModal">
   <div class="box">
     <div class="boxhead">
@@ -1451,19 +1765,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   </div>
 </div>
 
+<div class="image-preview-modal" id="imagePreviewModal">
+  <div class="image-preview-box">
+    <button type="button" class="image-preview-close" id="imagePreviewClose">&times;</button>
+    <img src="" alt="Preview" id="imagePreviewFull">
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+async function postFormData(formData){
+  const res = await fetch('homeowner_public_chat.php', {
+    method:'POST',
+    body: formData
+  });
+  return await res.json();
+}
+
 async function postJSON(action, payload){
   const fd = new FormData();
   fd.append('action', action);
   for (const [k,v] of Object.entries(payload || {})) fd.append(k, v);
-
-  const res = await fetch('homeowner_public_chat.php', {
-    method:'POST',
-    body: fd
-  });
-  return await res.json();
+  return await postFormData(fd);
 }
 
 const chatBody = document.getElementById('chatBody');
@@ -1476,6 +1800,18 @@ const chatTip = document.getElementById('chatTip');
 const modePublicBtn = document.getElementById('modePublicBtn');
 const modeOfficerBtn = document.getElementById('modeOfficerBtn');
 const officerSelect = document.getElementById('officerSelect');
+
+const attachBtn = document.getElementById('attachBtn');
+const cameraBtn = document.getElementById('cameraBtn');
+const chatAttachment = document.getElementById('chatAttachment');
+const chatCamera = document.getElementById('chatCamera');
+const selectedFileBadge = document.getElementById('selectedFileBadge');
+const selectedFileName = document.getElementById('selectedFileName');
+const clearFileBtn = document.getElementById('clearFileBtn');
+
+const imagePreviewModal = document.getElementById('imagePreviewModal');
+const imagePreviewFull = document.getElementById('imagePreviewFull');
+const imagePreviewClose = document.getElementById('imagePreviewClose');
 
 const isPublicMuted = <?= $isMuted ? 'true' : 'false' ?>;
 const muteReason = <?= json_encode($muteReason) ?>;
@@ -1496,6 +1832,52 @@ function escapeHtml(str){
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+function normalizePath(path){
+  return String(path || '').replace(/\\/g, '/');
+}
+
+function isImageAttachment(m){
+  const type = String(m.attachment_type || '').toLowerCase();
+  return ['image/jpeg','image/jpg','image/png','image/gif','image/webp'].includes(type);
+}
+
+function renderAttachmentHtml(m){
+  const path = normalizePath(m.attachment_path || '');
+  const name = escapeHtml(m.attachment_name || 'Attachment');
+  if (!path) return '';
+
+  if (isImageAttachment(m)) {
+    return `
+      <div class="chat-attachment">
+        <img src="${escapeHtml(path)}" alt="${name}" class="chat-image previewable-image" data-src="${escapeHtml(path)}">
+      </div>
+    `;
+  }
+
+  return `
+    <div class="chat-attachment">
+      <a href="${escapeHtml(path)}" target="_blank" class="attachment-link">
+        <i class="bi bi-file-earmark-arrow-down"></i>
+        <span>${name}</span>
+      </a>
+    </div>
+  `;
+}
+
+function openImagePreview(src){
+  if (!src || !imagePreviewModal || !imagePreviewFull) return;
+  imagePreviewFull.src = src;
+  imagePreviewModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImagePreview(){
+  if (!imagePreviewModal || !imagePreviewFull) return;
+  imagePreviewModal.style.display = 'none';
+  imagePreviewFull.src = '';
+  document.body.style.overflow = '';
 }
 
 function isNearBottom(el){
@@ -1531,7 +1913,10 @@ function renderPublicMessage(m){
         <span>•</span>
         <span>${escapeHtml(m.created_at || '')}</span>
       </div>
-      <div class="msg-bubble">${escapeHtml(m.message || '').replace(/\n/g, '<br>')}</div>
+      <div class="msg-bubble">
+        ${m.message ? escapeHtml(m.message || '').replace(/\n/g, '<br>') : ''}
+        ${renderAttachmentHtml(m)}
+      </div>
     </div>
   `;
   return row;
@@ -1551,10 +1936,35 @@ function renderOfficerMessage(m){
         <span>•</span>
         <span>${escapeHtml(m.created_at || '')}</span>
       </div>
-      <div class="msg-bubble">${escapeHtml(m.message || '').replace(/\n/g, '<br>')}</div>
+      <div class="msg-bubble">
+        ${m.message ? escapeHtml(m.message || '').replace(/\n/g, '<br>') : ''}
+        ${renderAttachmentHtml(m)}
+      </div>
     </div>
   `;
   return row;
+}
+
+function updateSelectedFileUI(file){
+  if (!file) {
+    selectedFileBadge.style.display = 'none';
+    selectedFileName.textContent = '';
+    return;
+  }
+  selectedFileBadge.style.display = 'inline-flex';
+  selectedFileName.textContent = file.name || 'Selected file';
+}
+
+function clearSelectedFiles(){
+  if (chatAttachment) chatAttachment.value = '';
+  if (chatCamera) chatCamera.value = '';
+  updateSelectedFileUI(null);
+}
+
+function getSelectedFile(){
+  if (chatCamera?.files?.length) return chatCamera.files[0];
+  if (chatAttachment?.files?.length) return chatAttachment.files[0];
+  return null;
 }
 
 function updateComposerState(){
@@ -1564,17 +1974,21 @@ function updateComposerState(){
     sendBtn.classList.remove('officer-mode');
     chatRoomTitle.textContent = 'Public Community Chat';
     chatRoomSub.textContent = `Talk with other homeowners in ${phase}`;
-    chatTip.textContent = `Max 500 characters. Everyone in ${phase} can see your message.`;
+    chatTip.textContent = `Max 500 characters. Everyone in ${phase} can see your message. You may also attach image or file up to 10MB.`;
     chatMessage.maxLength = 500;
 
     if (isPublicMuted) {
       chatMessage.placeholder = 'You are muted from sending public messages.';
       chatMessage.disabled = true;
       sendBtn.disabled = true;
+      attachBtn.disabled = true;
+      cameraBtn.disabled = true;
     } else {
       chatMessage.placeholder = 'Type your public message here...';
       chatMessage.disabled = false;
       sendBtn.disabled = false;
+      attachBtn.disabled = false;
+      cameraBtn.disabled = false;
     }
   } else {
     modeOfficerBtn.classList.add('active');
@@ -1586,17 +2000,21 @@ function updateComposerState(){
     const officerPosition = selectedOption?.dataset.position || 'Officer';
     chatRoomSub.textContent = `Private conversation with ${officerPosition}`;
 
-    chatTip.textContent = 'Max 1000 characters. Only you and the selected officer can see this conversation.';
+    chatTip.textContent = 'Max 1000 characters. Only you and the selected officer can see this conversation. You may also attach image or file up to 10MB.';
     chatMessage.maxLength = 1000;
 
     if (!selectedOfficerId) {
       chatMessage.placeholder = 'No officer available.';
       chatMessage.disabled = true;
       sendBtn.disabled = true;
+      attachBtn.disabled = true;
+      cameraBtn.disabled = true;
     } else {
       chatMessage.placeholder = 'Type your private message to the officer...';
       chatMessage.disabled = false;
       sendBtn.disabled = false;
+      attachBtn.disabled = false;
+      cameraBtn.disabled = false;
     }
   }
 }
@@ -1717,6 +2135,7 @@ async function loadOfficerMessages(initial = false){
 async function switchMode(mode){
   currentMode = mode;
   officerLastId = 0;
+  clearSelectedFiles();
   updateComposerState();
 
   if (mode === 'public') {
@@ -1739,9 +2158,58 @@ officerSelect?.addEventListener('change', async function(){
   }
 });
 
-/* =========================
-   NOTICE MODAL
-   ========================= */
+attachBtn?.addEventListener('click', () => {
+  if (attachBtn.disabled) return;
+  chatAttachment?.click();
+});
+
+cameraBtn?.addEventListener('click', () => {
+  if (cameraBtn.disabled) return;
+  chatCamera?.click();
+});
+
+chatAttachment?.addEventListener('change', function(){
+  if (this.files && this.files[0]) {
+    if (chatCamera) chatCamera.value = '';
+    updateSelectedFileUI(this.files[0]);
+  } else {
+    updateSelectedFileUI(getSelectedFile());
+  }
+});
+
+chatCamera?.addEventListener('change', function(){
+  if (this.files && this.files[0]) {
+    if (chatAttachment) chatAttachment.value = '';
+    updateSelectedFileUI(this.files[0]);
+  } else {
+    updateSelectedFileUI(getSelectedFile());
+  }
+});
+
+clearFileBtn?.addEventListener('click', clearSelectedFiles);
+
+imagePreviewClose?.addEventListener('click', closeImagePreview);
+
+imagePreviewModal?.addEventListener('click', function(e){
+  if (e.target === imagePreviewModal) {
+    closeImagePreview();
+  }
+});
+
+document.addEventListener('click', function(e){
+  const img = e.target.closest('.previewable-image');
+  if (!img) return;
+  const src = img.getAttribute('data-src') || img.getAttribute('src');
+  openImagePreview(src);
+});
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') {
+    closeImagePreview();
+  }
+});
+
+/* NOTICE MODAL */
 const noticeModal = document.getElementById('noticeModal');
 const noticeModalTitle = document.getElementById('noticeModalTitle');
 const noticeModalMessage = document.getElementById('noticeModalMessage');
@@ -1764,9 +2232,7 @@ noticeModal?.addEventListener('click', function(e) {
   if (e.target === noticeModal) closeNoticeDialog();
 });
 
-/* =========================
-   MUTED INFO MODAL
-   ========================= */
+/* MUTED INFO MODAL */
 const mutedInfoModal = document.getElementById('mutedInfoModal');
 const btnOpenMutedInfo = document.getElementById('btnOpenMutedInfo');
 const closeMutedInfoModal = document.getElementById('closeMutedInfoModal');
@@ -1793,7 +2259,9 @@ chatForm?.addEventListener('submit', async function(e){
   e.preventDefault();
 
   const message = (chatMessage.value || '').trim();
-  if (!message) return;
+  const selectedFile = getSelectedFile();
+
+  if (!message && !selectedFile) return;
 
   if (currentMode === 'public') {
     if (chatMessage.disabled || sendBtn.disabled) {
@@ -1803,13 +2271,19 @@ chatForm?.addEventListener('submit', async function(e){
 
     sendBtn.disabled = true;
     try {
-      const r = await postJSON('send_message', { message });
+      const fd = new FormData();
+      fd.append('action', 'send_message');
+      fd.append('message', message);
+      if (selectedFile) fd.append('attachment', selectedFile);
+
+      const r = await postFormData(fd);
       if (!r.success) {
         openNoticeModal('Unable to Send', r.message || 'Failed to send message.');
         return;
       }
 
       chatMessage.value = '';
+      clearSelectedFiles();
       await loadPublicMessages(false);
       scrollToBottom();
     } catch (e) {
@@ -1828,10 +2302,13 @@ chatForm?.addEventListener('submit', async function(e){
 
   sendBtn.disabled = true;
   try {
-    const r = await postJSON('send_officer_message', {
-      admin_id: selectedOfficerId,
-      message
-    });
+    const fd = new FormData();
+    fd.append('action', 'send_officer_message');
+    fd.append('admin_id', selectedOfficerId);
+    fd.append('message', message);
+    if (selectedFile) fd.append('attachment', selectedFile);
+
+    const r = await postFormData(fd);
 
     if (!r.success) {
       openNoticeModal('Unable to Send', r.message || 'Failed to send message to officer.');
@@ -1839,6 +2316,7 @@ chatForm?.addEventListener('submit', async function(e){
     }
 
     chatMessage.value = '';
+    clearSelectedFiles();
     await loadOfficerMessages(false);
     scrollToBottom();
   } catch (e) {
