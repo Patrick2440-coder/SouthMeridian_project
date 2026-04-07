@@ -30,7 +30,7 @@ if ($isTenant) {
 
   $stmt = $conn->prepare("
     SELECT id, homeowner_id, first_name, last_name, email, status, phase,
-           can_pay_dues, can_rent, can_parking, can_announcements
+           can_pay_dues, can_rent, can_parking, can_announcements, registered_at
     FROM tenants
     WHERE id = ?
     LIMIT 1
@@ -47,7 +47,7 @@ if ($isTenant) {
   }
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, created_at
     FROM homeowners
     WHERE id = ?
     LIMIT 1
@@ -73,7 +73,7 @@ if ($isTenant) {
   $hid = (int)$_SESSION['homeowner_id'];
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, created_at
     FROM homeowners
     WHERE id = ?
     LIMIT 1
@@ -93,6 +93,19 @@ if ($isTenant) {
 $phase = (string)$user['phase'];
 $houseLot = (string)($user['house_lot_number'] ?? '');
 $mustChange = !$isTenant && ((int)$user['must_change_password'] === 1);
+
+$accountStartRaw = $isTenant
+  ? (string)($tenant['registered_at'] ?? '')
+  : (string)($user['created_at'] ?? '');
+
+$accountStartTs = strtotime($accountStartRaw);
+if (!$accountStartTs) {
+  $accountStartTs = time();
+}
+
+$duesStartYear  = (int)date('Y', $accountStartTs);
+$duesStartMonth = (int)date('n', $accountStartTs);
+$duesStartLabel = date('F Y', $accountStartTs);
 
 if ($isTenant) {
   $fullName = trim(($tenant['first_name'] ?? '') . ' ' . ($tenant['last_name'] ?? ''));
@@ -115,7 +128,10 @@ $parkingOpen = in_array($activePage, [
 ], true);
 
 $selYear = (int)($_GET['year'] ?? (int)date('Y'));
-if ($selYear < 2000 || $selYear > ((int)date('Y') + 1)) $selYear = (int)date('Y');
+$currentYear = (int)date('Y');
+
+if ($selYear < $duesStartYear) $selYear = $duesStartYear;
+if ($selYear > ($currentYear + 1)) $selYear = $currentYear;
 
 $stmt = $conn->prepare("SELECT monthly_dues FROM finance_dues_settings WHERE phase=? LIMIT 1");
 $stmt->bind_param("s", $phase);
@@ -589,7 +605,7 @@ $chatOpen = in_array($activePage, $chatPages, true);
 
               <form method="get" class="dues-year-form">
                 <label class="fw-semibold text-muted small">Year</label>
-                <input type="number" name="year" class="form-control" value="<?= (int)$selYear ?>" style="width:120px" min="2000" max="<?= (int)date('Y')+1 ?>">
+                <input type="number" name="year" class="form-control" value="<?= (int)$selYear ?>" style="width:120px" min="<?= (int)$duesStartYear ?>" max="<?= (int)date('Y')+1 ?>">
                 <button class="btn btn-outline-success fw-semibold">Go</button>
               </form>
             </div>
@@ -602,26 +618,43 @@ $chatOpen = in_array($activePage, $chatPages, true);
                 <span class="text-success">₱ <?= number_format($monthlyDues, 2) ?></span>
               </div>
               <div class="text-muted fw-semibold small">
-                Tip: Pay month-by-month to avoid duplicates.
+                Dues start from your account creation month: <?= esc($duesStartLabel) ?>.
               </div>
             </div>
 
             <div class="mt-3">
               <?php foreach($months as $m => $label): ?>
-                <?php $isPaid = !empty($paidMonths[$m]); ?>
+                <?php
+                  $isBeforeStart = (
+                    $selYear < $duesStartYear ||
+                    ($selYear === $duesStartYear && $m < $duesStartMonth)
+                  );
+
+                  $isPaid = !$isBeforeStart && !empty($paidMonths[$m]);
+                ?>
                 <div class="dues-row">
                   <div class="dues-row-left">
                     <div class="fw-bold"><?= esc($label) ?> <?= (int)$selYear ?></div>
                     <div class="small-muted">
-                      <?= $isPaid ? 'Payment recorded' : 'Not paid yet' ?>
+                      <?php if ($isBeforeStart): ?>
+                        Not applicable — account started in <?= esc($duesStartLabel) ?>
+                      <?php else: ?>
+                        <?= $isPaid ? 'Payment recorded' : 'Not paid yet' ?>
+                      <?php endif; ?>
                     </div>
                   </div>
 
                   <div class="dues-row-right">
-                    <?php if ($isPaid): ?>
+                    <?php if ($isBeforeStart): ?>
+                      <span class="badge rounded-pill badge-soft-warning px-3 py-2 fw-semibold">
+                        <i class="bi bi-dash-circle me-1"></i> N/A
+                      </span>
+
+                    <?php elseif ($isPaid): ?>
                       <span class="badge rounded-pill badge-soft-success px-3 py-2 fw-semibold">
                         <i class="bi bi-check2-circle me-1"></i> PAID
                       </span>
+
                     <?php else: ?>
                       <span class="badge rounded-pill badge-soft-danger px-3 py-2 fw-semibold">
                         <i class="bi bi-x-circle me-1"></i> UNPAID
@@ -676,7 +709,7 @@ $chatOpen = in_array($activePage, $chatPages, true);
           <div class="dues-card p-3">
             <h6 class="mb-2">How PayMongo works</h6>
             <div class="text-muted fw-semibold">
-              When you click <b>Pay Now</b>, you’ll be redirected to PayMongo Checkout (GCash/Card/etc).
+              When you click <b>Pay Now</b>, you’ll be redirected to PayMongo Checkout (GCash).
             </div>
           </div>
         </div>

@@ -290,7 +290,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
                     authentication, communication, payments, parking, facility rental, voting,
                     homeowner management, financial management, and mobile access.
                   -->
-                  <p>South Meridian Homes is an integrated HOA management platform built for the South Meridian Homeowners Association in Salitran 4, Dasmariñas, Cavite. It centralizes all essential community services — from online due payments, parking permits, and facility reservations, to community voting, complaint tracking, and real-time announcements — into one secure and accessible digital system for both homeowners and administrators.</p>
+                  <p>South Meridian Homes is an integrated HOA management platform built for the South Meridian Homeowners Association in Salitran 4, Dasmariñas, Cavite. It centralizes all essential community services — from online due payments, parking permits, and facility reservations, to community voting, complaint tracking, and announcements — into one secure and accessible digital system for both homeowners and administrators.</p>
                 </div>
 
                 <div class="achievement-grid" data-aos="fade-up" data-aos-delay="400">
@@ -378,7 +378,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
                 CHANGED: Description now references the integrated HOA system and its purpose,
                 not just a generic community description.
               -->
-              <p>South Meridian Homes is a residential community located in Salitran 4, Dasmariñas, Cavite, guided by a Homeowners Association committed to transparency, order, and community participation. This platform was developed to centralize and digitize HOA operations — giving homeowners and administrators a secure, organized, and real-time system to manage the community efficiently.</p>
+              <p>South Meridian Homes is a residential community located in Salitran 4, Dasmariñas, Cavite, guided by a Homeowners Association committed to transparency, order, and community participation. This platform was developed to centralize and digitize HOA operations — giving homeowners and administrators a secure, organized, and system to manage the community efficiently.</p>
 
               <div class="achievements-list">
                 <!--
@@ -468,7 +468,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
             <h2 class="fw-bold mt-2">Complete HOA Management in One Platform</h2>
             <p class="text-muted">
               The South Meridian HOA Management System covers all operational needs of your community —
-              accessible on both web and mobile, in real time.
+              accessible on both web and mobile.
             </p>
           </div>
         </div>
@@ -543,7 +543,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
             <div class="card border-0 shadow-sm h-100 p-4 text-center">
               <div class="mb-3"><i class="bi bi-phone" style="font-size:36px; color:#077f46;"></i></div>
               <h6 class="fw-bold">Mobile Application</h6>
-              <p class="text-muted small">Access all HOA features anytime via the mobile app, synced in real time with the web system for a seamless and consistent experience.</p>
+              <p class="text-muted small">Access all HOA features anytime via the mobile app, syncedv in with the web system for a seamless and consistent experience.</p>
             </div>
           </div>
 
@@ -566,8 +566,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
           -->
           <p class="text-muted">
             Access your HOA services anytime, anywhere using your mobile phone.
-            The South Meridian Homes app syncs in real time with the web system,
-            keeping you connected to your community on the go.
+            Keeping you connected to your community on the go.
           </p>
         </div>
       </div>
@@ -633,7 +632,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
           <p>
             South Meridian Homes is a residential community in Salitran 4, Dasmariñas, Cavite,
             supported by an integrated HOA management system that centralizes community services,
-            promotes transparency, and empowers residents through digital tools and real-time access.
+            promotes transparency, and empowers residents through digital tools.
           </p>
           <div class="social-links d-flex mt-4">
             <a href="#"><i class="bi bi-facebook"></i></a>

@@ -160,11 +160,6 @@ if (!$isTenant && isset($conn) && isset($_SESSION['homeowner_id'])) {
         </a>
 
         <div class="sb-dd-menu">
-          <a class="sb-link <?= $activePage === 'homeowner_tenant.php' ? 'active' : '' ?>"
-             href="homeowner_tenant.php">
-            <i class="bi bi-list-ul"></i>
-            <span>Manage Tenants</span>
-          </a>
 
           <a class="sb-link <?= $activePage === 'homeowner_tenant_register.php' ? 'active' : '' ?>"
              href="homeowner_tenant_register.php">

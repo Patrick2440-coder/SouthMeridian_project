@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
   header("Location: ../index.php");
   exit;
 }
@@ -10,13 +10,23 @@ $conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_so
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
+require_once 'tenant_module_guard.php';
+
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-function back_err($msg){
-  header("Location: homeowner_pay_dues.php?err=" . urlencode($msg));
+
+function back_err($msg, $year = null){
+  $url = "homeowner_pay_dues.php?err=" . urlencode($msg);
+  if ($year !== null) {
+    $url .= "&year=" . urlencode((string)$year);
+  }
+  header("Location: " . $url);
   exit;
 }
 
-$hid = (int)$_SESSION['homeowner_id'];
+$isTenant = ($_SESSION['role'] === 'tenant');
+$tenant = null;
+$user = null;
+$hid = 0;
 
 // CSRF
 $csrf = (string)($_POST['csrf'] ?? '');
@@ -27,32 +37,110 @@ if (empty($_SESSION['csrf_pay_dues']) || !hash_equals($_SESSION['csrf_pay_dues']
 $year  = (int)($_POST['year'] ?? 0);
 $month = (int)($_POST['month'] ?? 0);
 
-if ($year < 2000 || $year > ((int)date('Y') + 1)) back_err("Invalid year.");
 if ($month < 1 || $month > 12) back_err("Invalid month.");
+if ($year < 2000 || $year > ((int)date('Y') + 1)) back_err("Invalid year.");
 
-// Load homeowner
-$stmt = $conn->prepare("
-  SELECT id, status, first_name, last_name, email, contact_number, phase, house_lot_number
-  FROM homeowners
-  WHERE id=?
-  LIMIT 1
-");
-$stmt->bind_param("i", $hid);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+if ($isTenant) {
+  if (empty($_SESSION['tenant_id']) || empty($_SESSION['tenant_homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
 
-if (!$user || $user['status'] !== 'approved') {
-  session_destroy();
-  header("Location: ../index.php");
-  exit;
+  $tenant_id = (int)$_SESSION['tenant_id'];
+  $hid = (int)$_SESSION['tenant_homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, homeowner_id, first_name, last_name, email, status, phase,
+           can_pay_dues, can_rent, can_parking, can_announcements, registered_at
+    FROM tenants
+    WHERE id = ?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $tenant_id);
+  $stmt->execute();
+  $tenant = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$tenant || $tenant['status'] !== 'active') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+  tenant_guard('pay_dues', $tenant);
+
+  $stmt = $conn->prepare("
+    SELECT id, status, first_name, last_name, email, contact_number, phase, house_lot_number, created_at
+    FROM homeowners
+    WHERE id = ?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
+
+} else {
+  if (empty($_SESSION['homeowner_id'])) {
+    header("Location: ../index.php");
+    exit;
+  }
+
+  $hid = (int)$_SESSION['homeowner_id'];
+
+  $stmt = $conn->prepare("
+    SELECT id, status, first_name, last_name, email, contact_number, phase, house_lot_number, created_at
+    FROM homeowners
+    WHERE id = ?
+    LIMIT 1
+  ");
+  $stmt->bind_param("i", $hid);
+  $stmt->execute();
+  $user = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$user || $user['status'] !== 'approved') {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+  }
 }
 
 $phase    = (string)$user['phase'];
-$fullName = trim($user['first_name'] . ' ' . $user['last_name']);
-$email    = (string)($user['email'] ?? '');
-$phone    = (string)($user['contact_number'] ?? '');
 $houseLot = (string)($user['house_lot_number'] ?? '');
+
+if ($isTenant) {
+  $fullName = trim((string)($tenant['first_name'] ?? '') . ' ' . (string)($tenant['last_name'] ?? ''));
+  $email    = (string)($tenant['email'] ?? '');
+  $phone    = (string)($user['contact_number'] ?? '');
+  $accountStartRaw = (string)($tenant['registered_at'] ?? '');
+} else {
+  $fullName = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? ''));
+  $email    = (string)($user['email'] ?? '');
+  $phone    = (string)($user['contact_number'] ?? '');
+  $accountStartRaw = (string)($user['created_at'] ?? '');
+}
+
+$accountStartTs = strtotime($accountStartRaw);
+if (!$accountStartTs) {
+  $accountStartTs = time();
+}
+
+$duesStartYear  = (int)date('Y', $accountStartTs);
+$duesStartMonth = (int)date('n', $accountStartTs);
+
+if (
+  $year < $duesStartYear ||
+  ($year === $duesStartYear && $month < $duesStartMonth)
+) {
+  back_err("You can only pay starting from your account creation month.", $duesStartYear);
+}
 
 // If already paid, block
 $stmt = $conn->prepare("
@@ -67,7 +155,7 @@ $already = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if ($already) {
-  back_err("This month is already marked as PAID.");
+  back_err("This month is already marked as PAID.", $year);
 }
 
 // Get dues
@@ -83,15 +171,13 @@ $monthlyDues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
 $stmt->close();
 
 if ($monthlyDues <= 0) {
-  back_err("Monthly dues is not set yet. Please contact HOA.");
+  back_err("Monthly dues is not set yet. Please contact HOA.", $year);
 }
 
 // Mark old pending checkouts for same month as cancelled
-// so the user can create a fresh checkout if they previously opened PayMongo but did not pay.
 $stmt = $conn->prepare("
   UPDATE finance_paymongo_checkouts
-  SET status='cancelled',
-      updated_at=CURRENT_TIMESTAMP
+  SET status='expired'
   WHERE homeowner_id=? AND pay_year=? AND pay_month=? AND status='pending'
 ");
 $stmt->bind_param("iii", $hid, $year, $month);
@@ -159,21 +245,21 @@ $err = curl_error($ch);
 curl_close($ch);
 
 if ($response === false) {
-  back_err("PayMongo error: " . $err);
+  back_err("PayMongo error: " . $err, $year);
 }
 
 $body = json_decode($response, true);
 
 if ($http < 200 || $http >= 300 || empty($body['data']['id'])) {
   $msg = $body['errors'][0]['detail'] ?? ($body['errors'][0]['code'] ?? 'Unable to create checkout session.');
-  back_err("PayMongo: " . $msg);
+  back_err("PayMongo: " . $msg, $year);
 }
 
 $csId = (string)$body['data']['id'];
 $checkoutUrl = (string)($body['data']['attributes']['checkout_url'] ?? '');
 
 if ($checkoutUrl === '') {
-  back_err("PayMongo did not return checkout_url.");
+  back_err("PayMongo did not return checkout_url.", $year);
 }
 
 // Save new checkout as pending
@@ -182,7 +268,6 @@ $stmt = $conn->prepare("
     (checkout_session_id, checkout_url, homeowner_id, phase, pay_year, pay_month, amount, status)
   VALUES (?,?,?,?,?,?,?,'pending')
 ");
-
 $stmt->bind_param("ssisiid", $csId, $checkoutUrl, $hid, $phase, $year, $month, $monthlyDues);
 $stmt->execute();
 $stmt->close();

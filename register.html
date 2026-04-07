@@ -224,8 +224,8 @@
   <header id="header" class="header d-flex align-items-center sticky-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
       <a href="index.php" class="logo d-flex align-items-center">
-  <img src="assets/img/sm_logo.png" alt="South Meridian Homes Logo" style="max-height: 70px;">
-  <h1 class="sitename">South Meridian Homes</h1>
+        <img src="assets/img/sm_logo.png" alt="South Meridian Homes Logo" style="max-height: 70px;">
+        <h1 class="sitename">South Meridian Homes</h1>
       </a>
     </div>
   </header>
@@ -280,7 +280,16 @@
                 <div class="row g-3 mb-4">
                   <div class="col-md-6">
                     <label class="form-label">Contact Number<span class="required-star">*</span></label>
-                    <input type="tel" name="contact_number" class="form-control" placeholder="09XXXXXXXXX" required>
+                    <input
+                      type="text"
+                      name="contact_number"
+                      class="form-control"
+                      placeholder="09XXXXXXXXX"
+                      pattern="[0-9]+"
+                      inputmode="numeric"
+                      maxlength="11"
+                      required
+                    >
                   </div>
                 </div>
 
@@ -702,6 +711,28 @@
     document.addEventListener('click', function(e) {
       if (e.target.classList.contains('removeMember')) {
         e.target.closest('.member').remove();
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const contactInput = document.querySelector('input[name="contact_number"]');
+
+      if (contactInput) {
+        contactInput.addEventListener('input', function () {
+          this.value = this.value.replace(/\D/g, '');
+        });
+
+        contactInput.addEventListener('keypress', function (e) {
+          if (!/[0-9]/.test(e.key)) {
+            e.preventDefault();
+          }
+        });
+
+        contactInput.addEventListener('paste', function (e) {
+          e.preventDefault();
+          const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+          this.value = pastedText.replace(/\D/g, '').slice(0, 11);
+        });
       }
     });
 

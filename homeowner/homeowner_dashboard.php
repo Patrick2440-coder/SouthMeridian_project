@@ -46,7 +46,7 @@ if ($isTenant) {
 
   $stmt = $conn->prepare("
     SELECT id, homeowner_id, first_name, last_name, email, status, phase,
-           can_pay_dues, can_rent, can_parking, can_announcements
+           can_pay_dues, can_rent, can_parking, can_announcements, registered_at
     FROM tenants
     WHERE id = ?
     LIMIT 1
@@ -63,7 +63,7 @@ if ($isTenant) {
   }
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude, created_at
     FROM homeowners
     WHERE id = ?
     LIMIT 1
@@ -87,7 +87,7 @@ if ($isTenant) {
   $hid = (int)$_SESSION['homeowner_id'];
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude
+    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude, created_at
     FROM homeowners
     WHERE id = ?
     LIMIT 1
@@ -110,11 +110,22 @@ if ($isTenant) {
   $fullName = trim(($tenant['first_name'] ?? '') . ' ' . ($tenant['last_name'] ?? ''));
   $mustChange = false;
   $initials = strtoupper(substr($tenant['first_name'] ?? 'T', 0, 1) . substr($tenant['last_name'] ?? 'N', 0, 1));
+  $accountStartRaw = (string)($tenant['registered_at'] ?? '');
 } else {
   $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
   $mustChange = ((int)$user['must_change_password'] === 1);
   $initials = strtoupper(substr($user['first_name'] ?? 'H', 0, 1) . substr($user['last_name'] ?? 'O', 0, 1));
+  $accountStartRaw = (string)($user['created_at'] ?? '');
 }
+
+$accountStartTs = strtotime($accountStartRaw);
+if (!$accountStartTs) {
+  $accountStartTs = time();
+}
+
+$accountStartYear  = (int)date('Y', $accountStartTs);
+$accountStartMonth = (int)date('n', $accountStartTs);
+$accountStartLabel = date('F Y', $accountStartTs);
 
 $pageTitle  = "South Meridian Homes Salitran • " . $phase;
 
@@ -167,7 +178,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
   $action = (string)$_POST['action'];
 
-  // For safety, tenants can view announcements but cannot like/comment
   if ($isTenant && in_array($action, ['toggle_like_ann', 'add_comment_ann'], true)) {
     echo json_encode(['success'=>false,'message'=>'You do not have access to that action.']);
     exit;
@@ -316,12 +326,25 @@ while($r = $res->fetch_assoc()){
 }
 $stmt->close();
 
+$duesStartMonthThisYear = 1;
+if ($accountStartYear === $curYear) {
+  $duesStartMonthThisYear = $accountStartMonth;
+}
+
+$dueMonths = [];
+if ($accountStartYear <= $curYear) {
+  for ($m = $duesStartMonthThisYear; $m <= $curMonth; $m++) {
+    $dueMonths[] = $m;
+  }
+}
+
 $unpaidMonths = [];
-for ($m=1; $m <= $curMonth; $m++){
+foreach ($dueMonths as $m) {
   if (empty($paidMonths[$m])) $unpaidMonths[] = $m;
 }
 
-$curMonthPaid = empty($unpaidMonths) ? true : !in_array($curMonth, $unpaidMonths, true);
+$curMonthIsApplicable = in_array($curMonth, $dueMonths, true);
+$curMonthPaid = !$curMonthIsApplicable ? true : !in_array($curMonth, $unpaidMonths, true);
 $nextDueMonth = !empty($unpaidMonths) ? (int)$unpaidMonths[0] : 0;
 
 function month_name($m){
@@ -727,19 +750,26 @@ unset($_SESSION['access_denied']);
                 <span class="pill">₱<?= number_format((float)$monthlyDues, 2) ?>/month</span>
               </div>
               <div class="fb-card-b">
-                <?php if (empty($unpaidMonths)): ?>
+                <?php if ($accountStartYear > $curYear): ?>
+                  <div class="alert alert-info mb-0">
+                    Your dues will start in <b><?= esc($accountStartLabel) ?></b>.
+                  </div>
+                <?php elseif (empty($unpaidMonths)): ?>
                   <div class="alert alert-success mb-0">
-                    ✅ You are fully paid for <?= esc($curYear) ?> (Jan–<?= esc(month_name($curMonth)) ?>). Thank you!
+                    ✅ You are fully paid for <?= esc($curYear) ?> (<?= esc(month_name($duesStartMonthThisYear)) ?>–<?= esc(month_name($curMonth)) ?>). Thank you!
                   </div>
                   <div class="mt-2 text-muted small fw-semibold">
-                    Keep it up — dues help fund maintenance, security, and utilities.
+                    Dues started from your account creation month: <?= esc($accountStartLabel) ?>.
                   </div>
                 <?php else: ?>
                   <div class="alert alert-danger">
                     <div class="fw-bold mb-1">⚠️ You have unpaid monthly dues.</div>
+                    <div class="fw-semibold mb-2">
+                      Dues start from: <b><?= esc($accountStartLabel) ?></b>
+                    </div>
                     <div class="fw-semibold">
                       Unpaid months (<?= esc($curYear) ?>):
-                      <?php foreach($unpaidMonths as $i => $m): ?>
+                      <?php foreach($unpaidMonths as $m): ?>
                         <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle me-1">
                           <?= esc(month_name($m)) ?>
                         </span>
@@ -755,7 +785,9 @@ unset($_SESSION['access_denied']);
                     </a>
                     <span class="pillx">
                       Current month: <?= esc(month_name($curMonth)) ?> —
-                      <?php if ($curMonthPaid): ?>
+                      <?php if (!$curMonthIsApplicable): ?>
+                        <span class="text-muted">NOT YET APPLICABLE</span>
+                      <?php elseif ($curMonthPaid): ?>
                         <span class="text-success">PAID ✅</span>
                       <?php else: ?>
                         <span class="text-danger">NOT PAID ❌</span>
@@ -763,7 +795,7 @@ unset($_SESSION['access_denied']);
                     </span>
                   </div>
                   <div class="mt-2 text-muted small fw-semibold">
-                    Tip: Paying on time avoids penalties and helps the HOA budget accurately.
+                    Only the months starting from your account creation month are included.
                   </div>
                 <?php endif; ?>
               </div>

@@ -82,8 +82,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $can_parking  = (int)($_POST['can_parking'] ?? 0);
         $can_ann      = (int)($_POST['can_announcements'] ?? 0);
 
-        if ($first_name === '' || $last_name === '' || $email === '' || $password_raw === '') {
-            echo json_encode(['ok' => false, 'msg' => 'First name, last name, email, and password are required.']);
+        if (
+            $first_name === '' ||
+            $last_name === '' ||
+            $email === '' ||
+            $contact_number === '' ||
+            $password_raw === '' ||
+            $lease_start === '' ||
+            $lease_end === ''
+        ) {
+            echo json_encode(['ok' => false, 'msg' => 'All fields are required except middle name.']);
+            exit;
+        }
+
+        if (!preg_match('/^[0-9]{11}$/', $contact_number)) {
+            echo json_encode(['ok' => false, 'msg' => 'Contact number must be exactly 11 digits.']);
             exit;
         }
 
@@ -97,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        if ($lease_start !== '' && $lease_end !== '' && $lease_end < $lease_start) {
+        if ($lease_end < $lease_start) {
             echo json_encode(['ok' => false, 'msg' => 'Lease end date must be later than lease start date.']);
             exit;
         }
@@ -118,44 +131,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $valid_id_path = null;
-        if (!empty($_FILES['valid_id']['name'])) {
-            if (!isset($_FILES['valid_id']) || $_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
-                echo json_encode(['ok' => false, 'msg' => 'Valid ID upload failed.']);
-                exit;
-            }
 
-            $ext = strtolower(pathinfo($_FILES['valid_id']['name'], PATHINFO_EXTENSION));
-            $allowedExt = ['jpg', 'jpeg', 'png', 'pdf'];
-            if (!in_array($ext, $allowedExt, true)) {
-                echo json_encode(['ok' => false, 'msg' => 'Valid ID must be JPG, JPEG, PNG, or PDF only.']);
-                exit;
-            }
-
-            if ($_FILES['valid_id']['size'] > 5 * 1024 * 1024) {
-                echo json_encode(['ok' => false, 'msg' => 'Valid ID must not exceed 5MB.']);
-                exit;
-            }
-
-            $dir = "../uploads/tenants/{$homeowner_id}/";
-            if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-                echo json_encode(['ok' => false, 'msg' => 'Failed to create upload folder.']);
-                exit;
-            }
-
-            $fname = time() . '_' . bin2hex(random_bytes(4)) . '_tenant_id.' . $ext;
-            $dest  = $dir . $fname;
-
-            if (!move_uploaded_file($_FILES['valid_id']['tmp_name'], $dest)) {
-                echo json_encode(['ok' => false, 'msg' => 'Failed to save uploaded file.']);
-                exit;
-            }
-
-            $valid_id_path = "uploads/tenants/{$homeowner_id}/{$fname}";
+        if (!isset($_FILES['valid_id']) || empty($_FILES['valid_id']['name'])) {
+            echo json_encode(['ok' => false, 'msg' => 'Valid ID is required.']);
+            exit;
         }
 
+        if ($_FILES['valid_id']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['ok' => false, 'msg' => 'Valid ID upload failed.']);
+            exit;
+        }
+
+        $ext = strtolower(pathinfo($_FILES['valid_id']['name'], PATHINFO_EXTENSION));
+        $allowedExt = ['jpg', 'jpeg', 'png', 'pdf'];
+        if (!in_array($ext, $allowedExt, true)) {
+            echo json_encode(['ok' => false, 'msg' => 'Valid ID must be JPG, JPEG, PNG, or PDF only.']);
+            exit;
+        }
+
+        if ($_FILES['valid_id']['size'] > 5 * 1024 * 1024) {
+            echo json_encode(['ok' => false, 'msg' => 'Valid ID must not exceed 5MB.']);
+            exit;
+        }
+
+        $dir = "../uploads/tenants/{$homeowner_id}/";
+        if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+            echo json_encode(['ok' => false, 'msg' => 'Failed to create upload folder.']);
+            exit;
+        }
+
+        $fname = time() . '_' . bin2hex(random_bytes(4)) . '_tenant_id.' . $ext;
+        $dest  = $dir . $fname;
+
+        if (!move_uploaded_file($_FILES['valid_id']['tmp_name'], $dest)) {
+            echo json_encode(['ok' => false, 'msg' => 'Failed to save uploaded file.']);
+            exit;
+        }
+
+        $valid_id_path = "uploads/tenants/{$homeowner_id}/{$fname}";
+
         $hashed = password_hash($password_raw, PASSWORD_DEFAULT);
-        $ls = $lease_start !== '' ? $lease_start : null;
-        $le = $lease_end   !== '' ? $lease_end   : null;
+        $ls = $lease_start;
+        $le = $lease_end;
 
         $ins = $conn->prepare("
             INSERT INTO tenants (
@@ -196,19 +213,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if ($action === 'toggle_status') {
-        $tid   = (int)($_POST['tenant_id'] ?? 0);
-        $newst = ($_POST['new_status'] ?? 'inactive') === 'active' ? 'active' : 'inactive';
+    if ($action === 'delete_tenant') {
+        $tid = (int)($_POST['tenant_id'] ?? 0);
 
-        $upd = $conn->prepare("UPDATE tenants SET status = ? WHERE id = ? AND homeowner_id = ?");
-        $upd->bind_param("sii", $newst, $tid, $homeowner_id);
-        $ok = $upd->execute() && $upd->affected_rows >= 0;
-        $upd->close();
+        if ($tid <= 0) {
+            echo json_encode(['ok' => false, 'msg' => 'Invalid tenant selected.']);
+            exit;
+        }
 
-        echo json_encode([
-            'ok' => $ok,
-            'msg' => $ok ? 'Tenant status updated successfully.' : 'Failed to update tenant status.'
-        ]);
+        $getFile = $conn->prepare("SELECT valid_id_path FROM tenants WHERE id = ? AND homeowner_id = ? LIMIT 1");
+        $getFile->bind_param("ii", $tid, $homeowner_id);
+        $getFile->execute();
+        $tenantRow = $getFile->get_result()->fetch_assoc();
+        $getFile->close();
+
+        if (!$tenantRow) {
+            echo json_encode(['ok' => false, 'msg' => 'Tenant not found.']);
+            exit;
+        }
+
+        $del = $conn->prepare("DELETE FROM tenants WHERE id = ? AND homeowner_id = ?");
+        $del->bind_param("ii", $tid, $homeowner_id);
+        $ok = $del->execute();
+        $affected = $del->affected_rows;
+        $del->close();
+
+        if ($ok && $affected > 0) {
+            if (!empty($tenantRow['valid_id_path'])) {
+                $filePath = dirname(__DIR__) . '/' . ltrim($tenantRow['valid_id_path'], '/');
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+
+            echo json_encode(['ok' => true, 'msg' => 'Tenant deleted successfully.']);
+        } else {
+            echo json_encode(['ok' => false, 'msg' => 'Failed to delete tenant.']);
+        }
         exit;
     }
 
@@ -325,11 +366,6 @@ $lng = $user['longitude'] ?? null;
     height: 100%;
   }
 
-  .tenant-card.inactive {
-    opacity: .82;
-    border-color: #d7dde6;
-  }
-
   .tenant-avatar {
     width: 50px;
     height: 50px;
@@ -406,6 +442,26 @@ $lng = $user['longitude'] ?? null;
     display:none;
   }
 
+  .id-preview-box{
+    border:1px solid #dee2e6;
+    border-radius:16px;
+    background:#f8f9fa;
+    padding:12px;
+  }
+
+  .id-preview-frame,
+  .id-preview-img{
+    width:100%;
+    height:360px;
+    border:1px solid #dee2e6;
+    border-radius:12px;
+    background:#fff;
+  }
+
+  .id-preview-img{
+    object-fit:contain;
+  }
+
   @media (max-width: 991.98px){
     .sidebar{
       position: fixed !important;
@@ -428,6 +484,11 @@ $lng = $user['longitude'] ?? null;
 
     .mobile-user-strip{ display:block; }
     .desktop-user-text{ display:none !important; }
+
+    .id-preview-frame,
+    .id-preview-img{
+      height:260px;
+    }
   }
 </style>
 </head>
@@ -531,7 +592,7 @@ $lng = $user['longitude'] ?? null;
             <div class="fb-card-h"><h6>ℹ️ How access works</h6></div>
             <div class="fb-card-b">
               <div class="info-soft small fw-semibold">
-                Each tenant gets their own login. They can only use the modules you allow. You can edit access anytime or deactivate the account whenever needed.
+                Each tenant gets their own login. They can only use the modules you allow. You can edit access anytime or delete the account whenever needed.
               </div>
             </div>
           </div>
@@ -561,11 +622,10 @@ $lng = $user['longitude'] ?? null;
                   <?php foreach ($tenants as $t): ?>
                     <?php
                       $tName = trim(($t['first_name'] ?? '') . ' ' . ($t['middle_name'] ?? '') . ' ' . ($t['last_name'] ?? ''));
-                      $isActive = (($t['status'] ?? '') === 'active');
                       $tenantJson = htmlspecialchars(json_encode($t), ENT_QUOTES, 'UTF-8');
                     ?>
                     <div class="col-md-6">
-                      <div class="tenant-card <?= $isActive ? '' : 'inactive' ?>">
+                      <div class="tenant-card">
                         <div class="p-3">
                           <div class="d-flex align-items-start gap-3 mb-3">
                             <div class="tenant-avatar">
@@ -578,9 +638,7 @@ $lng = $user['longitude'] ?? null;
                                   <div class="fw-bold"><?= esc($tName) ?></div>
                                   <div class="mini-muted"><?= esc($t['email'] ?? '') ?></div>
                                 </div>
-                                <span class="badge <?= $isActive ? 'bg-success' : 'bg-secondary' ?>">
-                                  <?= $isActive ? 'Active' : 'Inactive' ?>
-                                </span>
+                                <span class="badge bg-success">Active</span>
                               </div>
                             </div>
                           </div>
@@ -611,15 +669,19 @@ $lng = $user['longitude'] ?? null;
                           </div>
 
                           <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    onclick="openTenantInfoModal(<?= $tenantJson ?>)">
+                              <i class="bi bi-eye me-1"></i> View Info
+                            </button>
+
                             <button class="btn btn-outline-primary btn-sm flex-fill"
                                     onclick="openAccessModal(<?= $tenantJson ?>)">
                               <i class="bi bi-sliders me-1"></i> Edit Access
                             </button>
 
-                            <button class="btn btn-sm <?= $isActive ? 'btn-outline-danger' : 'btn-outline-success' ?>"
-                                    onclick="toggleStatus(<?= (int)$t['id'] ?>, '<?= $isActive ? 'inactive' : 'active' ?>', this)">
-                              <i class="bi bi-<?= $isActive ? 'person-dash' : 'person-check' ?>"></i>
-                              <?= $isActive ? 'Deactivate' : 'Activate' ?>
+                            <button class="btn btn-outline-danger btn-sm"
+                                    onclick="deleteTenant(<?= (int)$t['id'] ?>, '<?= esc(addslashes($tName)) ?>', this)">
+                              <i class="bi bi-trash me-1"></i> Delete
                             </button>
                           </div>
                         </div>
@@ -632,6 +694,85 @@ $lng = $user['longitude'] ?? null;
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TENANT INFO MODAL -->
+<div class="modal fade" id="tenantInfoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content rounded-4 shadow">
+      <div class="modal-header bg-secondary text-white rounded-top-4">
+        <h5 class="modal-title">
+          <i class="bi bi-person-lines-fill me-2"></i>Tenant Information
+        </h5>
+        <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body px-4 py-4">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-bold text-success">First Name</label>
+            <div class="form-control bg-light" id="ti_first_name">—</div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-bold text-success">Middle Name</label>
+            <div class="form-control bg-light" id="ti_middle_name">—</div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-bold text-success">Last Name</label>
+            <div class="form-control bg-light" id="ti_last_name">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Email Address</label>
+            <div class="form-control bg-light" id="ti_email">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Contact Number</label>
+            <div class="form-control bg-light" id="ti_contact_number">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Lease Start</label>
+            <div class="form-control bg-light" id="ti_lease_start">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Lease End</label>
+            <div class="form-control bg-light" id="ti_lease_end">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Status</label>
+            <div class="form-control bg-light" id="ti_status">—</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-success">Module Access</label>
+            <div class="form-control bg-light" id="ti_access">—</div>
+          </div>
+
+          <div class="col-12 mt-3">
+            <label class="form-label fw-bold text-success">Uploaded Valid ID</label>
+            <div class="id-preview-box">
+              <div id="ti_valid_id_wrap"></div>
+              <div class="mt-2">
+                <a href="#" target="_blank" id="ti_valid_id_link" class="btn btn-outline-success btn-sm d-none">
+                  <i class="bi bi-box-arrow-up-right me-1"></i> Open File
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 px-4 pb-4">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -675,8 +816,19 @@ $lng = $user['longitude'] ?? null;
               <input type="email" name="email" class="form-control" required>
             </div>
             <div class="col-sm-6">
-              <label class="form-label">Contact Number</label>
-              <input type="text" name="contact_number" class="form-control" placeholder="09XXXXXXXXX">
+              <label class="form-label">Contact Number <span class="text-danger">*</span></label>
+              <input
+                type="text"
+                name="contact_number"
+                class="form-control"
+                placeholder="09XXXXXXXXX"
+                inputmode="numeric"
+                pattern="[0-9]{11}"
+                maxlength="11"
+                minlength="11"
+                required
+                oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,11)"
+              >
             </div>
 
             <div class="col-sm-6">
@@ -684,20 +836,20 @@ $lng = $user['longitude'] ?? null;
               <input type="password" name="password" class="form-control" required minlength="6" placeholder="Minimum 6 characters">
             </div>
             <div class="col-sm-6">
-              <label class="form-label">Valid ID <span class="text-muted">(optional)</span></label>
-              <input type="file" name="valid_id" class="form-control" accept=".jpg,.jpeg,.png,.pdf">
+              <label class="form-label">Valid ID <span class="text-danger">*</span></label>
+              <input type="file" name="valid_id" class="form-control" accept=".jpg,.jpeg,.png,.pdf" required>
             </div>
           </div>
 
-          <h6 class="fw-semibold text-success mb-3">Lease Period <span class="text-muted fw-normal">(optional)</span></h6>
+          <h6 class="fw-semibold text-success mb-3">Lease Period</h6>
           <div class="row g-3 mb-4">
             <div class="col-sm-6">
-              <label class="form-label">Lease Start</label>
-              <input type="date" name="lease_start" class="form-control">
+              <label class="form-label">Lease Start <span class="text-danger">*</span></label>
+              <input type="date" name="lease_start" class="form-control" required>
             </div>
             <div class="col-sm-6">
-              <label class="form-label">Lease End</label>
-              <input type="date" name="lease_end" class="form-control">
+              <label class="form-label">Lease End <span class="text-danger">*</span></label>
+              <input type="date" name="lease_end" class="form-control" required>
             </div>
           </div>
 
@@ -768,28 +920,93 @@ $lng = $user['longitude'] ?? null;
   </div>
 </div>
 
-<!-- TOAST -->
-<div class="position-fixed top-0 end-0 p-3" style="z-index:9999">
-  <div id="sbToast" class="toast align-items-center border-0 shadow" role="alert">
-    <div class="d-flex">
-      <div class="toast-body" id="sbToastMsg"></div>
-      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
-    </div>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
 const SELF = 'homeowner_tenant_register.php';
 
 function showToast(msg, ok = true) {
-  const el = document.getElementById('sbToast');
-  document.getElementById('sbToastMsg').textContent = msg;
-  el.classList.remove('bg-success', 'text-white', 'bg-danger');
-  el.classList.add(ok ? 'bg-success' : 'bg-danger');
-  if (ok) el.classList.add('text-white');
-  new bootstrap.Toast(el, { delay: 3200 }).show();
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: ok ? 'success' : 'error',
+    title: msg,
+    showConfirmButton: false,
+    timer: 2800,
+    timerProgressBar: true
+  });
+}
+
+function formatDateValue(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
+}
+
+function resolveTenantFileUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  path = String(path).replace(/^\/+/, '');
+  return '../' + path;
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, function(m) {
+    return ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    })[m];
+  });
+}
+
+function openTenantInfoModal(tenant) {
+  document.getElementById('ti_first_name').textContent     = tenant.first_name || '—';
+  document.getElementById('ti_middle_name').textContent    = tenant.middle_name || '—';
+  document.getElementById('ti_last_name').textContent      = tenant.last_name || '—';
+  document.getElementById('ti_email').textContent          = tenant.email || '—';
+  document.getElementById('ti_contact_number').textContent = tenant.contact_number || '—';
+  document.getElementById('ti_lease_start').textContent    = formatDateValue(tenant.lease_start);
+  document.getElementById('ti_lease_end').textContent      = tenant.lease_end ? formatDateValue(tenant.lease_end) : 'Open-ended';
+  document.getElementById('ti_status').textContent         = tenant.status || '—';
+
+  const access = [];
+  if (parseInt(tenant.can_pay_dues || 0, 10) === 1) access.push('Pay Monthly Dues');
+  if (parseInt(tenant.can_rent || 0, 10) === 1) access.push('Facility Rentals');
+  if (parseInt(tenant.can_parking || 0, 10) === 1) access.push('Parking Permits');
+  if (parseInt(tenant.can_announcements || 0, 10) === 1) access.push('Announcement Feed');
+
+  document.getElementById('ti_access').textContent = access.length ? access.join(', ') : 'No enabled access';
+
+  const wrap = document.getElementById('ti_valid_id_wrap');
+  const openLink = document.getElementById('ti_valid_id_link');
+  wrap.innerHTML = '';
+  openLink.classList.add('d-none');
+  openLink.href = '#';
+
+  if (tenant.valid_id_path) {
+    const fileUrl = resolveTenantFileUrl(tenant.valid_id_path);
+    const ext = String(tenant.valid_id_path).split('.').pop().toLowerCase();
+
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+      wrap.innerHTML = `<img src="${escapeHtml(fileUrl)}" alt="Valid ID Preview" class="id-preview-img">`;
+    } else if (ext === 'pdf') {
+      wrap.innerHTML = `<iframe src="${escapeHtml(fileUrl)}" class="id-preview-frame"></iframe>`;
+    } else {
+      wrap.innerHTML = `<div class="text-muted">Preview is not available for this file type.</div>`;
+    }
+
+    openLink.href = fileUrl;
+    openLink.classList.remove('d-none');
+  } else {
+    wrap.innerHTML = `<div class="text-muted">No uploaded valid ID found.</div>`;
+  }
+
+  new bootstrap.Modal(document.getElementById('tenantInfoModal')).show();
 }
 
 async function submitRegister() {
@@ -800,6 +1017,12 @@ async function submitRegister() {
   btn.disabled = true;
   err.classList.add('d-none');
   err.textContent = '';
+
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    btn.disabled = false;
+    return;
+  }
 
   const fd = new FormData(form);
 
@@ -812,46 +1035,90 @@ async function submitRegister() {
     const data = await res.json();
 
     if (data.ok) {
-      showToast(data.msg, true);
       bootstrap.Modal.getInstance(document.getElementById('registerModal')).hide();
-      setTimeout(() => location.reload(), 1000);
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success',
+        text: data.msg || 'Tenant registered successfully.',
+        confirmButtonColor: '#198754'
+      });
+
+      location.reload();
     } else {
       err.textContent = data.msg || 'Failed to register tenant.';
       err.classList.remove('d-none');
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Registration Failed',
+        text: data.msg || 'Failed to register tenant.',
+        confirmButtonColor: '#dc3545'
+      });
     }
   } catch (e) {
     err.textContent = 'An error occurred. Please try again.';
     err.classList.remove('d-none');
+
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'An error occurred. Please try again.',
+      confirmButtonColor: '#dc3545'
+    });
   } finally {
     btn.disabled = false;
   }
 }
 
-async function toggleStatus(tid, newStatus, btn) {
-  if (!confirm(`Are you sure you want to ${newStatus === 'inactive' ? 'deactivate' : 'activate'} this tenant?`)) {
-    return;
-  }
+async function deleteTenant(tid, tenantName, btn) {
+  const result = await Swal.fire({
+    title: 'Are you sure?',
+    text: `Do you want to delete ${tenantName}? This action cannot be undone.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    cancelButtonColor: '#6c757d',
+    confirmButtonText: 'Yes, delete',
+    cancelButtonText: 'Cancel'
+  });
+
+  if (!result.isConfirmed) return;
 
   btn.disabled = true;
 
   const fd = new FormData();
-  fd.append('action', 'toggle_status');
+  fd.append('action', 'delete_tenant');
   fd.append('tenant_id', tid);
-  fd.append('new_status', newStatus);
 
   try {
     const res = await fetch(SELF, { method: 'POST', body: fd });
     const data = await res.json();
 
     if (data.ok) {
-      showToast(data.msg || 'Status updated.', true);
-      setTimeout(() => location.reload(), 900);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted',
+        text: data.msg || 'Tenant deleted successfully.',
+        confirmButtonColor: '#198754'
+      });
+      location.reload();
     } else {
-      showToast(data.msg || 'Failed to update status.', false);
+      Swal.fire({
+        icon: 'error',
+        title: 'Delete Failed',
+        text: data.msg || 'Failed to delete tenant.',
+        confirmButtonColor: '#dc3545'
+      });
       btn.disabled = false;
     }
   } catch (e) {
-    showToast('An error occurred while updating status.', false);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'An error occurred while deleting tenant.',
+      confirmButtonColor: '#dc3545'
+    });
     btn.disabled = false;
   }
 }
@@ -883,14 +1150,31 @@ async function submitAccess() {
     const data = await res.json();
 
     if (data.ok) {
-      showToast(data.msg || 'Access updated successfully.', true);
       bootstrap.Modal.getInstance(document.getElementById('accessModal')).hide();
-      setTimeout(() => location.reload(), 900);
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Saved',
+        text: data.msg || 'Access updated successfully.',
+        confirmButtonColor: '#198754'
+      });
+
+      location.reload();
     } else {
-      showToast(data.msg || 'Failed to update access.', false);
+      Swal.fire({
+        icon: 'error',
+        title: 'Update Failed',
+        text: data.msg || 'Failed to update access.',
+        confirmButtonColor: '#dc3545'
+      });
     }
   } catch (e) {
-    showToast('An error occurred while updating access.', false);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'An error occurred while updating access.',
+      confirmButtonColor: '#dc3545'
+    });
   }
 }
 
@@ -961,7 +1245,6 @@ async function submitAccess() {
 </script>
 
 <script>
-// ── Generic dropdown toggle ────────────────────────────────────────────────────
 function initSbDropdown(toggleId, containerId) {
   const toggle = document.getElementById(toggleId);
   const container = document.getElementById(containerId);

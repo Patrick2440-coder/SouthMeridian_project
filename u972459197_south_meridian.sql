@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 05, 2026 at 12:01 PM
+-- Generation Time: Apr 07, 2026 at 05:30 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -444,22 +444,6 @@ CREATE TABLE `election_nominations` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `election_nominations`
---
-
-INSERT INTO `election_nominations` (`id`, `election_id`, `phase`, `position`, `homeowner_id`, `created_by_admin_id`, `created_at`) VALUES
-(2, 1, 'Phase 1', 'President', 88, 1, '2026-03-11 16:16:40'),
-(4, 1, 'Phase 1', 'Secretary', 39, 1, '2026-03-11 16:17:05'),
-(5, 1, 'Phase 1', 'Treasurer', 44, 1, '2026-03-11 16:17:20'),
-(6, 1, 'Phase 1', 'Board of Director', 43, 1, '2026-03-11 16:17:34'),
-(7, 1, 'Phase 1', 'Board of Director', 37, 1, '2026-03-11 16:42:33'),
-(8, 1, 'Phase 1', 'Board of Director', 38, 1, '2026-03-11 16:42:33'),
-(9, 1, 'Phase 1', 'Board of Director', 39, 1, '2026-03-11 16:42:33'),
-(10, 1, 'Phase 1', 'Board of Director', 40, 1, '2026-03-11 16:42:33'),
-(11, 1, 'Phase 1', 'Board of Director', 41, 1, '2026-03-11 16:42:33'),
-(12, 1, 'Phase 1', 'Board of Director', 42, 1, '2026-03-11 16:42:33');
-
 -- --------------------------------------------------------
 
 --
@@ -476,14 +460,6 @@ CREATE TABLE `election_sessions` (
   `created_by_admin_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `election_sessions`
---
-
-INSERT INTO `election_sessions` (`id`, `phase`, `title`, `status`, `started_at`, `ended_at`, `created_by_admin_id`, `created_at`) VALUES
-(1, 'Phase 1', 'Phase 1 HOA Election 2026', 'finished', '2026-03-11 16:17:45', '2026-03-11 16:18:17', 1, '2026-03-11 16:17:45'),
-(3, 'Phase 1', 'awdadw', 'draft', NULL, NULL, 1, '2026-03-28 06:16:24');
 
 -- --------------------------------------------------------
 
@@ -1638,13 +1614,13 @@ ALTER TABLE `complaint_messages`
 -- AUTO_INCREMENT for table `election_nominations`
 --
 ALTER TABLE `election_nominations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `election_sessions`
 --
 ALTER TABLE `election_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `election_votes`
