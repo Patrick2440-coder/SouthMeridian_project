@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 07, 2026 at 05:30 AM
+-- Generation Time: Apr 08, 2026 at 12:27 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -444,6 +444,25 @@ CREATE TABLE `election_nominations` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `election_nominations`
+--
+
+INSERT INTO `election_nominations` (`id`, `election_id`, `phase`, `position`, `homeowner_id`, `created_by_admin_id`, `created_at`) VALUES
+(14, 5, 'Phase 1', 'President', 38, 1, '2026-04-07 21:32:32'),
+(15, 5, 'Phase 1', 'Vice President', 45, 1, '2026-04-07 21:32:36'),
+(16, 5, 'Phase 1', 'Secretary', 117, 1, '2026-04-07 21:32:42'),
+(17, 5, 'Phase 1', 'Treasurer', 116, 1, '2026-04-07 21:32:47'),
+(18, 5, 'Phase 1', 'Secretary', 46, 1, '2026-04-07 21:32:52'),
+(19, 5, 'Phase 1', 'Treasurer', 120, 1, '2026-04-07 21:32:56'),
+(20, 5, 'Phase 1', 'Auditor', 42, 1, '2026-04-07 21:33:00'),
+(21, 5, 'Phase 1', 'Board of Director', 43, 1, '2026-04-07 21:33:04'),
+(22, 5, 'Phase 1', 'Board of Director', 113, 1, '2026-04-07 21:33:07'),
+(23, 5, 'Phase 1', 'Board of Director', 41, 1, '2026-04-07 21:33:10'),
+(24, 5, 'Phase 1', 'Board of Director', 115, 1, '2026-04-07 21:33:13'),
+(25, 5, 'Phase 1', 'Board of Director', 38, 1, '2026-04-07 21:33:16'),
+(26, 5, 'Phase 1', 'Board of Director', 44, 1, '2026-04-07 21:33:19');
+
 -- --------------------------------------------------------
 
 --
@@ -461,6 +480,13 @@ CREATE TABLE `election_sessions` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `election_sessions`
+--
+
+INSERT INTO `election_sessions` (`id`, `phase`, `title`, `status`, `started_at`, `ended_at`, `created_by_admin_id`, `created_at`) VALUES
+(5, 'Phase 1', 'Phase 1 ELECTION 2026', 'finished', '2026-04-08 05:33:25', '2026-04-08 05:40:49', 1, '2026-04-07 21:32:17');
+
 -- --------------------------------------------------------
 
 --
@@ -476,6 +502,23 @@ CREATE TABLE `election_votes` (
   `nominee_homeowner_id` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `election_votes`
+--
+
+INSERT INTO `election_votes` (`id`, `election_id`, `phase`, `position`, `voter_homeowner_id`, `nominee_homeowner_id`, `created_at`) VALUES
+(1, 5, 'Phase 1', 'President', 115, 38, '2026-04-07 21:33:49'),
+(2, 5, 'Phase 1', 'Vice President', 115, 45, '2026-04-07 21:33:54'),
+(3, 5, 'Phase 1', 'Secretary', 115, 46, '2026-04-07 21:33:56'),
+(4, 5, 'Phase 1', 'Treasurer', 115, 116, '2026-04-07 21:33:59'),
+(5, 5, 'Phase 1', 'Auditor', 115, 42, '2026-04-07 21:34:01'),
+(6, 5, 'Phase 1', 'Board of Director', 115, 38, '2026-04-07 21:34:06'),
+(7, 5, 'Phase 1', 'Board of Director', 115, 41, '2026-04-07 21:34:06'),
+(8, 5, 'Phase 1', 'Board of Director', 115, 43, '2026-04-07 21:34:06'),
+(9, 5, 'Phase 1', 'Board of Director', 115, 44, '2026-04-07 21:34:06'),
+(10, 5, 'Phase 1', 'Board of Director', 115, 113, '2026-04-07 21:34:06'),
+(11, 5, 'Phase 1', 'Board of Director', 115, 115, '2026-04-07 21:34:06');
 
 -- --------------------------------------------------------
 
@@ -652,11 +695,7 @@ CREATE TABLE `finance_payments` (
 
 INSERT INTO `finance_payments` (`id`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `paid_at`, `reference_no`, `notes`, `created_by_admin_id`, `created_at`) VALUES
 (3, 39, 'Phase 1', 2026, 2, 200.00, 'paid', '2026-02-17 18:57:10', '', 'cash', NULL, '2026-02-17 10:57:10'),
-(9, 113, 'Phase 1', 2026, 1, 200.00, 'paid', '2026-03-28 05:44:16', 'pay_4ouRuy2AKjD3oUYGonDyfnMS', 'PayMongo (fallback sync)', NULL, '2026-03-28 05:44:16'),
-(10, 115, 'Phase 1', 2026, 2, 200.00, 'paid', '2026-03-29 17:55:18', 'pay_LDm4SQShCdjtTqq2JyJQYK3F', 'PayMongo (fallback sync)', NULL, '2026-03-29 17:55:18'),
-(11, 118, 'Phase 1', 2026, 3, 200.00, 'paid', '2026-03-30 08:42:39', '209324267582', 'for 3 months', 9, '2026-03-30 08:42:39'),
-(12, 119, 'Phase 1', 2026, 1, 200.00, 'paid', '2026-03-30 08:45:52', '', '', 9, '2026-03-30 08:45:52'),
-(13, 120, 'Phase 1', 2026, 1, 200.00, 'paid', '2026-03-30 10:58:16', 'pay_MFZig74Ye8G9JyfxxXdoJoec', 'PayMongo (fallback sync)', NULL, '2026-03-30 10:58:16');
+(11, 118, 'Phase 1', 2026, 3, 200.00, 'paid', '2026-03-30 08:42:39', '209324267582', 'for 3 months', 9, '2026-03-30 08:42:39');
 
 -- --------------------------------------------------------
 
@@ -687,15 +726,7 @@ CREATE TABLE `finance_paymongo_checkouts` (
 --
 
 INSERT INTO `finance_paymongo_checkouts` (`id`, `checkout_session_id`, `checkout_url`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `payment_id`, `paid_at`, `last_event_type`, `last_event_id`, `created_at`, `updated_at`) VALUES
-(44, 'cs_9a4a32d3f855330b0affe9bd', 'https://checkout.paymongo.com/9a4a32d3f855330b0affe9bd', 113, 'Phase 1', 2026, 1, 200.00, '', NULL, NULL, NULL, NULL, '2026-03-28 05:44:03', '2026-03-28 05:44:07'),
-(45, 'cs_83c5483bc7e66302bf917849', 'https://checkout.paymongo.com/83c5483bc7e66302bf917849', 113, 'Phase 1', 2026, 1, 200.00, 'paid', 'pay_4ouRuy2AKjD3oUYGonDyfnMS', '2026-03-28 05:44:16', NULL, NULL, '2026-03-28 05:44:07', '2026-03-28 05:44:16'),
-(46, 'cs_ce916cc1374e997e7bec2626', 'https://checkout.paymongo.com/ce916cc1374e997e7bec2626', 113, 'Phase 1', 2026, 2, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-03-28 05:44:19', '2026-03-28 05:44:19'),
-(47, 'cs_e1cad1493572d1f0b63c1428', 'https://checkout.paymongo.com/e1cad1493572d1f0b63c1428', 115, 'Phase 1', 2026, 1, 200.00, '', NULL, NULL, NULL, NULL, '2026-03-29 14:03:56', '2026-03-30 17:37:39'),
-(48, 'cs_f5c86760f0f3b613300e16dd', 'https://checkout.paymongo.com/f5c86760f0f3b613300e16dd', 115, 'Phase 1', 2026, 2, 200.00, 'paid', 'pay_LDm4SQShCdjtTqq2JyJQYK3F', '2026-03-29 17:55:18', NULL, NULL, '2026-03-29 17:54:25', '2026-03-29 17:55:18'),
-(49, 'cs_f46087cdee9d460c05af71d2', 'https://checkout.paymongo.com/f46087cdee9d460c05af71d2', 120, 'Phase 1', 2026, 1, 200.00, '', NULL, NULL, NULL, NULL, '2026-03-30 10:54:04', '2026-03-30 10:56:24'),
-(50, 'cs_a090d0a9a40fe6c8ec1599a7', 'https://checkout.paymongo.com/a090d0a9a40fe6c8ec1599a7', 120, 'Phase 1', 2026, 1, 200.00, 'paid', 'pay_MFZig74Ye8G9JyfxxXdoJoec', '2026-03-30 10:58:16', NULL, NULL, '2026-03-30 10:56:24', '2026-03-30 10:58:16'),
-(51, 'cs_adbc84547b664697a3f593dd', 'https://checkout.paymongo.com/adbc84547b664697a3f593dd', 120, 'Phase 1', 2026, 2, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-03-30 10:58:21', '2026-03-30 10:58:21'),
-(52, 'cs_e57b3554f94eca9d898c65bb', 'https://checkout.paymongo.com/e57b3554f94eca9d898c65bb', 115, 'Phase 1', 2026, 1, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-03-30 17:37:40', '2026-03-30 17:37:40');
+(53, 'cs_7eaa7da5aedf531a38b01ba9', 'https://checkout.paymongo.com/7eaa7da5aedf531a38b01ba9', 115, 'Phase 1', 2026, 3, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-04-07 03:56:36', '2026-04-07 03:56:36');
 
 -- --------------------------------------------------------
 
@@ -929,7 +960,15 @@ CREATE TABLE `homeowner_officer_messages` (
 
 INSERT INTO `homeowner_officer_messages` (`id`, `phase`, `homeowner_id`, `admin_id`, `sender_type`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `is_read_by_homeowner`, `is_read_by_admin`, `created_at`) VALUES
 (1, 'Phase 1', 113, 9, 'homeowner', 'hello', NULL, NULL, NULL, 1, 1, '2026-03-28 05:44:35'),
-(2, 'Phase 1', 113, 9, 'admin', 'hi', NULL, NULL, NULL, 0, 1, '2026-04-05 09:15:23');
+(2, 'Phase 1', 113, 9, 'admin', 'hi', NULL, NULL, NULL, 0, 1, '2026-04-05 09:15:23'),
+(3, 'Phase 1', 115, 9, 'homeowner', 'awdasdaw', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:20'),
+(4, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:21'),
+(5, 'Phase 1', 115, 9, 'homeowner', 'awda', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:22'),
+(6, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:23'),
+(7, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:24'),
+(8, 'Phase 1', 115, 9, 'homeowner', 'awda', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:25'),
+(9, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:25'),
+(10, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:26');
 
 -- --------------------------------------------------------
 
@@ -1104,7 +1143,11 @@ INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `a
 (6, 'Phase 2', 114, 'Hi', NULL, NULL, NULL, '2026-03-28 08:36:23'),
 (7, 'Phase 1', 115, 'hello', NULL, NULL, NULL, '2026-04-04 08:51:34'),
 (8, 'Phase 1', 115, '', 'abi.jpg', 'uploads/chat_files/1775377010_7628adbe.jpg', 'image/jpeg', '2026-04-05 08:16:50'),
-(9, 'Phase 1', 115, 'gello', NULL, NULL, NULL, '2026-04-05 08:30:33');
+(9, 'Phase 1', 115, 'gello', NULL, NULL, NULL, '2026-04-05 08:30:33'),
+(10, 'Phase 1', 115, 'awasdawda', NULL, NULL, NULL, '2026-04-07 20:49:42'),
+(11, 'Phase 1', 115, 'awdadsdaw', NULL, NULL, NULL, '2026-04-07 20:49:44'),
+(12, 'Phase 1', 115, 'awdasdaw', NULL, NULL, NULL, '2026-04-07 20:49:46'),
+(13, 'Phase 1', 115, 'awdadasd', NULL, NULL, NULL, '2026-04-07 20:49:48');
 
 -- --------------------------------------------------------
 
@@ -1232,7 +1275,7 @@ CREATE TABLE `tenants` (
 --
 
 INSERT INTO `tenants` (`id`, `homeowner_id`, `phase`, `house_lot_number`, `first_name`, `middle_name`, `last_name`, `email`, `password`, `contact_number`, `valid_id_path`, `can_pay_dues`, `can_rent`, `can_parking`, `can_announcements`, `lease_start`, `lease_end`, `status`, `registered_at`, `updated_at`) VALUES
-(1, 115, 'Phase 1', 'house 7', 'patrick', '', 'baculpo', 'tenant1@gmail.com', '$2y$10$wsOgqFb1dZSjQbNP/o1x3eh7narBGNhgDjdBsLd2tvEjeRYI1qt3S', '09916964490', NULL, 1, 1, 1, 1, NULL, NULL, 'active', '2026-04-04 07:36:27', '2026-04-04 07:40:44');
+(2, 115, 'Phase 1', 'house 7', 'Liam', '', 'Alexander', 'patrick2440@gmail.com', '$2y$10$WxEwFAm4.WN/d5X3supUOOKsMMjFxUYEoMl91Iu7vBCvuoBmOwQVG', '09121231237', 'uploads/tenants/115/1775540148_90de9345_tenant_id.jpg', 1, 1, 1, 1, '2026-04-07', '2027-04-07', 'active', '2026-04-07 05:35:48', '2026-04-07 05:35:48');
 
 --
 -- Indexes for dumped tables
@@ -1334,7 +1377,7 @@ ALTER TABLE `complaint_messages`
 --
 ALTER TABLE `election_nominations`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uniq_phase_position_homeowner` (`phase`,`position`,`homeowner_id`),
+  ADD UNIQUE KEY `uniq_election_position_homeowner` (`election_id`,`position`,`homeowner_id`),
   ADD KEY `idx_phase` (`phase`),
   ADD KEY `idx_homeowner` (`homeowner_id`),
   ADD KEY `fk_nom_admin` (`created_by_admin_id`),
@@ -1554,7 +1597,7 @@ ALTER TABLE `tenants`
 -- AUTO_INCREMENT for table `access_permissions`
 --
 ALTER TABLE `access_permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6187;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6253;
 
 --
 -- AUTO_INCREMENT for table `activity_logs`
@@ -1614,19 +1657,19 @@ ALTER TABLE `complaint_messages`
 -- AUTO_INCREMENT for table `election_nominations`
 --
 ALTER TABLE `election_nominations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
 
 --
 -- AUTO_INCREMENT for table `election_sessions`
 --
 ALTER TABLE `election_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `election_votes`
 --
 ALTER TABLE `election_votes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- AUTO_INCREMENT for table `facility_rental_pricing`
@@ -1674,7 +1717,7 @@ ALTER TABLE `finance_payments`
 -- AUTO_INCREMENT for table `finance_paymongo_checkouts`
 --
 ALTER TABLE `finance_paymongo_checkouts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
 
 --
 -- AUTO_INCREMENT for table `finance_report_requests`
@@ -1698,7 +1741,7 @@ ALTER TABLE `homeowners`
 -- AUTO_INCREMENT for table `homeowner_officer_messages`
 --
 ALTER TABLE `homeowner_officer_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `homeowner_positions`
@@ -1728,7 +1771,7 @@ ALTER TABLE `parking_violations`
 -- AUTO_INCREMENT for table `public_chat_messages`
 --
 ALTER TABLE `public_chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `public_chat_mutes`
@@ -1752,7 +1795,7 @@ ALTER TABLE `staff_members`
 -- AUTO_INCREMENT for table `tenants`
 --
 ALTER TABLE `tenants`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- Constraints for dumped tables

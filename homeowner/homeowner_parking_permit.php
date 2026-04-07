@@ -742,6 +742,27 @@ html, body { max-width:100%; overflow-x:hidden; }
   .form-label{ font-size:.92rem; }
   .btn, .form-control, .form-select{ font-size:.95rem; }
 }
+  /* Desktop fixed sidebar */
+@media (min-width: 992px){
+  .sidebar{
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 1030;
+  }
+
+  .main-area{
+    margin-left: 280px;
+    width: calc(100% - 280px);
+  }
+}
+.sidebar{
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 </style>
 </head>
 

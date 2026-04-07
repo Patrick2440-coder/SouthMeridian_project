@@ -439,6 +439,27 @@ $chatOpen = in_array($activePage, $chatPages, true);
     .req-list{ padding-left: 18px; }
     .permit-grid{ grid-template-columns: 1fr; }
   }
+    /* Desktop fixed sidebar */
+@media (min-width: 992px){
+  .sidebar{
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 1030;
+  }
+
+  .main-area{
+    margin-left: 280px;
+    width: calc(100% - 280px);
+  }
+}
+.sidebar{
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 </style>
 </head>
 

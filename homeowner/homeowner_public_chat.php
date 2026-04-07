@@ -1423,7 +1423,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     .chat-main-card{
-      min-height: calc(100vh - 190px);
+  height: calc(100vh - 120px);
+  min-height: calc(100vh - 120px);
+  max-height: calc(100vh - 120px);
     }
   }
 
@@ -1471,7 +1473,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     .selected-file-name{
       max-width: 140px;
     }
+    .chat-main-card{
+  height: calc(100vh - 100px);
+  min-height: calc(100vh - 100px);
+  max-height: calc(100vh - 100px);
+}
+
+.chat-body{
+  min-height: 0;
+}
   }
+  .chat-main-card{
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 140px);
+  min-height: 620px;
+  max-height: calc(100vh - 140px);
+  overflow: hidden;
+}
+
+.chat-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(34,197,94,.06), transparent 25%),
+    linear-gradient(180deg, #fafcff 0%, #f8fafc 100%);
+  scroll-behavior: smooth;
+}
 </style>
 </head>
 <body>

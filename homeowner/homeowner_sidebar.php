@@ -170,10 +170,6 @@ if (!$isTenant && isset($conn) && isset($_SESSION['homeowner_id'])) {
       </div>
     <?php endif; ?>
 
-    <!-- Logout -->
-    <a class="sb-link" href="logout.php" style="margin-top: 10px;">
-      <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-    </a>
 
   </nav>
 </aside>
