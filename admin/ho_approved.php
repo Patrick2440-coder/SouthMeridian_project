@@ -9,10 +9,10 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-$host="localhost";
-$db="u972459197_south_meridian";
-$user="u972459197_patrick";
-$pass="Idle2440";
+$host = "localhost";
+$user = "root";
+$pass = "";
+$db = "u972459197_south_meridian.sql";
 
 $conn = new mysqli($host,$user,$pass,$db);
 if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);

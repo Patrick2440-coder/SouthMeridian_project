@@ -16,13 +16,11 @@ if (
 /* =========================
    DB
    ========================= */
-$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
+$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
 
-function esc($v){
-    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-}
+function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 $positions = [
     'President',

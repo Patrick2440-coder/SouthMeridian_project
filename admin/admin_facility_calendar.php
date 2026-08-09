@@ -13,9 +13,9 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
   exit;
 }
 $db_host = "localhost";
-$db_user = "u972459197_patrick";
-$db_pass = "Idle2440";
-$db_name = "u972459197_south_meridian";
+$db_user = "root";
+$db_pass = "";
+$db_name = "u972459197_south_meridian.sql";
 
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);

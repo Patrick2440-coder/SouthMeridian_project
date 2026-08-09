@@ -10,9 +10,10 @@ $logPayload = __DIR__ . '/paymongo_webhook_payload.log';
 // If file cannot be created, PHP will fail silently. Ensure this folder is writable.
 ini_set('error_log', $logErrFile);
 
-$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
-if ($conn->connect_error) { http_response_code(500); exit("DB error"); }
+$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
+
 
 function log_err($msg) {
   error_log("[" . date('c') . "] " . $msg);

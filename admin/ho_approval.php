@@ -9,16 +9,30 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-$host="localhost"; 
-$db="u972459197_south_meridian"; 
-$user="u972459197_patrick"; 
-$pass="Idle2440";
+// Database connection
+$db_host = "localhost";
+$db_user = "root";
+$db_pass = "";
+$db_name = "u972459197_south_meridian.sql"; // Database name (do not include .sql)
 
-$conn = new mysqli($host,$user,$pass,$db);
-if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);
+$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
 $conn->set_charset("utf8mb4");
 
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+if (!function_exists('esc')) {
+  function esc($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+  }
+}
+
+if (empty($_SESSION['homeowner_import_csrf'])) {
+  $_SESSION['homeowner_import_csrf'] = bin2hex(random_bytes(32));
+}
+$homeownerImportCsrf = $_SESSION['homeowner_import_csrf'];
 
 function phase_prefix(string $phase): string {
   $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
@@ -40,6 +54,121 @@ $isHOSection = true;
 
 if (!isset($permissions) || !is_array($permissions)) {
   $permissions = [];
+}
+
+// AJAX homeowner profile used by the View button on this page.
+if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
+  $homeownerId = (int)($_GET['id'] ?? 0);
+  if ($homeownerId <= 0) {
+    http_response_code(400);
+    echo '<div class="p-4"><div class="alert alert-danger mb-0">Invalid homeowner ID.</div></div>';
+    exit();
+  }
+
+  if ($admin_role === 'superadmin') {
+    $profileStmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? LIMIT 1");
+    $profileStmt->bind_param('i', $homeownerId);
+  } else {
+    $profileStmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? AND phase=? LIMIT 1");
+    $profileStmt->bind_param('is', $homeownerId, $admin_phase);
+  }
+  $profileStmt->execute();
+  $homeowner = $profileStmt->get_result()->fetch_assoc();
+  $profileStmt->close();
+
+  if (!$homeowner) {
+    http_response_code(404);
+    echo '<div class="p-4"><div class="alert alert-warning mb-0">Homeowner not found or outside your assigned phase.</div></div>';
+    exit();
+  }
+
+  $memberStmt = $conn->prepare("SELECT first_name, middle_name, last_name, relation FROM household_members WHERE homeowner_id=? ORDER BY id ASC");
+  $memberStmt->bind_param('i', $homeownerId);
+  $memberStmt->execute();
+  $members = $memberStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+  $memberStmt->close();
+
+  $fullName = trim(($homeowner['first_name'] ?? '').' '.($homeowner['middle_name'] ?? '').' '.($homeowner['last_name'] ?? ''));
+  $addressParts = array_filter([
+    $homeowner['house_lot_number'] ?? '',
+    $homeowner['other_location_info'] ?? '',
+    $homeowner['barangay'] ?? '',
+    $homeowner['city_municipality'] ?? '',
+    $homeowner['province'] ?? '',
+    $homeowner['region'] ?? '',
+    $homeowner['zip_code'] ?? '',
+    $homeowner['country'] ?? ''
+  ], static fn($v) => trim((string)$v) !== '');
+  $address = implode(', ', $addressParts);
+  $lat = $homeowner['latitude'];
+  $lng = $homeowner['longitude'];
+  $status = (string)($homeowner['status'] ?? 'pending');
+  $validId = trim((string)($homeowner['valid_id_path'] ?? ''));
+  $billing = trim((string)($homeowner['proof_of_billing_path'] ?? ''));
+  $isImportPlaceholder = static function(string $path): bool {
+    return $path === '' || str_starts_with($path, 'imports/');
+  };
+  ?>
+  <div class="p-4">
+    <div class="row g-4">
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+              <div>
+                <h4 class="mb-1"><?= esc($fullName) ?></h4>
+                <div class="text-muted"><?= esc($homeowner['public_id'] ?: (phase_prefix($homeowner['phase']).$homeowner['id'])) ?> · <?= esc($homeowner['phase']) ?></div>
+              </div>
+              <span class="badge <?= $status === 'approved' ? 'badge-success' : ($status === 'rejected' ? 'badge-danger' : 'badge-warning') ?>"><?= esc(ucfirst($status)) ?></span>
+            </div>
+            <hr>
+            <div class="row g-3">
+              <div class="col-md-6"><strong>Email</strong><div><?= esc($homeowner['email']) ?></div></div>
+              <div class="col-md-6"><strong>Contact</strong><div><?= esc($homeowner['contact_number']) ?></div></div>
+              <div class="col-12"><strong>Address</strong><div><?= esc($address ?: 'Not provided') ?></div></div>
+              <div class="col-md-6"><strong>Valid ID</strong><div><?php if (!$isImportPlaceholder($validId)): ?><a href="<?= esc($validId) ?>" target="_blank">Open file</a><?php else: ?><span class="text-muted">Not provided by import</span><?php endif; ?></div></div>
+              <div class="col-md-6"><strong>Proof of Billing</strong><div><?php if (!$isImportPlaceholder($billing)): ?><a href="<?= esc($billing) ?>" target="_blank">Open file</a><?php else: ?><span class="text-muted">Not provided by import</span><?php endif; ?></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <h6 class="fw-bold">Household Members</h6>
+            <?php if (!$members): ?>
+              <div class="text-muted">No household members recorded.</div>
+            <?php else: ?>
+              <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Relation</th></tr></thead><tbody>
+              <?php foreach ($members as $m): ?>
+                <tr><td><?= esc(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])) ?></td><td><?= esc($m['relation']) ?></td></tr>
+              <?php endforeach; ?>
+              </tbody></table></div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <?php if ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng)): ?>
+          <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>" class="rounded shadow-sm mb-3"></div>
+        <?php else: ?>
+          <div class="alert alert-secondary">No map coordinates saved for this homeowner.</div>
+        <?php endif; ?>
+
+        <?php if ($status === 'pending'): ?>
+          <div class="card border-0 shadow-sm"><div class="card-body">
+            <h6 class="fw-bold">Approval Action</h6>
+            <div class="d-grid gap-2">
+              <button class="btn btn-success approveHomeowner" data-id="<?= (int)$homeownerId ?>">Approve Homeowner</button>
+              <button class="btn btn-danger rejectHomeowner" data-id="<?= (int)$homeownerId ?>">Reject Homeowner</button>
+            </div>
+          </div></div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+  <?php
+  exit();
 }
 
 // pending homeowners
@@ -231,6 +360,18 @@ $resultHO = $sqlHO->get_result();
 			</div>
 
 			<div class="card-box p-3">
+				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+					<div>
+						<h5 class="mb-1">Homeowner Import</h5>
+						<small class="text-muted">Upload .xlsx, .xls, or .csv. Use the template so the column names match.</small>
+					</div>
+					<div class="d-flex gap-2">
+						<button type="button" class="btn btn-outline-success" id="downloadTemplateBtn">Download Excel Template</button>
+						<button type="button" class="btn btn-success" id="importExcelBtn">Import Excel</button>
+						<input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" hidden>
+					</div>
+				</div>
+				<div id="importStatus" class="alert d-none mb-3" role="alert"></div>
 				<div class="table-responsive">
 					<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
 						<thead>
@@ -346,6 +487,7 @@ $resultHO = $sqlHO->get_result();
 	<script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
 
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
 	function showToast(message, type='success') {
@@ -358,6 +500,138 @@ $resultHO = $sqlHO->get_result();
 
 		bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2800 }).show();
 	}
+
+	const homeownerImportCsrf = <?= json_encode($homeownerImportCsrf) ?>;
+	const importHeaders = [
+		'first_name','middle_name','last_name','contact_number','email','password','phase','house_lot_number',
+		'barangay','city_municipality','province','region','zip_code','country','other_location_info','exact_location',
+		'latitude','longitude','status'
+	];
+
+	function normalizeExcelKey(key) {
+		return String(key || '')
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '_')
+			.replace(/^_+|_+$/g, '');
+	}
+
+	function normalizeExcelRow(row) {
+		const aliases = {
+			firstname: 'first_name', first: 'first_name',
+			middlename: 'middle_name', middle: 'middle_name',
+			lastname: 'last_name', last: 'last_name',
+			contact: 'contact_number', contact_no: 'contact_number', phone: 'contact_number', mobile: 'contact_number',
+			house_lot: 'house_lot_number', house_lot_no: 'house_lot_number', lot_number: 'house_lot_number', address: 'other_location_info',
+			city: 'city_municipality', municipality: 'city_municipality', zip: 'zip_code'
+		};
+		const clean = {};
+		Object.entries(row || {}).forEach(([key, value]) => {
+			let normalized = normalizeExcelKey(key);
+			normalized = aliases[normalized] || normalized;
+			clean[normalized] = typeof value === 'string' ? value.trim() : value;
+		});
+		return clean;
+	}
+
+	function setImportStatus(message, kind='info') {
+		const el = document.getElementById('importStatus');
+		el.className = 'alert mb-3 alert-' + kind;
+		el.textContent = message;
+	}
+
+	function downloadCredentials(rows) {
+		if (!rows || !rows.length || typeof XLSX === 'undefined') return;
+		const ws = XLSX.utils.json_to_sheet(rows);
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+		XLSX.writeFile(wb, 'imported_homeowner_credentials.xlsx');
+	}
+
+	document.addEventListener('DOMContentLoaded', function () {
+		const importBtn = document.getElementById('importExcelBtn');
+		const fileInput = document.getElementById('excelFileInput');
+		const templateBtn = document.getElementById('downloadTemplateBtn');
+
+		templateBtn?.addEventListener('click', function () {
+			if (typeof XLSX === 'undefined') {
+				showToast('Excel library failed to load.', 'error');
+				return;
+			}
+			const sample = [{
+				first_name: 'Juan', middle_name: 'Santos', last_name: 'Dela Cruz', contact_number: '09123456789',
+				email: 'juan@example.com', password: '', phase: 'Phase 1', house_lot_number: 'Blk 5 Lot 12',
+				barangay: 'Salitran', city_municipality: 'Dasmariñas', province: 'Cavite', region: 'CALABARZON',
+				zip_code: '4114', country: 'Philippines', other_location_info: 'Example Street', exact_location: '',
+				latitude: '14.3545000', longitude: '120.9460000', status: 'pending'
+			}];
+			const ws = XLSX.utils.json_to_sheet(sample, { header: importHeaders });
+			const wb = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(wb, ws, 'Homeowners');
+			XLSX.writeFile(wb, 'south_meridian_homeowners_import_template.xlsx');
+		});
+
+		importBtn?.addEventListener('click', () => fileInput?.click());
+
+		fileInput?.addEventListener('change', async function () {
+			const file = this.files && this.files[0];
+			if (!file) return;
+
+			try {
+				if (typeof XLSX === 'undefined') throw new Error('Excel library failed to load.');
+				importBtn.disabled = true;
+				setImportStatus('Reading ' + file.name + '...', 'info');
+
+				const buffer = await file.arrayBuffer();
+				const workbook = XLSX.read(buffer, { type: 'array' });
+				const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+				let rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+				rows = rows.map(normalizeExcelRow).filter(r => Object.values(r).some(v => String(v).trim() !== ''));
+
+				if (!rows.length) throw new Error('No data rows were found in the first worksheet.');
+
+				const missing = ['first_name','last_name','contact_number','email','house_lot_number'].filter(h => !(h in rows[0]));
+				if (missing.length) throw new Error('Missing required column(s): ' + missing.join(', '));
+
+				let imported = 0, skipped = 0;
+				const errors = [];
+				const credentials = [];
+				const chunkSize = 100;
+
+				for (let i = 0; i < rows.length; i += chunkSize) {
+					const chunk = rows.slice(i, i + chunkSize);
+					setImportStatus(`Importing rows ${i + 1}-${Math.min(i + chunk.length, rows.length)} of ${rows.length}...`, 'info');
+
+					const response = await fetch('import_homeowners.php', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ csrf: homeownerImportCsrf, rows: chunk, row_offset: i })
+					});
+					const data = await response.json().catch(() => null);
+					if (!response.ok || !data || !data.success) {
+						throw new Error((data && data.message) ? data.message : 'Import request failed.');
+					}
+					imported += Number(data.imported || 0);
+					skipped += Number(data.skipped || 0);
+					(data.errors || []).forEach(e => errors.push(e));
+					(data.generated_credentials || []).forEach(c => credentials.push(c));
+				}
+
+				const summary = `Import finished: ${imported} imported, ${skipped} skipped${errors.length ? `, ${errors.length} row error(s)` : ''}.`;
+				setImportStatus(summary + (errors.length ? ' First error: ' + errors[0] : ''), errors.length ? 'warning' : 'success');
+				showToast(summary, errors.length ? 'error' : 'success');
+				if (credentials.length) downloadCredentials(credentials);
+				setTimeout(() => location.reload(), 1800);
+			} catch (err) {
+				console.error(err);
+				setImportStatus(err.message || 'Import failed.', 'danger');
+				showToast(err.message || 'Import failed.', 'error');
+			} finally {
+				importBtn.disabled = false;
+				fileInput.value = '';
+			}
+		});
+	});
 
 	$(function () {
 		if ($.fn.DataTable && $('#approvalTable').length && !$.fn.DataTable.isDataTable('#approvalTable')) {
@@ -549,7 +823,7 @@ function initCoverMapIfAny() {
 			content.innerHTML = '<div class="p-4 text-muted fw-semibold">Loading...</div>';
 			modal.show();
 
-			$.get('HO-management.php', { ajax: 'homeowner_profile', id: id, _: Date.now() })
+			$.get('ho_approval.php', { ajax: 'homeowner_profile', id: id, _: Date.now() })
 				.done(function (html) {
 					pendingProfileHtml = html;
 

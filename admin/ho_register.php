@@ -74,9 +74,9 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 $host = "localhost";
-$db   = "u972459197_south_meridian";
-$user = "u972459197_patrick";
-$pass = "Idle2440";
+$db   = "u972459197_south_meridian.sql";
+$user = "root";
+$pass = "";
 
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {

@@ -7,9 +7,9 @@ requireAccess('user_management');
    DB
    ========================= */
 $host = "localhost";
-$db   = "u972459197_south_meridian";
-$user = "u972459197_patrick";
-$pass = "Idle2440";
+$db   = "u972459197_south_meridian.sql";
+$user = "root";
+$pass = "";
 
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);

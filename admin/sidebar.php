@@ -16,9 +16,9 @@ if (!function_exists('esc')) {
 */
 $conn = $conn ?? new mysqli(
     "localhost",
-    "u972459197_patrick",
-    "Idle2440",
-    "u972459197_south_meridian"
+    "root",
+    "",
+    "u972459197_south_meridian.sql"
 );
 
 if ($conn->connect_error) {

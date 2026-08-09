@@ -29,9 +29,9 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
    3) LOCAL DB CONNECTION
    ========================= */
 $db_host = "localhost";
-$db_user = "u972459197_patrick";
-$db_pass = "Idle2440";
-$db_name = "u972459197_south_meridian";
+$db_user = "root";
+$db_pass = "";
+$db_name = "u972459197_south_meridian.sql";
 
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 if ($conn->connect_error) {

@@ -5,9 +5,10 @@ session_start();
 // if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') { header("Location: authentication-login.html"); exit; }
 
 // DB
-$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
+$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
+
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function nfmt($n){ return number_format((float)$n, 0); }

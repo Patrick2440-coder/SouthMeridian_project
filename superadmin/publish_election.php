@@ -20,15 +20,10 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') {
 }
 
 // ================= DB =================
-$conn = new mysqli("localhost", "root", "", "your_database_name");
-if ($conn->connect_error) {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Database connection failed'
-    ]);
-    exit;
-}
+$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $conn->set_charset("utf8mb4");
+
 
 // ================= INPUT =================
 $sessionId = (int)($_POST['session_id'] ?? 0);

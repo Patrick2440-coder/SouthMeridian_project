@@ -41,7 +41,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             $_SESSION['role']    = $_SESSION['admin_role'];
             $_SESSION['phase']   = $_SESSION['admin_phase'];
             $_SESSION['user_id'] = $_SESSION['admin_id'];
-
+ 
             echo ($_SESSION['admin_role'] === 'superadmin')
                 ? "superadmin/dashboard.php"
                 : "admin/dashboard.php";
@@ -125,12 +125,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     echo "homeowner/homeowner_dashboard.php";
     exit;
 }
-
-// ===================== FLASH MESSAGES =====================
-$success_message = $_SESSION['success_message'] ?? '';
-$email_error     = $_SESSION['email_error'] ?? '';
-
-unset($_SESSION['success_message'], $_SESSION['email_error']);
 ?>
 
 <!DOCTYPE html>
@@ -165,39 +159,7 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
 
 <body class="index-page">
 
-  <?php if ($success_message !== ''): ?>
-  <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999">
-    <div id="successToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 360px; border-radius: 14px; overflow: hidden;">
-      <div class="toast-header bg-success text-white border-0">
-        <strong class="me-auto">
-          <i class="bi bi-check-circle-fill me-2"></i>Registration Submitted
-        </strong>
-        <small>Just now</small>
-        <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>
-      <div class="toast-body bg-white text-dark">
-        <?= esc($success_message) ?>
-      </div>
-    </div>
-  </div>
-  <?php endif; ?>
 
-  <?php if ($email_error !== ''): ?>
-  <div class="position-fixed top-0 end-0 p-3" style="z-index: 9998; margin-top: 110px;">
-    <div id="emailErrorToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 360px; border-radius: 14px; overflow: hidden;">
-      <div class="toast-header bg-warning text-dark border-0">
-        <strong class="me-auto">
-          <i class="bi bi-exclamation-triangle-fill me-2"></i>Email Notice
-        </strong>
-        <small>Just now</small>
-        <button type="button" class="btn-close ms-2 mb-1" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>
-      <div class="toast-body bg-white text-dark">
-        Registration was saved, but the confirmation email could not be sent.
-      </div>
-    </div>
-  </div>
-  <?php endif; ?>
 
   <header id="header" class="header d-flex align-items-center sticky-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
@@ -258,15 +220,13 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
             <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">Log in</button>
           </form>
 
-          <div class="mt-3">
-            <div class="d-flex justify-content-start mt-3">
-              <!-- CHANGED: "Forgot password?" now links to forgot_password.php instead of # -->
-              <a href="forgot_password.php" class="text-success text-decoration-none">Forgot password?</a>
-            </div>
-            <span class="text-muted small d-block my-2">Don't have an account?
-              <a href="register.html" class="text-success text-decoration-none">Create Account</a>
-            </span>
-          </div>
+<div class="mt-3">
+    <div class="d-flex justify-content-start mt-3">
+        <a href="forgot_password.php" class="text-success text-decoration-none">
+            Forgot password?
+        </a>
+    </div>
+</div>
 
         </div>
       </div>
@@ -649,7 +609,6 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
             <li><a href="#about">About Us</a></li>
             <li><a href="#features">Features</a></li>
             <li><a href="#download-app">Download App</a></li>
-            <li><a href="register.html">Register</a></li>
           </ul>
         </div>
 
@@ -776,20 +735,6 @@ unset($_SESSION['success_message'], $_SESSION['email_error']);
           error.innerText = "An error occurred. Try again.";
           error.style.display = 'block';
         });
-    });
-
-    document.addEventListener('DOMContentLoaded', function () {
-      var successToastEl = document.getElementById('successToast');
-      if (successToastEl) {
-        var successToast = new bootstrap.Toast(successToastEl, { delay: 6000 });
-        successToast.show();
-      }
-
-      var emailErrorToastEl = document.getElementById('emailErrorToast');
-      if (emailErrorToastEl) {
-        var emailErrorToast = new bootstrap.Toast(emailErrorToastEl, { delay: 7000 });
-        emailErrorToast.show();
-      }
     });
   </script>
 
