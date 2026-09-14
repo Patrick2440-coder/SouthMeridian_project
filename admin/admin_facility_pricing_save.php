@@ -1,6 +1,6 @@
 <?php
 session_start();
-
+require_once '../config/database.php';
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
   header("Location: index.php"); exit;
@@ -9,17 +9,6 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
   header("Location: index.php"); exit;
 }
 
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "u972459197_south_meridian.sql";
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) {
-  http_response_code(500);
-  exit("DB error");
-}
-$conn->set_charset("utf8mb4");
 
 function back(string $msg, string $returnStatus, string $returnFacility): void {
   header("Location: admin_facility_rentals.php?status=" . urlencode($returnStatus) .

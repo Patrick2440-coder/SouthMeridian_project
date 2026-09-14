@@ -1,6 +1,8 @@
 <?php
+require_once '../config/database.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+    
 }
 
 /* =========================
@@ -82,15 +84,37 @@ $myPhase       = (string)($me['phase'] ?? 'Phase 1');
 $adminRole     = (string)($me['role'] ?? $adminRole);
 $adminPosition = trim((string)($me['position'] ?? ''));
 
-/* keep session fresh */
+/* =========================
+   KEEP SESSION FRESH
+   ========================= */
+
+/*
+ * Main / official admin session keys
+ */
 $_SESSION['admin_id']       = $adminId;
 $_SESSION['admin_role']     = $adminRole;
 $_SESSION['admin_email']    = $adminEmail;
 $_SESSION['admin_name']     = $adminName;
 $_SESSION['admin_phase']    = $myPhase;
 $_SESSION['admin_position'] = $adminPosition;
-$_SESSION['phase']          = $myPhase;
-$_SESSION['position']       = $adminPosition;
+
+/*
+ * Compatibility keys for older admin files.
+ *
+ * Some existing pages still use:
+ * $_SESSION['user_id']
+ * $_SESSION['role']
+ * $_SESSION['phase']
+ * $_SESSION['position']
+ *
+ * We will remove these dependencies later,
+ * but keeping them here prevents older pages
+ * from suddenly treating a valid admin as unauthorized.
+ */
+$_SESSION['user_id']  = $adminId;
+$_SESSION['role']     = $adminRole;
+$_SESSION['phase']    = $myPhase;
+$_SESSION['position'] = $adminPosition;
 
 /* =========================
    MODULES

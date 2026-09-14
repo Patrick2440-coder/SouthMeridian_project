@@ -2,14 +2,9 @@
 session_start();
 
 // ===================== DB CONNECTION =====================
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-
-if (!function_exists('esc')) {
-  function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-}
+require_once '../config/database.php';
 
 $POSITIONS = ["President", "Vice President", "Secretary", "Treasurer", "Auditor", "Board of Director"];
 $SINGLE_POSITIONS = ["President", "Vice President", "Secretary", "Treasurer", "Auditor"];

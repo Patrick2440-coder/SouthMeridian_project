@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'admin_access.php';
+require_once '../config/database.php';
 requireAccess('homeowner_management');
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
@@ -9,14 +10,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-$host = "localhost";
-$user = "root";
-$pass = "";
-$db = "u972459197_south_meridian.sql";
-
-$conn = new mysqli($host,$user,$pass,$db);
-if ($conn->connect_error) die("Connection failed: ".$conn->connect_error);
-$conn->set_charset("utf8mb4");
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -155,6 +148,16 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
     ($homeowner['last_name'] ?? '')
   );
 
+  $displayValue = static function($value, string $fallback = 'Not provided'): string {
+    $value = trim((string)($value ?? ''));
+    return $value !== '' ? $value : $fallback;
+  };
+
+  $isImportPlaceholder = static function(string $path): bool {
+    $path = trim($path);
+    return $path === '' || str_starts_with($path, 'imports/');
+  };
+
   $displayId = trim((string)($homeowner['public_id'] ?? ''));
   if ($displayId === '') {
     $prefix = phase_prefix((string)($homeowner['phase'] ?? ''));
@@ -162,8 +165,11 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
   }
 
   $fullAddress = trim(implode(', ', array_filter([
-    $homeowner['phase'] ?? '',
-    $homeowner['house_lot_number'] ?? ''
+    $homeowner['house_lot_number'] ?? '',
+    $homeowner['other_location_info'] ?? '',
+    $homeowner['barangay'] ?? '',
+    $homeowner['city_municipality'] ?? '',
+    $homeowner['province'] ?? ''
   ], fn($v) => trim((string)$v) !== '')));
 
   $createdAt = !empty($homeowner['created_at']) ? date('F d, Y h:i A', strtotime($homeowner['created_at'])) : '-';
@@ -186,10 +192,12 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
             <hr>
 
             <div class="text-start small">
-              <div class="mb-2"><strong>Phase:</strong> <?= esc($homeowner['phase'] ?? '-') ?></div>
-              <div class="mb-2"><strong>House/Lot:</strong> <?= esc($homeowner['house_lot_number'] ?? '-') ?></div>
-              <div class="mb-2"><strong>Email:</strong> <?= esc($homeowner['email'] ?? '-') ?></div>
-              <div class="mb-2"><strong>Contact:</strong> <?= esc($homeowner['contact_number'] ?? '-') ?></div>
+              <div class="mb-2"><strong>Phase:</strong> <?= esc($displayValue($homeowner['phase'] ?? null)) ?></div>
+              <div class="mb-2"><strong>House/Lot:</strong> <?= esc($displayValue($homeowner['house_lot_number'] ?? null)) ?></div>
+              <div class="mb-2"><strong>Residential Type:</strong> <?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div>
+              <div class="mb-2"><strong>Email:</strong> <?= esc($displayValue($homeowner['email'] ?? null)) ?></div>
+              <div class="mb-2"><strong>Contact:</strong> <?= esc($displayValue($homeowner['contact_number'] ?? null)) ?></div>
+              <div class="mb-2"><strong>Address:</strong> <?= esc($fullAddress !== '' ? $fullAddress : 'Not provided') ?></div>
               <div class="mb-2"><strong>Registered:</strong> <?= esc($createdAt) ?></div>
             </div>
           </div>
@@ -199,55 +207,118 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
       <div class="col-lg-8">
         <div class="card shadow-sm border-0 mb-4">
           <div class="card-header bg-white">
-            <h6 class="mb-0 fw-bold">Homeowner Details</h6>
+            <h6 class="mb-0 fw-bold">Personal Information</h6>
           </div>
+
           <div class="card-body">
             <div class="row g-3">
+
               <div class="col-md-4">
                 <label class="form-label text-muted small mb-1">First Name</label>
-                <div class="fw-semibold"><?= esc($homeowner['first_name'] ?? '-') ?></div>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['first_name'] ?? null)) ?></div>
               </div>
+
               <div class="col-md-4">
                 <label class="form-label text-muted small mb-1">Middle Name</label>
-                <div class="fw-semibold"><?= esc($homeowner['middle_name'] ?? '-') ?></div>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['middle_name'] ?? null)) ?></div>
               </div>
+
               <div class="col-md-4">
                 <label class="form-label text-muted small mb-1">Last Name</label>
-                <div class="fw-semibold"><?= esc($homeowner['last_name'] ?? '-') ?></div>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['last_name'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Contact Number</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['contact_number'] ?? null)) ?></div>
               </div>
 
               <div class="col-md-6">
                 <label class="form-label text-muted small mb-1">Email</label>
-                <div class="fw-semibold"><?= esc($homeowner['email'] ?? '-') ?></div>
+                <div class="fw-semibold text-break"><?= esc($displayValue($homeowner['email'] ?? null)) ?></div>
               </div>
+
+            </div>
+          </div>
+        </div>
+
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Address &amp; Residency Information</h6>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-3">
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Phase</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['phase'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">House/Lot Number</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['house_lot_number'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Residential Type</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Barangay</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['barangay'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">City/Municipality</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['city_municipality'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label text-muted small mb-1">Province</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['province'] ?? null)) ?></div>
+              </div>
+
               <div class="col-md-6">
-                <label class="form-label text-muted small mb-1">Contact Number</label>
-                <div class="fw-semibold"><?= esc($homeowner['contact_number'] ?? '-') ?></div>
+                <label class="form-label text-muted small mb-1">Other Location Info</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['other_location_info'] ?? null)) ?></div>
               </div>
 
-              <div class="col-md-12">
-                <label class="form-label text-muted small mb-1">Address</label>
-                <div class="fw-semibold"><?= esc($fullAddress !== '' ? $fullAddress : '-') ?></div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Length of Residency in the Barangay</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['length_of_residency'] ?? null)) ?></div>
               </div>
 
-              <?php if (!empty($homeowner['barangay']) || !empty($homeowner['city_municipality']) || !empty($homeowner['province']) || !empty($homeowner['region']) || !empty($homeowner['zip_code']) || !empty($homeowner['country']) || !empty($homeowner['other_location_info']) || !empty($homeowner['exact_location'])): ?>
               <div class="col-md-12">
                 <label class="form-label text-muted small mb-1">Complete Address</label>
-                <div class="fw-semibold">
-                  <?= esc(trim(implode(', ', array_filter([
-                    $homeowner['house_lot_number'] ?? '',
-                    $homeowner['barangay'] ?? '',
-                    $homeowner['city_municipality'] ?? '',
-                    $homeowner['province'] ?? '',
-                    $homeowner['region'] ?? '',
-                    $homeowner['zip_code'] ?? '',
-                    $homeowner['country'] ?? '',
-                    $homeowner['other_location_info'] ?? '',
-                    $homeowner['exact_location'] ?? ''
-                  ], fn($v) => trim((string)$v) !== '')))) ?>
-                </div>
+                <div class="fw-semibold"><?= esc($fullAddress !== '' ? $fullAddress : 'Not provided') ?></div>
               </div>
-              <?php endif; ?>
+
+            </div>
+          </div>
+        </div>
+
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold">Emergency Contact</h6>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-3">
+
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Emergency Contact Person</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['emergency_contact_person'] ?? null)) ?></div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Emergency Contact Number</label>
+                <div class="fw-semibold"><?= esc($displayValue($homeowner['emergency_contact_number'] ?? null)) ?></div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -367,7 +438,7 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
             <div class="row g-4">
               <div class="col-md-6">
                 <label class="form-label text-muted small mb-2">Valid ID</label>
-                <?php if (!empty($homeowner['valid_id_path'])): ?>
+                <?php if (!empty($homeowner['valid_id_path']) && !$isImportPlaceholder((string)$homeowner['valid_id_path'])): ?>
                   <?php $validIdPath = document_url($homeowner['valid_id_path']); ?>
                   <div class="border rounded-3 overflow-hidden bg-light">
                     <div class="p-2 text-center" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
@@ -388,13 +459,13 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
                     </div>
                   </div>
                 <?php else: ?>
-                  <div class="text-muted">No file uploaded.</div>
+                  <div class="text-muted">Not provided by Excel import.</div>
                 <?php endif; ?>
               </div>
 
               <div class="col-md-6">
                 <label class="form-label text-muted small mb-2">Proof of Billing</label>
-                <?php if (!empty($homeowner['proof_of_billing_path'])): ?>
+                <?php if (!empty($homeowner['proof_of_billing_path']) && !$isImportPlaceholder((string)$homeowner['proof_of_billing_path'])): ?>
                   <?php $proofPath = document_url($homeowner['proof_of_billing_path']); ?>
                   <div class="border rounded-3 overflow-hidden bg-light">
                     <div class="p-2 text-center" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
@@ -415,7 +486,7 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
                     </div>
                   </div>
                 <?php else: ?>
-                  <div class="text-muted">No file uploaded.</div>
+                  <div class="text-muted">Not provided by Excel import.</div>
                 <?php endif; ?>
               </div>
             </div>
@@ -592,6 +663,23 @@ $resultApproved = $sqlApproved->get_result();
 		.access-toast.show {
 		  opacity: 1;
 		  transform: translateY(0);
+		}
+
+		#viewHomeownerModal .card{
+		  border-radius:14px;
+		}
+
+		#viewHomeownerModal .form-label.text-muted.small{
+		  font-size:12px;
+		}
+
+		#viewHomeownerModal .fw-semibold{
+		  word-break:break-word;
+		}
+
+		#viewHomeownerModal #coverMap{
+		  min-height:360px;
+		  background:#e9eef6;
 		}
 	</style>
 </head>

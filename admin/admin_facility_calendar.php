@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once '../config/database.php';
 require_once 'admin_access.php';
 requireAccess('community');
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
@@ -12,14 +13,6 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
   echo "<script>alert('Superadmin cannot access President Dashboard.'); window.location='index.php';</script>";
   exit;
 }
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "u972459197_south_meridian.sql";
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 

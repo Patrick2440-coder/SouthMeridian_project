@@ -1,0 +1,3352 @@
+[
+  {
+    "marker_index": 86,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 5500473,
+    "y_emu": 8715121,
+    "road_distance_emu": 230201
+  },
+  {
+    "marker_index": 87,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 5017618,
+    "y_emu": 8586776,
+    "road_distance_emu": 171098
+  },
+  {
+    "marker_index": 85,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 5408981,
+    "y_emu": 8567775,
+    "road_distance_emu": 199606
+  },
+  {
+    "marker_index": 88,
+    "street": "Gulf Street",
+    "block": 1,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4955159,
+    "y_emu": 8440801,
+    "road_distance_emu": 103469
+  },
+  {
+    "marker_index": 84,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 5313884,
+    "y_emu": 8415503,
+    "road_distance_emu": 167480
+  },
+  {
+    "marker_index": 83,
+    "street": "Gulf Street",
+    "block": 1,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 5245857,
+    "y_emu": 8246821,
+    "road_distance_emu": 13856
+  },
+  {
+    "marker_index": 82,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 5164049,
+    "y_emu": 8042453,
+    "road_distance_emu": 166037
+  },
+  {
+    "marker_index": 89,
+    "street": "Gulf Street",
+    "block": 1,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 4655615,
+    "y_emu": 8524876,
+    "road_distance_emu": 103041
+  },
+  {
+    "marker_index": 78,
+    "street": "Gulf Street",
+    "block": 1,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 4838770,
+    "y_emu": 8159520,
+    "road_distance_emu": 170210
+  },
+  {
+    "marker_index": 76,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 4768773,
+    "y_emu": 7973466,
+    "road_distance_emu": 175802
+  },
+  {
+    "marker_index": 79,
+    "street": "Gulf Street",
+    "block": 1,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 4644314,
+    "y_emu": 8231446,
+    "road_distance_emu": 147947
+  },
+  {
+    "marker_index": 81,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 5112563,
+    "y_emu": 7848473,
+    "road_distance_emu": 189843
+  },
+  {
+    "marker_index": 77,
+    "street": "Equator Street",
+    "block": 1,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 4567555,
+    "y_emu": 8046261,
+    "road_distance_emu": 229454
+  },
+  {
+    "marker_index": 80,
+    "street": "Meridian Ave.",
+    "block": 1,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 5083276,
+    "y_emu": 7650988,
+    "road_distance_emu": 215443
+  },
+  {
+    "marker_index": 98,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4106342,
+    "y_emu": 8250656,
+    "road_distance_emu": 162288
+  },
+  {
+    "marker_index": 90,
+    "street": "Equator Street",
+    "block": 2,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 4437974,
+    "y_emu": 8551316,
+    "road_distance_emu": 47957
+  },
+  {
+    "marker_index": 97,
+    "street": "Zenith Street",
+    "block": 2,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 3961774,
+    "y_emu": 8250605,
+    "road_distance_emu": 104620
+  },
+  {
+    "marker_index": 91,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4260088,
+    "y_emu": 8533003,
+    "road_distance_emu": 50653
+  },
+  {
+    "marker_index": 100,
+    "street": "Zenith Street",
+    "block": 2,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 3894531,
+    "y_emu": 7868795,
+    "road_distance_emu": 88087
+  },
+  {
+    "marker_index": 92,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 4090778,
+    "y_emu": 8550579,
+    "road_distance_emu": 71452
+  },
+  {
+    "marker_index": 99,
+    "street": "Equator Street",
+    "block": 2,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 4233494,
+    "y_emu": 8133410,
+    "road_distance_emu": 108192
+  },
+  {
+    "marker_index": 93,
+    "street": "Zenith Street",
+    "block": 2,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 3887114,
+    "y_emu": 8529066,
+    "road_distance_emu": 46895
+  },
+  {
+    "marker_index": 94,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 3699841,
+    "y_emu": 8528355,
+    "road_distance_emu": 106520
+  },
+  {
+    "marker_index": 95,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 3499485,
+    "y_emu": 8507475,
+    "road_distance_emu": 94530
+  },
+  {
+    "marker_index": 96,
+    "street": "Gulf Street",
+    "block": 2,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 3313252,
+    "y_emu": 8506638,
+    "road_distance_emu": 93693
+  },
+  {
+    "marker_index": 75,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4431767,
+    "y_emu": 7922363,
+    "road_distance_emu": 134118
+  },
+  {
+    "marker_index": 74,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 4644821,
+    "y_emu": 7629069,
+    "road_distance_emu": 205431
+  },
+  {
+    "marker_index": 70,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 5002987,
+    "y_emu": 7498157,
+    "road_distance_emu": 161649
+  },
+  {
+    "marker_index": 71,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4589526,
+    "y_emu": 7409713,
+    "road_distance_emu": 183558
+  },
+  {
+    "marker_index": 73,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 4403657,
+    "y_emu": 7779004,
+    "road_distance_emu": 153287
+  },
+  {
+    "marker_index": 103,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 4070020,
+    "y_emu": 7632446,
+    "road_distance_emu": 103031
+  },
+  {
+    "marker_index": 69,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 4913129,
+    "y_emu": 7315098,
+    "road_distance_emu": 151153
+  },
+  {
+    "marker_index": 31,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 4472528,
+    "y_emu": 7150607,
+    "road_distance_emu": 189049
+  },
+  {
+    "marker_index": 72,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 4308043,
+    "y_emu": 7592264,
+    "road_distance_emu": 122351
+  },
+  {
+    "marker_index": 104,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 4015589,
+    "y_emu": 7442580,
+    "road_distance_emu": 106946
+  },
+  {
+    "marker_index": 68,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 4838618,
+    "y_emu": 7160996,
+    "road_distance_emu": 143358
+  },
+  {
+    "marker_index": 105,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 3952569,
+    "y_emu": 7310934,
+    "road_distance_emu": 124599
+  },
+  {
+    "marker_index": 32,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 4216602,
+    "y_emu": 7259295,
+    "road_distance_emu": 142092
+  },
+  {
+    "marker_index": 29,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 4362907,
+    "y_emu": 6901308,
+    "road_distance_emu": 191622
+  },
+  {
+    "marker_index": 67,
+    "street": "Meridian Ave.",
+    "block": 3,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 4743019,
+    "y_emu": 6970852,
+    "road_distance_emu": 130375
+  },
+  {
+    "marker_index": 106,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 3879723,
+    "y_emu": 7146669,
+    "road_distance_emu": 141142
+  },
+  {
+    "marker_index": 101,
+    "street": "Zenith Street",
+    "block": 3,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 3788537,
+    "y_emu": 7570369,
+    "road_distance_emu": 110509
+  },
+  {
+    "marker_index": 107,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 3799425,
+    "y_emu": 6967143,
+    "road_distance_emu": 159869
+  },
+  {
+    "marker_index": 102,
+    "street": "Zenith Street",
+    "block": 3,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 3748379,
+    "y_emu": 7387540,
+    "road_distance_emu": 146950
+  },
+  {
+    "marker_index": 30,
+    "street": "Equator Street",
+    "block": 3,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 4070501,
+    "y_emu": 6952540,
+    "road_distance_emu": 101662
+  },
+  {
+    "marker_index": 108,
+    "street": "Zenith Street",
+    "block": 3,
+    "lot": 23,
+    "parity": "Odd",
+    "x_emu": 3695615,
+    "y_emu": 7226782,
+    "road_distance_emu": 162999
+  },
+  {
+    "marker_index": 66,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4640454,
+    "y_emu": 6608445,
+    "road_distance_emu": 178837
+  },
+  {
+    "marker_index": 27,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 4267565,
+    "y_emu": 6641262,
+    "road_distance_emu": 176837
+  },
+  {
+    "marker_index": 28,
+    "street": "Equator Street",
+    "block": 4,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 4015130,
+    "y_emu": 6695441,
+    "road_distance_emu": 167108
+  },
+  {
+    "marker_index": 25,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4073653,
+    "y_emu": 6129044,
+    "road_distance_emu": 268904
+  },
+  {
+    "marker_index": 65,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 4585615,
+    "y_emu": 6426100,
+    "road_distance_emu": 130717
+  },
+  {
+    "marker_index": 23,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 4007815,
+    "y_emu": 5947157,
+    "road_distance_emu": 249997
+  },
+  {
+    "marker_index": 109,
+    "street": "Zenith Street",
+    "block": 4,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 3516534,
+    "y_emu": 6798464,
+    "road_distance_emu": 167411
+  },
+  {
+    "marker_index": 181,
+    "street": "Equator Street",
+    "block": 4,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 3513963,
+    "y_emu": 6206058,
+    "road_distance_emu": 148384
+  },
+  {
+    "marker_index": 64,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 4479797,
+    "y_emu": 6224448,
+    "road_distance_emu": 56565
+  },
+  {
+    "marker_index": 21,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 3920591,
+    "y_emu": 5730976,
+    "road_distance_emu": 235622
+  },
+  {
+    "marker_index": 26,
+    "street": "Tropic Street",
+    "block": 4,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 3971367,
+    "y_emu": 6326909,
+    "road_distance_emu": 132892
+  },
+  {
+    "marker_index": 182,
+    "street": "Equator Street",
+    "block": 4,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 3433597,
+    "y_emu": 5938926,
+    "road_distance_emu": 114966
+  },
+  {
+    "marker_index": 63,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 4431792,
+    "y_emu": 6037681,
+    "road_distance_emu": 93669
+  },
+  {
+    "marker_index": 24,
+    "street": "Equator Street",
+    "block": 4,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 3817442,
+    "y_emu": 6038011,
+    "road_distance_emu": 192880
+  },
+  {
+    "marker_index": 62,
+    "street": "Meridian Ave.",
+    "block": 4,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 4311980,
+    "y_emu": 5712587,
+    "road_distance_emu": 125534
+  },
+  {
+    "marker_index": 110,
+    "street": "Zenith Street",
+    "block": 4,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 3298698,
+    "y_emu": 6133059,
+    "road_distance_emu": 150170
+  },
+  {
+    "marker_index": 22,
+    "street": "Equator Street",
+    "block": 4,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 3675904,
+    "y_emu": 5763793,
+    "road_distance_emu": 146378
+  },
+  {
+    "marker_index": 116,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2729284,
+    "y_emu": 7084160,
+    "road_distance_emu": 157436
+  },
+  {
+    "marker_index": 118,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2746476,
+    "y_emu": 6795159,
+    "road_distance_emu": 110222
+  },
+  {
+    "marker_index": 162,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 2501951,
+    "y_emu": 7065773,
+    "road_distance_emu": 369433
+  },
+  {
+    "marker_index": 117,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 2775913,
+    "y_emu": 6601433,
+    "road_distance_emu": 110807
+  },
+  {
+    "marker_index": 163,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 2554198,
+    "y_emu": 6842431,
+    "road_distance_emu": 289621
+  },
+  {
+    "marker_index": 164,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 2574392,
+    "y_emu": 6693230,
+    "road_distance_emu": 298855
+  },
+  {
+    "marker_index": 119,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 2777874,
+    "y_emu": 6421799,
+    "road_distance_emu": 108846
+  },
+  {
+    "marker_index": 155,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 2311298,
+    "y_emu": 6934150,
+    "road_distance_emu": 525640
+  },
+  {
+    "marker_index": 165,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 2578582,
+    "y_emu": 6539002,
+    "road_distance_emu": 308138
+  },
+  {
+    "marker_index": 120,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 2857473,
+    "y_emu": 6144033,
+    "road_distance_emu": 29247
+  },
+  {
+    "marker_index": 156,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 2311272,
+    "y_emu": 6754876,
+    "road_distance_emu": 544943
+  },
+  {
+    "marker_index": 166,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 2608580,
+    "y_emu": 6334481,
+    "road_distance_emu": 278140
+  },
+  {
+    "marker_index": 157,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 2325647,
+    "y_emu": 6626530,
+    "road_distance_emu": 555825
+  },
+  {
+    "marker_index": 148,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 28,
+    "parity": "Even",
+    "x_emu": 2134945,
+    "y_emu": 6802476,
+    "road_distance_emu": 709370
+  },
+  {
+    "marker_index": 158,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 30,
+    "parity": "Even",
+    "x_emu": 2344352,
+    "y_emu": 6477330,
+    "road_distance_emu": 542368
+  },
+  {
+    "marker_index": 167,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 32,
+    "parity": "Even",
+    "x_emu": 2658339,
+    "y_emu": 6129198,
+    "road_distance_emu": 228381
+  },
+  {
+    "marker_index": 149,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 34,
+    "parity": "Even",
+    "x_emu": 2153337,
+    "y_emu": 6627190,
+    "road_distance_emu": 724711
+  },
+  {
+    "marker_index": 159,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 36,
+    "parity": "Even",
+    "x_emu": 2385389,
+    "y_emu": 6323329,
+    "road_distance_emu": 501331
+  },
+  {
+    "marker_index": 150,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 38,
+    "parity": "Even",
+    "x_emu": 2188134,
+    "y_emu": 6472682,
+    "road_distance_emu": 698586
+  },
+  {
+    "marker_index": 168,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 40,
+    "parity": "Even",
+    "x_emu": 2616154,
+    "y_emu": 5968364,
+    "road_distance_emu": 305525
+  },
+  {
+    "marker_index": 160,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 42,
+    "parity": "Even",
+    "x_emu": 2395018,
+    "y_emu": 6173190,
+    "road_distance_emu": 491702
+  },
+  {
+    "marker_index": 151,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 44,
+    "parity": "Even",
+    "x_emu": 2198065,
+    "y_emu": 6334201,
+    "road_distance_emu": 688655
+  },
+  {
+    "marker_index": 138,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 46,
+    "parity": "Even",
+    "x_emu": 1964081,
+    "y_emu": 6648120,
+    "road_distance_emu": 906273
+  },
+  {
+    "marker_index": 152,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 48,
+    "parity": "Even",
+    "x_emu": 2226386,
+    "y_emu": 6198489,
+    "road_distance_emu": 660334
+  },
+  {
+    "marker_index": 139,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 50,
+    "parity": "Even",
+    "x_emu": 1982342,
+    "y_emu": 6502399,
+    "road_distance_emu": 904378
+  },
+  {
+    "marker_index": 161,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 52,
+    "parity": "Even",
+    "x_emu": 2395144,
+    "y_emu": 5997677,
+    "road_distance_emu": 504307
+  },
+  {
+    "marker_index": 153,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 54,
+    "parity": "Even",
+    "x_emu": 2244752,
+    "y_emu": 6082006,
+    "road_distance_emu": 642590
+  },
+  {
+    "marker_index": 129,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 56,
+    "parity": "Even",
+    "x_emu": 1795856,
+    "y_emu": 6678041,
+    "road_distance_emu": 1065457
+  },
+  {
+    "marker_index": 140,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 58,
+    "parity": "Even",
+    "x_emu": 1999995,
+    "y_emu": 6349004,
+    "road_distance_emu": 886725
+  },
+  {
+    "marker_index": 130,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 60,
+    "parity": "Even",
+    "x_emu": 1821205,
+    "y_emu": 6491454,
+    "road_distance_emu": 1065515
+  },
+  {
+    "marker_index": 141,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 62,
+    "parity": "Even",
+    "x_emu": 2026183,
+    "y_emu": 6192011,
+    "road_distance_emu": 860537
+  },
+  {
+    "marker_index": 142,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 64,
+    "parity": "Even",
+    "x_emu": 2062074,
+    "y_emu": 6063565,
+    "road_distance_emu": 825968
+  },
+  {
+    "marker_index": 131,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 66,
+    "parity": "Even",
+    "x_emu": 1842720,
+    "y_emu": 6276796,
+    "road_distance_emu": 1044000
+  },
+  {
+    "marker_index": 132,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 68,
+    "parity": "Even",
+    "x_emu": 1871726,
+    "y_emu": 6121807,
+    "road_distance_emu": 1014994
+  },
+  {
+    "marker_index": 128,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 70,
+    "parity": "Even",
+    "x_emu": 1586612,
+    "y_emu": 6275857,
+    "road_distance_emu": 1300108
+  },
+  {
+    "marker_index": 127,
+    "street": "Cape Street",
+    "block": 5,
+    "lot": 72,
+    "parity": "Even",
+    "x_emu": 1634795,
+    "y_emu": 6118758,
+    "road_distance_emu": 1251925
+  },
+  {
+    "marker_index": 111,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 3199536,
+    "y_emu": 5917589,
+    "road_distance_emu": 145623
+  },
+  {
+    "marker_index": 183,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 3368445,
+    "y_emu": 5737836,
+    "road_distance_emu": 112452
+  },
+  {
+    "marker_index": 20,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 3631056,
+    "y_emu": 5628412,
+    "road_distance_emu": 147137
+  },
+  {
+    "marker_index": 176,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2833954,
+    "y_emu": 5880785,
+    "road_distance_emu": 174604
+  },
+  {
+    "marker_index": 112,
+    "street": "Cape Street",
+    "block": 6,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 3087146,
+    "y_emu": 5661177,
+    "road_distance_emu": 3208
+  },
+  {
+    "marker_index": 184,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 3258692,
+    "y_emu": 5507711,
+    "road_distance_emu": 142923
+  },
+  {
+    "marker_index": 18,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 3532658,
+    "y_emu": 5372632,
+    "road_distance_emu": 159841
+  },
+  {
+    "marker_index": 177,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 2804540,
+    "y_emu": 5697880,
+    "road_distance_emu": 128288
+  },
+  {
+    "marker_index": 113,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 3021406,
+    "y_emu": 5478321,
+    "road_distance_emu": 106825
+  },
+  {
+    "marker_index": 185,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 3184268,
+    "y_emu": 5240706,
+    "road_distance_emu": 128134
+  },
+  {
+    "marker_index": 16,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 3437839,
+    "y_emu": 5108627,
+    "road_distance_emu": 149224
+  },
+  {
+    "marker_index": 186,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 3118840,
+    "y_emu": 5061280,
+    "road_distance_emu": 132803
+  },
+  {
+    "marker_index": 114,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 2900426,
+    "y_emu": 5189677,
+    "road_distance_emu": 111598
+  },
+  {
+    "marker_index": 178,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 2676221,
+    "y_emu": 5346877,
+    "road_distance_emu": 156803
+  },
+  {
+    "marker_index": 14,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 3316859,
+    "y_emu": 4874692,
+    "road_distance_emu": 109331
+  },
+  {
+    "marker_index": 179,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 2641726,
+    "y_emu": 5184505,
+    "road_distance_emu": 123368
+  },
+  {
+    "marker_index": 115,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 2816376,
+    "y_emu": 4925898,
+    "road_distance_emu": 140248
+  },
+  {
+    "marker_index": 187,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 3034285,
+    "y_emu": 4776343,
+    "road_distance_emu": 127005
+  },
+  {
+    "marker_index": 12,
+    "street": "Equator Street",
+    "block": 6,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 3240506,
+    "y_emu": 4670018,
+    "road_distance_emu": 102377
+  },
+  {
+    "marker_index": 180,
+    "street": "Zenith Street",
+    "block": 6,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 2529612,
+    "y_emu": 4940859,
+    "road_distance_emu": 128496
+  },
+  {
+    "marker_index": 61,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4198797,
+    "y_emu": 5335778,
+    "road_distance_emu": 96762
+  },
+  {
+    "marker_index": 19,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 3843503,
+    "y_emu": 5520490,
+    "road_distance_emu": 214552
+  },
+  {
+    "marker_index": 60,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 4146931,
+    "y_emu": 5178044,
+    "road_distance_emu": 117878
+  },
+  {
+    "marker_index": 17,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 3775579,
+    "y_emu": 5236717,
+    "road_distance_emu": 153915
+  },
+  {
+    "marker_index": 59,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 4077589,
+    "y_emu": 4941062,
+    "road_distance_emu": 157349
+  },
+  {
+    "marker_index": 15,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 3660904,
+    "y_emu": 5021426,
+    "road_distance_emu": 253326
+  },
+  {
+    "marker_index": 58,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 3978676,
+    "y_emu": 4779899,
+    "road_distance_emu": 137481
+  },
+  {
+    "marker_index": 13,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 3583660,
+    "y_emu": 4754066,
+    "road_distance_emu": 207905
+  },
+  {
+    "marker_index": 57,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 3921151,
+    "y_emu": 4647922,
+    "road_distance_emu": 142398
+  },
+  {
+    "marker_index": 56,
+    "street": "Meridian Ave.",
+    "block": 7,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 3915766,
+    "y_emu": 4483507,
+    "road_distance_emu": 208342
+  },
+  {
+    "marker_index": 169,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2574366,
+    "y_emu": 5818328,
+    "road_distance_emu": 387437
+  },
+  {
+    "marker_index": 144,
+    "street": "Cape Street",
+    "block": 8,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2252624,
+    "y_emu": 5910224,
+    "road_distance_emu": 664905
+  },
+  {
+    "marker_index": 170,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 2472791,
+    "y_emu": 5679111,
+    "road_distance_emu": 424740
+  },
+  {
+    "marker_index": 154,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 2288971,
+    "y_emu": 5781955,
+    "road_distance_emu": 634365
+  },
+  {
+    "marker_index": 143,
+    "street": "Cape Street",
+    "block": 8,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 2084883,
+    "y_emu": 5883961,
+    "road_distance_emu": 833164
+  },
+  {
+    "marker_index": 171,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 2402256,
+    "y_emu": 5533136,
+    "road_distance_emu": 459804
+  },
+  {
+    "marker_index": 145,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 2102080,
+    "y_emu": 5756383,
+    "road_distance_emu": 799000
+  },
+  {
+    "marker_index": 133,
+    "street": "Cape Street",
+    "block": 8,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 1900557,
+    "y_emu": 5913856,
+    "road_distance_emu": 1005534
+  },
+  {
+    "marker_index": 172,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 2346807,
+    "y_emu": 5401691,
+    "road_distance_emu": 480590
+  },
+  {
+    "marker_index": 146,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 2124330,
+    "y_emu": 5599912,
+    "road_distance_emu": 742782
+  },
+  {
+    "marker_index": 134,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 1927097,
+    "y_emu": 5762931,
+    "road_distance_emu": 968525
+  },
+  {
+    "marker_index": 147,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 2135301,
+    "y_emu": 5459832,
+    "road_distance_emu": 697675
+  },
+  {
+    "marker_index": 126,
+    "street": "Cape Street",
+    "block": 8,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 1697102,
+    "y_emu": 5927979,
+    "road_distance_emu": 1203505
+  },
+  {
+    "marker_index": 135,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 28,
+    "parity": "Even",
+    "x_emu": 1942119,
+    "y_emu": 5617185,
+    "road_distance_emu": 925743
+  },
+  {
+    "marker_index": 173,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 30,
+    "parity": "Even",
+    "x_emu": 2281098,
+    "y_emu": 5273547,
+    "road_distance_emu": 489466
+  },
+  {
+    "marker_index": 125,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 32,
+    "parity": "Even",
+    "x_emu": 1688921,
+    "y_emu": 5748936,
+    "road_distance_emu": 1197017
+  },
+  {
+    "marker_index": 136,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 34,
+    "parity": "Even",
+    "x_emu": 1982013,
+    "y_emu": 5387161,
+    "road_distance_emu": 788228
+  },
+  {
+    "marker_index": 124,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 36,
+    "parity": "Even",
+    "x_emu": 1727885,
+    "y_emu": 5555337,
+    "road_distance_emu": 1067710
+  },
+  {
+    "marker_index": 174,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 38,
+    "parity": "Even",
+    "x_emu": 2204898,
+    "y_emu": 5101667,
+    "road_distance_emu": 434293
+  },
+  {
+    "marker_index": 137,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 40,
+    "parity": "Even",
+    "x_emu": 2003830,
+    "y_emu": 5244947,
+    "road_distance_emu": 655096
+  },
+  {
+    "marker_index": 123,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 42,
+    "parity": "Even",
+    "x_emu": 1762008,
+    "y_emu": 5350686,
+    "road_distance_emu": 887969
+  },
+  {
+    "marker_index": 175,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 44,
+    "parity": "Even",
+    "x_emu": 2259558,
+    "y_emu": 4904206,
+    "road_distance_emu": 231467
+  },
+  {
+    "marker_index": 122,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 46,
+    "parity": "Even",
+    "x_emu": 1769238,
+    "y_emu": 5167682,
+    "road_distance_emu": 757754
+  },
+  {
+    "marker_index": 121,
+    "street": "Zenith Street",
+    "block": 8,
+    "lot": 48,
+    "parity": "Even",
+    "x_emu": 1809776,
+    "y_emu": 4889703,
+    "road_distance_emu": 586027
+  },
+  {
+    "marker_index": 51,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4889144,
+    "y_emu": 4509312,
+    "road_distance_emu": 446
+  },
+  {
+    "marker_index": 52,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 4667178,
+    "y_emu": 4439310,
+    "road_distance_emu": 169737
+  },
+  {
+    "marker_index": 50,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 4871212,
+    "y_emu": 4206087,
+    "road_distance_emu": 81108
+  },
+  {
+    "marker_index": 55,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4275168,
+    "y_emu": 4384877,
+    "road_distance_emu": 500094
+  },
+  {
+    "marker_index": 49,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 4761834,
+    "y_emu": 3986683,
+    "road_distance_emu": 75319
+  },
+  {
+    "marker_index": 54,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 4384599,
+    "y_emu": 4333154,
+    "road_distance_emu": 379056
+  },
+  {
+    "marker_index": 48,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 4659351,
+    "y_emu": 3829710,
+    "road_distance_emu": 50424
+  },
+  {
+    "marker_index": 53,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 4577086,
+    "y_emu": 4272075,
+    "road_distance_emu": 179029
+  },
+  {
+    "marker_index": 40,
+    "street": "Meridian Ave.",
+    "block": 9,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 4205782,
+    "y_emu": 3832479,
+    "road_distance_emu": 148594
+  },
+  {
+    "marker_index": 41,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 4321181,
+    "y_emu": 4059022,
+    "road_distance_emu": 318240
+  },
+  {
+    "marker_index": 47,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 4607940,
+    "y_emu": 3627297,
+    "road_distance_emu": 54338
+  },
+  {
+    "marker_index": 42,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 4491092,
+    "y_emu": 3971883,
+    "road_distance_emu": 127366
+  },
+  {
+    "marker_index": 43,
+    "street": "Horizon Ave.",
+    "block": 9,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 4392244,
+    "y_emu": 3736364,
+    "road_distance_emu": 115155
+  },
+  {
+    "marker_index": 196,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 2669845,
+    "y_emu": 4505628,
+    "road_distance_emu": 174335
+  },
+  {
+    "marker_index": 188,
+    "street": "Equator Street",
+    "block": 10,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2907981,
+    "y_emu": 4424103,
+    "road_distance_emu": 66237
+  },
+  {
+    "marker_index": 192,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 2430857,
+    "y_emu": 4607814,
+    "road_distance_emu": 55164
+  },
+  {
+    "marker_index": 8,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2230474,
+    "y_emu": 4633823,
+    "road_distance_emu": 140046
+  },
+  {
+    "marker_index": 197,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 2629812,
+    "y_emu": 4267962,
+    "road_distance_emu": 207619
+  },
+  {
+    "marker_index": 189,
+    "street": "Equator Street",
+    "block": 10,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 2812136,
+    "y_emu": 4205377,
+    "road_distance_emu": 155078
+  },
+  {
+    "marker_index": 191,
+    "street": "Equator Street",
+    "block": 10,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 3038475,
+    "y_emu": 3982161,
+    "road_distance_emu": 185961
+  },
+  {
+    "marker_index": 190,
+    "street": "Equator Street",
+    "block": 10,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 2907981,
+    "y_emu": 4095521,
+    "road_distance_emu": 72651
+  },
+  {
+    "marker_index": 198,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 2629839,
+    "y_emu": 4041725,
+    "road_distance_emu": 112393
+  },
+  {
+    "marker_index": 193,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 2324531,
+    "y_emu": 4399634,
+    "road_distance_emu": 77657
+  },
+  {
+    "marker_index": 199,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 2808454,
+    "y_emu": 3920569,
+    "road_distance_emu": 158994
+  },
+  {
+    "marker_index": 9,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 2025447,
+    "y_emu": 4538066,
+    "road_distance_emu": 355900
+  },
+  {
+    "marker_index": 203,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 2493244,
+    "y_emu": 3840399,
+    "road_distance_emu": 15921
+  },
+  {
+    "marker_index": 194,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 2288743,
+    "y_emu": 4194480,
+    "road_distance_emu": 140157
+  },
+  {
+    "marker_index": 204,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 2593005,
+    "y_emu": 3690441,
+    "road_distance_emu": 95059
+  },
+  {
+    "marker_index": 10,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 1747722,
+    "y_emu": 4578653,
+    "road_distance_emu": 625859
+  },
+  {
+    "marker_index": 6,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 1955826,
+    "y_emu": 4264178,
+    "road_distance_emu": 460992
+  },
+  {
+    "marker_index": 7,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 1732636,
+    "y_emu": 4424306,
+    "road_distance_emu": 661145
+  },
+  {
+    "marker_index": 195,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 2353182,
+    "y_emu": 3960393,
+    "road_distance_emu": 107114
+  },
+  {
+    "marker_index": 4,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 1952675,
+    "y_emu": 4063466,
+    "road_distance_emu": 490554
+  },
+  {
+    "marker_index": 212,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 2194937,
+    "y_emu": 3823666,
+    "road_distance_emu": 281990
+  },
+  {
+    "marker_index": 211,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 28,
+    "parity": "Even",
+    "x_emu": 2321913,
+    "y_emu": 3683128,
+    "road_distance_emu": 174633
+  },
+  {
+    "marker_index": 5,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 30,
+    "parity": "Even",
+    "x_emu": 1647341,
+    "y_emu": 4132302,
+    "road_distance_emu": 784160
+  },
+  {
+    "marker_index": 3,
+    "street": "Zenith Street",
+    "block": 10,
+    "lot": 32,
+    "parity": "Even",
+    "x_emu": 1579702,
+    "y_emu": 3964126,
+    "road_distance_emu": 873363
+  },
+  {
+    "marker_index": 2,
+    "street": "Asia Street",
+    "block": 10,
+    "lot": 34,
+    "parity": "Even",
+    "x_emu": 1542619,
+    "y_emu": 3766328,
+    "road_distance_emu": 728668
+  },
+  {
+    "marker_index": 11,
+    "street": "Meridian Ave.",
+    "block": 11,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 3518279,
+    "y_emu": 3982111,
+    "road_distance_emu": 70349
+  },
+  {
+    "marker_index": 205,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2715974,
+    "y_emu": 3551051,
+    "road_distance_emu": 162023
+  },
+  {
+    "marker_index": 200,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 3016961,
+    "y_emu": 3683207,
+    "road_distance_emu": 147504
+  },
+  {
+    "marker_index": 206,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2824721,
+    "y_emu": 3423496,
+    "road_distance_emu": 139110
+  },
+  {
+    "marker_index": 202,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 3192144,
+    "y_emu": 3492906,
+    "road_distance_emu": 144119
+  },
+  {
+    "marker_index": 207,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 2907981,
+    "y_emu": 3328289,
+    "road_distance_emu": 143972
+  },
+  {
+    "marker_index": 201,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 3554146,
+    "y_emu": 3090697,
+    "road_distance_emu": 162469
+  },
+  {
+    "marker_index": 208,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 3020568,
+    "y_emu": 3214928,
+    "road_distance_emu": 140006
+  },
+  {
+    "marker_index": 209,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 3126409,
+    "y_emu": 3108881,
+    "road_distance_emu": 135919
+  },
+  {
+    "marker_index": 210,
+    "street": "Zenith Street",
+    "block": 11,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 3257656,
+    "y_emu": 2958847,
+    "road_distance_emu": 143580
+  },
+  {
+    "marker_index": 214,
+    "street": "Meridian Ave.",
+    "block": 11,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 3367761,
+    "y_emu": 2636817,
+    "road_distance_emu": 145380
+  },
+  {
+    "marker_index": 213,
+    "street": "Asia Street",
+    "block": 11,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 3060700,
+    "y_emu": 2598546,
+    "road_distance_emu": 94146
+  },
+  {
+    "marker_index": 216,
+    "street": "Asia Street",
+    "block": 11,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 2536011,
+    "y_emu": 2786560,
+    "road_distance_emu": 91745
+  },
+  {
+    "marker_index": 215,
+    "street": "Asia Street",
+    "block": 11,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 3284145,
+    "y_emu": 2472947,
+    "road_distance_emu": 86764
+  },
+  {
+    "marker_index": 46,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 4497883,
+    "y_emu": 3343224,
+    "road_distance_emu": 77342
+  },
+  {
+    "marker_index": 44,
+    "street": "Meridian Ave.",
+    "block": 12,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 4271391,
+    "y_emu": 3479143,
+    "road_distance_emu": 126507
+  },
+  {
+    "marker_index": 39,
+    "street": "Meridian Ave.",
+    "block": 12,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 4011702,
+    "y_emu": 3386049,
+    "road_distance_emu": 116105
+  },
+  {
+    "marker_index": 38,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 4216655,
+    "y_emu": 3265651,
+    "road_distance_emu": 106212
+  },
+  {
+    "marker_index": 45,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 4388556,
+    "y_emu": 3078844,
+    "road_distance_emu": 92525
+  },
+  {
+    "marker_index": 37,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 4132326,
+    "y_emu": 3140843,
+    "road_distance_emu": 128574
+  },
+  {
+    "marker_index": 36,
+    "street": "Equator Street",
+    "block": 12,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 4052494,
+    "y_emu": 2903601,
+    "road_distance_emu": 87767
+  },
+  {
+    "marker_index": 35,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 3971798,
+    "y_emu": 2716953,
+    "road_distance_emu": 127764
+  },
+  {
+    "marker_index": 34,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 4252858,
+    "y_emu": 2746323,
+    "road_distance_emu": 113251
+  },
+  {
+    "marker_index": 33,
+    "street": "Horizon Ave.",
+    "block": 12,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 4187192,
+    "y_emu": 2552421,
+    "road_distance_emu": 137487
+  },
+  {
+    "marker_index": 243,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 2567278,
+    "y_emu": 2482647,
+    "road_distance_emu": 109281
+  },
+  {
+    "marker_index": 217,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2387443,
+    "y_emu": 2830347,
+    "road_distance_emu": 73898
+  },
+  {
+    "marker_index": 244,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 2393441,
+    "y_emu": 2540168,
+    "road_distance_emu": 152915
+  },
+  {
+    "marker_index": 230,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2856762,
+    "y_emu": 2198579,
+    "road_distance_emu": 151776
+  },
+  {
+    "marker_index": 246,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 2139952,
+    "y_emu": 2655158,
+    "road_distance_emu": 115352
+  },
+  {
+    "marker_index": 249,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 2515488,
+    "y_emu": 2316616,
+    "road_distance_emu": 150756
+  },
+  {
+    "marker_index": 245,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 2251049,
+    "y_emu": 2594762,
+    "road_distance_emu": 141395
+  },
+  {
+    "marker_index": 250,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 2310332,
+    "y_emu": 2381291,
+    "road_distance_emu": 144212
+  },
+  {
+    "marker_index": 247,
+    "street": "Asia Street",
+    "block": 13,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 1962479,
+    "y_emu": 2713304,
+    "road_distance_emu": 110478
+  },
+  {
+    "marker_index": 251,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 2142211,
+    "y_emu": 2456967,
+    "road_distance_emu": 160258
+  },
+  {
+    "marker_index": 248,
+    "street": "Africa Street",
+    "block": 13,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 1774343,
+    "y_emu": 2771828,
+    "road_distance_emu": 59042
+  },
+  {
+    "marker_index": 218,
+    "street": "Africa Street",
+    "block": 13,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 1481633,
+    "y_emu": 2780081,
+    "road_distance_emu": 173320
+  },
+  {
+    "marker_index": 254,
+    "street": "Africa Street",
+    "block": 13,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 1678152,
+    "y_emu": 2585263,
+    "road_distance_emu": 102053
+  },
+  {
+    "marker_index": 252,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 1977415,
+    "y_emu": 2490236,
+    "road_distance_emu": 137362
+  },
+  {
+    "marker_index": 231,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 2763246,
+    "y_emu": 1968481,
+    "road_distance_emu": 96286
+  },
+  {
+    "marker_index": 253,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 1819781,
+    "y_emu": 2533941,
+    "road_distance_emu": 127704
+  },
+  {
+    "marker_index": 255,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 2435734,
+    "y_emu": 2056440,
+    "road_distance_emu": 120143
+  },
+  {
+    "marker_index": 261,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 2338779,
+    "y_emu": 1882927,
+    "road_distance_emu": 143608
+  },
+  {
+    "marker_index": 256,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 2237384,
+    "y_emu": 2119425,
+    "road_distance_emu": 126040
+  },
+  {
+    "marker_index": 262,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 2168549,
+    "y_emu": 1919401,
+    "road_distance_emu": 112060
+  },
+  {
+    "marker_index": 257,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 2108300,
+    "y_emu": 2165168,
+    "road_distance_emu": 125391
+  },
+  {
+    "marker_index": 263,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 2039290,
+    "y_emu": 1974343,
+    "road_distance_emu": 121337
+  },
+  {
+    "marker_index": 258,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 23,
+    "parity": "Odd",
+    "x_emu": 1980511,
+    "y_emu": 2218536,
+    "road_distance_emu": 117115
+  },
+  {
+    "marker_index": 264,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 1922246,
+    "y_emu": 2021941,
+    "road_distance_emu": 127705
+  },
+  {
+    "marker_index": 259,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 25,
+    "parity": "Odd",
+    "x_emu": 1792107,
+    "y_emu": 2271482,
+    "road_distance_emu": 129213
+  },
+  {
+    "marker_index": 265,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 1739010,
+    "y_emu": 2087549,
+    "road_distance_emu": 129265
+  },
+  {
+    "marker_index": 260,
+    "street": "Belgium Street",
+    "block": 13,
+    "lot": 27,
+    "parity": "Odd",
+    "x_emu": 1581301,
+    "y_emu": 2358314,
+    "road_distance_emu": 116700
+  },
+  {
+    "marker_index": 276,
+    "street": "Canada Street",
+    "block": 13,
+    "lot": 28,
+    "parity": "Even",
+    "x_emu": 2186483,
+    "y_emu": 1440281,
+    "road_distance_emu": 112418
+  },
+  {
+    "marker_index": 232,
+    "street": "Australia Street",
+    "block": 13,
+    "lot": 29,
+    "parity": "Odd",
+    "x_emu": 2674315,
+    "y_emu": 1780743,
+    "road_distance_emu": 146103
+  },
+  {
+    "marker_index": 277,
+    "street": "Canada Street",
+    "block": 13,
+    "lot": 30,
+    "parity": "Even",
+    "x_emu": 2024632,
+    "y_emu": 1505251,
+    "road_distance_emu": 96274
+  },
+  {
+    "marker_index": 233,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 31,
+    "parity": "Odd",
+    "x_emu": 2604562,
+    "y_emu": 1602480,
+    "road_distance_emu": 33587
+  },
+  {
+    "marker_index": 268,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 33,
+    "parity": "Odd",
+    "x_emu": 2159533,
+    "y_emu": 1662657,
+    "road_distance_emu": 123426
+  },
+  {
+    "marker_index": 270,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 35,
+    "parity": "Odd",
+    "x_emu": 1830425,
+    "y_emu": 1789861,
+    "road_distance_emu": 111782
+  },
+  {
+    "marker_index": 269,
+    "street": "Brazil Street",
+    "block": 13,
+    "lot": 37,
+    "parity": "Odd",
+    "x_emu": 1964616,
+    "y_emu": 1718081,
+    "road_distance_emu": 135331
+  },
+  {
+    "marker_index": 234,
+    "street": "Australia Street",
+    "block": 13,
+    "lot": 39,
+    "parity": "Odd",
+    "x_emu": 2505862,
+    "y_emu": 1354805,
+    "road_distance_emu": 124731
+  },
+  {
+    "marker_index": 271,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 1739417,
+    "y_emu": 1838835,
+    "road_distance_emu": 95534
+  },
+  {
+    "marker_index": 219,
+    "street": "Belgium Street",
+    "block": 14,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 1328044,
+    "y_emu": 2628386,
+    "road_distance_emu": 55571
+  },
+  {
+    "marker_index": 272,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 1617270,
+    "y_emu": 1852627,
+    "road_distance_emu": 122764
+  },
+  {
+    "marker_index": 266,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 1578812,
+    "y_emu": 2127095,
+    "road_distance_emu": 113811
+  },
+  {
+    "marker_index": 273,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 1481470,
+    "y_emu": 1919579,
+    "road_distance_emu": 114191
+  },
+  {
+    "marker_index": 267,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 1407339,
+    "y_emu": 2201265,
+    "road_distance_emu": 127331
+  },
+  {
+    "marker_index": 274,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 1374267,
+    "y_emu": 1967027,
+    "road_distance_emu": 104721
+  },
+  {
+    "marker_index": 220,
+    "street": "Africa Street",
+    "block": 14,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 1149815,
+    "y_emu": 2321993,
+    "road_distance_emu": 103434
+  },
+  {
+    "marker_index": 275,
+    "street": "Brazil Street",
+    "block": 14,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 1233930,
+    "y_emu": 2025446,
+    "road_distance_emu": 95812
+  },
+  {
+    "marker_index": 278,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 1844900,
+    "y_emu": 1590472,
+    "road_distance_emu": 117506
+  },
+  {
+    "marker_index": 284,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 1701115,
+    "y_emu": 1347545,
+    "road_distance_emu": 135085
+  },
+  {
+    "marker_index": 279,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 1642695,
+    "y_emu": 1645360,
+    "road_distance_emu": 102694
+  },
+  {
+    "marker_index": 285,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 1461032,
+    "y_emu": 1417090,
+    "road_distance_emu": 148542
+  },
+  {
+    "marker_index": 280,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 1438047,
+    "y_emu": 1725828,
+    "road_distance_emu": 111228
+  },
+  {
+    "marker_index": 286,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 1304110,
+    "y_emu": 1478286,
+    "road_distance_emu": 166624
+  },
+  {
+    "marker_index": 281,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 1242747,
+    "y_emu": 1816784,
+    "road_distance_emu": 132744
+  },
+  {
+    "marker_index": 287,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 1190623,
+    "y_emu": 1535381,
+    "road_distance_emu": 150116
+  },
+  {
+    "marker_index": 221,
+    "street": "Africa Street",
+    "block": 14,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 924865,
+    "y_emu": 2006862,
+    "road_distance_emu": 177630
+  },
+  {
+    "marker_index": 288,
+    "street": "Africa Street",
+    "block": 14,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 1065503,
+    "y_emu": 1594079,
+    "road_distance_emu": 56612
+  },
+  {
+    "marker_index": 222,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 872370,
+    "y_emu": 1872684,
+    "road_distance_emu": 63468
+  },
+  {
+    "marker_index": 223,
+    "street": "Canada Street",
+    "block": 14,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 795715,
+    "y_emu": 1730467,
+    "road_distance_emu": 97271
+  },
+  {
+    "marker_index": 293,
+    "street": "Columbia Street",
+    "block": 14,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 1354962,
+    "y_emu": 1272311,
+    "road_distance_emu": 121349
+  },
+  {
+    "marker_index": 295,
+    "street": "Africa Street",
+    "block": 14,
+    "lot": 23,
+    "parity": "Odd",
+    "x_emu": 1001444,
+    "y_emu": 1385570,
+    "road_distance_emu": 84684
+  },
+  {
+    "marker_index": 294,
+    "street": "Columbia Street",
+    "block": 14,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 1175940,
+    "y_emu": 1344730,
+    "road_distance_emu": 130728
+  },
+  {
+    "marker_index": 224,
+    "street": "Africa Street",
+    "block": 14,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 744533,
+    "y_emu": 1520351,
+    "road_distance_emu": 140222
+  },
+  {
+    "marker_index": 235,
+    "street": "Canada Street",
+    "block": 15,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 2450179,
+    "y_emu": 1163250,
+    "road_distance_emu": 62240
+  },
+  {
+    "marker_index": 282,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 2159633,
+    "y_emu": 1179218,
+    "road_distance_emu": 119137
+  },
+  {
+    "marker_index": 283,
+    "street": "Canada Street",
+    "block": 15,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 1905150,
+    "y_emu": 1277694,
+    "road_distance_emu": 133797
+  },
+  {
+    "marker_index": 289,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 2016759,
+    "y_emu": 1037131,
+    "road_distance_emu": 130951
+  },
+  {
+    "marker_index": 236,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 2412588,
+    "y_emu": 967531,
+    "road_distance_emu": 169943
+  },
+  {
+    "marker_index": 290,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 1856510,
+    "y_emu": 1084655,
+    "road_distance_emu": 109455
+  },
+  {
+    "marker_index": 296,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 2008430,
+    "y_emu": 776730,
+    "road_distance_emu": 117648
+  },
+  {
+    "marker_index": 291,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 1714602,
+    "y_emu": 1132967,
+    "road_distance_emu": 108304
+  },
+  {
+    "marker_index": 237,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 2255286,
+    "y_emu": 674543,
+    "road_distance_emu": 116047
+  },
+  {
+    "marker_index": 292,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 1595070,
+    "y_emu": 1180515,
+    "road_distance_emu": 113806
+  },
+  {
+    "marker_index": 298,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 1751431,
+    "y_emu": 874524,
+    "road_distance_emu": 110008
+  },
+  {
+    "marker_index": 305,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 1923976,
+    "y_emu": 578461,
+    "road_distance_emu": 90776
+  },
+  {
+    "marker_index": 297,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 1875739,
+    "y_emu": 817654,
+    "road_distance_emu": 122737
+  },
+  {
+    "marker_index": 306,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 1787754,
+    "y_emu": 634388,
+    "road_distance_emu": 98688
+  },
+  {
+    "marker_index": 299,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 1634389,
+    "y_emu": 898427,
+    "road_distance_emu": 126010
+  },
+  {
+    "marker_index": 307,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 1687274,
+    "y_emu": 675794,
+    "road_distance_emu": 104669
+  },
+  {
+    "marker_index": 300,
+    "street": "Columbia Street",
+    "block": 15,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 1449631,
+    "y_emu": 975157,
+    "road_distance_emu": 114451
+  },
+  {
+    "marker_index": 308,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 1560016,
+    "y_emu": 712292,
+    "road_distance_emu": 97192
+  },
+  {
+    "marker_index": 317,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 1481419,
+    "y_emu": 504953,
+    "road_distance_emu": 114211
+  },
+  {
+    "marker_index": 309,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 20,
+    "parity": "Even",
+    "x_emu": 1447470,
+    "y_emu": 753593,
+    "road_distance_emu": 99098
+  },
+  {
+    "marker_index": 316,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 1583284,
+    "y_emu": 440993,
+    "road_distance_emu": 141030
+  },
+  {
+    "marker_index": 238,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 22,
+    "parity": "Even",
+    "x_emu": 2178247,
+    "y_emu": 399597,
+    "road_distance_emu": 5695
+  },
+  {
+    "marker_index": 239,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 23,
+    "parity": "Odd",
+    "x_emu": 2126762,
+    "y_emu": 220097,
+    "road_distance_emu": 168128
+  },
+  {
+    "marker_index": 314,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 24,
+    "parity": "Even",
+    "x_emu": 1846046,
+    "y_emu": 347473,
+    "road_distance_emu": 138713
+  },
+  {
+    "marker_index": 315,
+    "street": "Germany Street",
+    "block": 15,
+    "lot": 25,
+    "parity": "Odd",
+    "x_emu": 1719506,
+    "y_emu": 369775,
+    "road_distance_emu": 164550
+  },
+  {
+    "marker_index": 322,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 26,
+    "parity": "Even",
+    "x_emu": 1713304,
+    "y_emu": 174727,
+    "road_distance_emu": 108996
+  },
+  {
+    "marker_index": 241,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 27,
+    "parity": "Odd",
+    "x_emu": 1957254,
+    "y_emu": -153136,
+    "road_distance_emu": 120161
+  },
+  {
+    "marker_index": 323,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 28,
+    "parity": "Even",
+    "x_emu": 1545081,
+    "y_emu": 239394,
+    "road_distance_emu": 111071
+  },
+  {
+    "marker_index": 330,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 29,
+    "parity": "Odd",
+    "x_emu": 1615923,
+    "y_emu": -92254,
+    "road_distance_emu": 175162
+  },
+  {
+    "marker_index": 324,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 30,
+    "parity": "Even",
+    "x_emu": 1400175,
+    "y_emu": 298983,
+    "road_distance_emu": 119579
+  },
+  {
+    "marker_index": 242,
+    "street": "Australia Street",
+    "block": 15,
+    "lot": 31,
+    "parity": "Odd",
+    "x_emu": 1852223,
+    "y_emu": -340259,
+    "road_distance_emu": 214894
+  },
+  {
+    "marker_index": 240,
+    "street": "Hungary Street",
+    "block": 15,
+    "lot": 32,
+    "parity": "Even",
+    "x_emu": 2015369,
+    "y_emu": -21077,
+    "road_distance_emu": 23671
+  },
+  {
+    "marker_index": 301,
+    "street": "Columbia Street",
+    "block": 16,
+    "lot": 1,
+    "parity": "Odd",
+    "x_emu": 1270863,
+    "y_emu": 1041955,
+    "road_distance_emu": 110296
+  },
+  {
+    "marker_index": 310,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 2,
+    "parity": "Even",
+    "x_emu": 1211963,
+    "y_emu": 844043,
+    "road_distance_emu": 106887
+  },
+  {
+    "marker_index": 302,
+    "street": "Columbia Street",
+    "block": 16,
+    "lot": 3,
+    "parity": "Odd",
+    "x_emu": 1158976,
+    "y_emu": 1092250,
+    "road_distance_emu": 110606
+  },
+  {
+    "marker_index": 311,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 4,
+    "parity": "Even",
+    "x_emu": 1090221,
+    "y_emu": 891666,
+    "road_distance_emu": 121985
+  },
+  {
+    "marker_index": 303,
+    "street": "Columbia Street",
+    "block": 16,
+    "lot": 5,
+    "parity": "Odd",
+    "x_emu": 1039522,
+    "y_emu": 1144219,
+    "road_distance_emu": 103537
+  },
+  {
+    "marker_index": 312,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 6,
+    "parity": "Even",
+    "x_emu": 955774,
+    "y_emu": 942797,
+    "road_distance_emu": 125954
+  },
+  {
+    "marker_index": 304,
+    "street": "Columbia Street",
+    "block": 16,
+    "lot": 7,
+    "parity": "Odd",
+    "x_emu": 920648,
+    "y_emu": 1206373,
+    "road_distance_emu": 84028
+  },
+  {
+    "marker_index": 226,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 8,
+    "parity": "Even",
+    "x_emu": 590635,
+    "y_emu": 1115814,
+    "road_distance_emu": 168979
+  },
+  {
+    "marker_index": 225,
+    "street": "Columbia Street",
+    "block": 16,
+    "lot": 9,
+    "parity": "Odd",
+    "x_emu": 637880,
+    "y_emu": 1271887,
+    "road_distance_emu": 115434
+  },
+  {
+    "marker_index": 325,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 10,
+    "parity": "Even",
+    "x_emu": 1155319,
+    "y_emu": 386715,
+    "road_distance_emu": 121721
+  },
+  {
+    "marker_index": 313,
+    "street": "Africa Street",
+    "block": 16,
+    "lot": 11,
+    "parity": "Odd",
+    "x_emu": 828597,
+    "y_emu": 983183,
+    "road_distance_emu": 94056
+  },
+  {
+    "marker_index": 326,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 12,
+    "parity": "Even",
+    "x_emu": 1039445,
+    "y_emu": 418261,
+    "road_distance_emu": 113320
+  },
+  {
+    "marker_index": 318,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 13,
+    "parity": "Odd",
+    "x_emu": 1129308,
+    "y_emu": 620826,
+    "road_distance_emu": 120845
+  },
+  {
+    "marker_index": 327,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 14,
+    "parity": "Even",
+    "x_emu": 927989,
+    "y_emu": 467158,
+    "road_distance_emu": 122757
+  },
+  {
+    "marker_index": 227,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 15,
+    "parity": "Odd",
+    "x_emu": 525052,
+    "y_emu": 945372,
+    "road_distance_emu": 13553
+  },
+  {
+    "marker_index": 328,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 16,
+    "parity": "Even",
+    "x_emu": 813561,
+    "y_emu": 522249,
+    "road_distance_emu": 137062
+  },
+  {
+    "marker_index": 319,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 17,
+    "parity": "Odd",
+    "x_emu": 997687,
+    "y_emu": 675767,
+    "road_distance_emu": 112347
+  },
+  {
+    "marker_index": 229,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 18,
+    "parity": "Even",
+    "x_emu": 393497,
+    "y_emu": 657721,
+    "road_distance_emu": 126539
+  },
+  {
+    "marker_index": 320,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 19,
+    "parity": "Odd",
+    "x_emu": 879270,
+    "y_emu": 727051,
+    "road_distance_emu": 102951
+  },
+  {
+    "marker_index": 321,
+    "street": "Africa Street",
+    "block": 16,
+    "lot": 21,
+    "parity": "Odd",
+    "x_emu": 742926,
+    "y_emu": 774521,
+    "road_distance_emu": 102521
+  },
+  {
+    "marker_index": 228,
+    "street": "Germany Street",
+    "block": 16,
+    "lot": 23,
+    "parity": "Odd",
+    "x_emu": 471042,
+    "y_emu": 828786,
+    "road_distance_emu": 141807
+  },
+  {
+    "marker_index": 329,
+    "street": "Africa Street",
+    "block": 16,
+    "lot": 25,
+    "parity": "Odd",
+    "x_emu": 668655,
+    "y_emu": 573660,
+    "road_distance_emu": 118130
+  },
+  {
+    "marker_index": 331,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 27,
+    "parity": "Odd",
+    "x_emu": 1187932,
+    "y_emu": 42977,
+    "road_distance_emu": 188525
+  },
+  {
+    "marker_index": 332,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 29,
+    "parity": "Odd",
+    "x_emu": 1032636,
+    "y_emu": 101575,
+    "road_distance_emu": 184376
+  },
+  {
+    "marker_index": 334,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 31,
+    "parity": "Odd",
+    "x_emu": 737309,
+    "y_emu": 233502,
+    "road_distance_emu": 160683
+  },
+  {
+    "marker_index": 333,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 33,
+    "parity": "Odd",
+    "x_emu": 891387,
+    "y_emu": 148971,
+    "road_distance_emu": 186174
+  },
+  {
+    "marker_index": 336,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 35,
+    "parity": "Odd",
+    "x_emu": 415671,
+    "y_emu": 365455,
+    "road_distance_emu": 142093
+  },
+  {
+    "marker_index": 335,
+    "street": "Hungary Street",
+    "block": 16,
+    "lot": 37,
+    "parity": "Odd",
+    "x_emu": 566420,
+    "y_emu": 277393,
+    "road_distance_emu": 175559
+  }
+]

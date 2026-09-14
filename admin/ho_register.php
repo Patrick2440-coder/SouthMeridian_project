@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'admin_access.php';
+require_once '../config/database.php';
 requireAccess('homeowner_management');
 
 function esc($v){
@@ -73,16 +74,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$host = "localhost";
-$db   = "u972459197_south_meridian.sql";
-$user = "root";
-$pass = "";
-
-$conn = new mysqli($host, $user, $pass, $db);
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
 
 // admin info from DB
 $admin_id = (int)$_SESSION['admin_id'];

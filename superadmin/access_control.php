@@ -1,6 +1,10 @@
 <?php
 session_start();
 
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+require_once '../config/database.php';
+
 /* =========================
    SUPERADMIN GUARD
    ========================= */
@@ -12,15 +16,6 @@ if (
     echo "<script>alert('Access denied. Superadmin only.'); window.location='../index.php';</script>";
     exit;
 }
-
-/* =========================
-   DB
-   ========================= */
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
-
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 $positions = [
     'President',

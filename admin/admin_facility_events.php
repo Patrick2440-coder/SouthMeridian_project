@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once '../config/database.php';
 header('Content-Type: application/json; charset=utf-8');
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -13,14 +14,7 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
   echo json_encode([]); exit;
 }
 
-$db_host = "localhost";
-$db_user = "";
-$db_pass = "root";
-$db_name = "u972459197_south_meridian.sql";
-
 try {
-  $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-  $conn->set_charset("utf8mb4");
 
   $adminId = (int)($_SESSION['admin_id'] ?? 0);
 

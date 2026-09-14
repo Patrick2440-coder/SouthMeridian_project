@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'admin_access.php';
+require_once '../config/database.php';
 requireAccess('announcements');
 /* =========================
    1) SESSION CHECK
@@ -21,16 +22,7 @@ $csrf_token = $_SESSION['csrf_ann'];
 /* =========================
    3) LOCAL DB CONNECTION
    ========================= */
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "u972459197_south_meridian.sql";
 
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
 
 function esc($v) {
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');

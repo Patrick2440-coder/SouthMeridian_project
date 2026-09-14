@@ -1,14 +1,12 @@
 <?php
 session_start();
-
+require_once '../config/database.php';
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
   header("Location: ../index.php");
   exit;
 }
 
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
+
 
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }

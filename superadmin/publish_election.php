@@ -1,11 +1,10 @@
 <?php
 session_start();
 header('Content-Type: application/json');
-
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-require __DIR__ . '/../vendor/autoload.php';
+require_once '../config/database.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -19,11 +18,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') {
     exit;
 }
 
-// ================= DB =================
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
-
+require_once '../config/database.php';
 
 // ================= INPUT =================
 $sessionId = (int)($_POST['session_id'] ?? 0);

@@ -1,6 +1,6 @@
 <?php
 session_start();
-
+require_once '../config/database.php';
 require_once 'admin_access.php';
 requireAccess('parking');
 
@@ -24,11 +24,6 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 // ===================== DB =====================
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
 
 function esc($v): string
 {

@@ -1,6 +1,6 @@
 <?php
 session_start();
-
+require_once '../config/database.php';
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'homeowner' || empty($_SESSION['homeowner_id'])) {
   header("Location: ../index.php"); exit;
 }
@@ -9,9 +9,6 @@ date_default_timezone_set('Asia/Manila');
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
 
 
 function back($msg){

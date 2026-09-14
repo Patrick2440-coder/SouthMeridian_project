@@ -2,9 +2,7 @@
 session_start();
 
 // ===================== DB CONNECTION =====================
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset("utf8mb4");
+require_once 'config/database.php';
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -133,52 +131,762 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 <head>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
   <title>South Meridian Homes</title>
   <meta name="description" content="South Meridian Homeowners Association – Your secure, modern, and efficient HOA management platform.">
   <meta name="keywords" content="South Meridian Homes, HOA, Homeowners Association, Dasmariñas, Cavite">
 
-  <!-- Favicons -->
   <link href="assets/img/sm_logo.png" rel="icon">
   <link href="assets/img/apple-touch-icon.png" rel="apple-touch-icon">
 
-  <!-- Fonts -->
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Montserrat:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Raleway:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800&family=Raleway:wght@600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Vendor CSS Files -->
   <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
   <link href="assets/vendor/aos/aos.css" rel="stylesheet">
   <link href="assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <!-- Main CSS File -->
   <link href="assets/css/main.css" rel="stylesheet">
+
+  <!-- Landing-page-only refinements. main.css is NOT modified. -->
+  <style>
+    :root{
+      --smh-green:#077f46;
+      --smh-green-dark:#056437;
+      --smh-deep:#0d3d2a;
+      --smh-soft:#f3f8f5;
+      --smh-line:#e4ece7;
+      --smh-text:#294438;
+      --smh-muted:#6f7f76;
+    }
+
+    body.index-page{
+      background:#fff;
+    }
+
+    /* Header */
+    #header{
+      padding:10px 0;
+      background:var(--smh-green);
+      border-bottom:1px solid rgba(255,255,255,.12);
+      box-shadow:0 8px 28px rgba(0,0,0,.06);
+    }
+
+    #header .logo{
+      gap:10px;
+    }
+
+    #header .logo img{
+      height:58px !important;
+      width:58px;
+      object-fit:contain;
+      margin:0;
+    }
+
+    #header .sitename{
+      font-size:24px;
+      font-weight:800;
+      letter-spacing:-.5px;
+      margin:0;
+      color:#fff;
+    }
+
+    @media(min-width:1200px){
+      #navmenu ul{
+        gap:3px;
+      }
+
+      #navmenu a,
+      #navmenu a:focus{
+        color:rgba(255,255,255,.78);
+        padding:11px 14px;
+        font-size:14px;
+        font-weight:700;
+        border-radius:10px;
+      }
+
+      #navmenu a:hover,
+      #navmenu .active{
+        color:#fff;
+        background:rgba(255,255,255,.10);
+      }
+
+      #navmenu .landing-login{
+        margin-left:8px;
+        background:#fff !important;
+        color:var(--smh-green) !important;
+        border-radius:50px;
+        padding:11px 20px !important;
+        min-width:105px;
+        justify-content:center;
+        box-shadow:0 8px 20px rgba(0,0,0,.08);
+      }
+
+      #navmenu .landing-login:hover{
+        background:#f4faf6 !important;
+        transform:translateY(-1px);
+      }
+    }
+
+    /* Hero */
+    #hero{
+      min-height:auto;
+      padding:78px 0 86px;
+      background:
+        radial-gradient(circle at 85% 20%, rgba(7,127,70,.10), transparent 28%),
+        linear-gradient(135deg,#ffffff 0%,#f7fbf8 55%,#edf6f1 100%);
+    }
+
+    #hero::before{
+      display:none;
+    }
+
+    .landing-hero-copy{
+      max-width:650px;
+    }
+
+    .landing-eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 13px;
+      margin-bottom:18px;
+      color:var(--smh-green);
+      background:#eaf5ee;
+      border:1px solid #dbece2;
+      border-radius:50px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .landing-eyebrow i{
+      font-size:13px;
+    }
+
+    .landing-hero-title{
+      font-family:"Raleway",sans-serif;
+      color:#123c2a;
+      font-size:clamp(2.8rem,5vw,4.5rem);
+      line-height:1.02;
+      letter-spacing:-.055em;
+      font-weight:800;
+      margin:0 0 22px;
+    }
+
+    .landing-hero-title span{
+      color:var(--smh-green);
+    }
+
+    .landing-hero-text{
+      color:#64766c;
+      font-size:1.05rem;
+      line-height:1.8;
+      max-width:620px;
+      margin-bottom:28px;
+    }
+
+    .landing-hero-actions{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:34px;
+    }
+
+    .landing-primary-btn,
+    .landing-secondary-btn{
+      min-height:50px;
+      padding:0 20px;
+      border-radius:12px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:9px;
+      font-size:14px;
+      font-weight:700;
+      transition:.25s ease;
+    }
+
+    .landing-primary-btn{
+      color:#fff;
+      background:var(--smh-green);
+      border:1px solid var(--smh-green);
+      box-shadow:0 12px 28px rgba(7,127,70,.18);
+    }
+
+    .landing-primary-btn:hover{
+      color:#fff;
+      background:var(--smh-green-dark);
+      transform:translateY(-2px);
+    }
+
+    .landing-secondary-btn{
+      color:var(--smh-green);
+      background:#fff;
+      border:1px solid #dbe8e0;
+    }
+
+    .landing-secondary-btn:hover{
+      color:var(--smh-green-dark);
+      border-color:#b7d8c4;
+      transform:translateY(-2px);
+    }
+
+    .landing-stats{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      max-width:620px;
+      background:#fff;
+      border:1px solid var(--smh-line);
+      border-radius:16px;
+      box-shadow:0 16px 35px rgba(25,63,43,.06);
+      overflow:hidden;
+    }
+
+    .landing-stat{
+      padding:18px 20px;
+      text-align:left;
+      border-right:1px solid var(--smh-line);
+    }
+
+    .landing-stat:last-child{
+      border-right:0;
+    }
+
+    .landing-stat strong{
+      display:block;
+      color:var(--smh-green);
+      font-size:27px;
+      line-height:1;
+      font-weight:800;
+      margin-bottom:6px;
+    }
+
+    .landing-stat span{
+      color:#78887f;
+      font-size:11px;
+      font-weight:700;
+    }
+
+    .landing-hero-image{
+      position:relative;
+      max-width:520px;
+      margin-left:auto;
+    }
+
+    .landing-hero-image-main{
+      position:relative;
+      height:540px;
+      overflow:hidden;
+      border-radius:28px;
+      border:6px solid #fff;
+      box-shadow:0 28px 65px rgba(25,63,43,.16);
+    }
+
+    .landing-hero-image-main img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .landing-community-card{
+      position:absolute;
+      left:-34px;
+      bottom:34px;
+      min-width:255px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:14px 16px;
+      background:rgba(255,255,255,.96);
+      border:1px solid #e6eee9;
+      border-radius:16px;
+      box-shadow:0 18px 42px rgba(20,58,39,.14);
+    }
+
+    .landing-community-card img{
+      width:48px;
+      height:48px;
+      object-fit:contain;
+    }
+
+    .landing-community-card span,
+    .landing-community-card strong{
+      display:block;
+    }
+
+    .landing-community-card span{
+      color:#7b8c83;
+      font-size:10px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.07em;
+    }
+
+    .landing-community-card strong{
+      margin-top:3px;
+      color:#173d2b;
+      font-size:12px;
+      line-height:1.35;
+    }
+
+    /* Section heading */
+    .landing-section-label{
+      display:inline-block;
+      color:var(--smh-green);
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.09em;
+      margin-bottom:10px;
+    }
+
+    .landing-section-title{
+      color:#163d2b;
+      font-size:clamp(2rem,3.6vw,3rem);
+      font-weight:800;
+      letter-spacing:-.035em;
+      margin-bottom:16px;
+    }
+
+    .landing-section-text{
+      color:#6d7d74;
+      line-height:1.75;
+    }
+
+    /* About */
+    #about{
+      padding:88px 0;
+      background:#fff;
+    }
+
+    .landing-about-image{
+      position:relative;
+      height:500px;
+      overflow:hidden;
+      border-radius:24px;
+      box-shadow:0 24px 55px rgba(22,62,41,.12);
+    }
+
+    .landing-about-image img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .landing-about-note{
+      position:absolute;
+      left:22px;
+      bottom:22px;
+      right:22px;
+      padding:15px 17px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      color:#fff;
+      background:rgba(11,73,46,.90);
+      border-radius:14px;
+      backdrop-filter:blur(8px);
+    }
+
+    .landing-about-note i{
+      width:38px;
+      height:38px;
+      display:grid;
+      place-items:center;
+      flex:0 0 38px;
+      border-radius:10px;
+      background:rgba(255,255,255,.12);
+      color:#fff;
+    }
+
+    .landing-about-note strong{
+      display:block;
+      font-size:13px;
+    }
+
+    .landing-about-note span{
+      display:block;
+      margin-top:2px;
+      color:rgba(255,255,255,.70);
+      font-size:11px;
+    }
+
+    .landing-about-content{
+      padding-left:28px;
+    }
+
+    .landing-about-points{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      margin-top:28px;
+    }
+
+    .landing-about-point{
+      display:flex;
+      gap:11px;
+      padding:15px;
+      border:1px solid var(--smh-line);
+      border-radius:14px;
+      background:#fbfdfc;
+    }
+
+    .landing-about-point i{
+      width:36px;
+      height:36px;
+      display:grid;
+      place-items:center;
+      flex:0 0 36px;
+      color:var(--smh-green);
+      background:#eaf5ee;
+      border-radius:10px;
+    }
+
+    .landing-about-point strong{
+      display:block;
+      color:#254536;
+      font-size:13px;
+      margin-bottom:3px;
+    }
+
+    .landing-about-point span{
+      display:block;
+      color:#7d8c84;
+      font-size:11px;
+      line-height:1.5;
+    }
+
+    /* Features */
+    #features{
+      padding:88px 0;
+      background:#f6f9f7 !important;
+    }
+
+    .landing-feature-card{
+      height:100%;
+      min-height:245px;
+      padding:24px;
+      background:#fff;
+      border:1px solid #e3ebe6;
+      border-radius:18px;
+      transition:.25s ease;
+    }
+
+    .landing-feature-card:hover{
+      transform:translateY(-5px);
+      border-color:#c7dfd1;
+      box-shadow:0 18px 38px rgba(24,64,42,.08);
+    }
+
+    .landing-feature-icon{
+      width:48px;
+      height:48px;
+      display:grid;
+      place-items:center;
+      margin-bottom:18px;
+      border-radius:13px;
+      color:var(--smh-green);
+      background:#eaf5ee;
+      font-size:20px;
+    }
+
+    .landing-feature-card h5{
+      color:#173f2c;
+      font-weight:800;
+      font-size:16px;
+      margin-bottom:10px;
+    }
+
+    .landing-feature-card p{
+      color:#7a8a81;
+      font-size:12px;
+      line-height:1.7;
+      margin:0;
+    }
+
+    /* App */
+    #download-app{
+      padding:88px 0;
+      background:#fff !important;
+    }
+
+    .landing-app-wrap{
+      padding:44px;
+      border-radius:24px;
+      background:linear-gradient(135deg,#0c422c 0%,#077f46 100%);
+      box-shadow:0 25px 60px rgba(9,78,48,.16);
+    }
+
+    .landing-app-copy h2{
+      color:#fff;
+      font-size:clamp(2rem,3.3vw,2.8rem);
+      font-weight:800;
+      letter-spacing:-.035em;
+      margin-bottom:14px;
+    }
+
+    .landing-app-copy p{
+      color:rgba(255,255,255,.72);
+      line-height:1.75;
+      max-width:560px;
+    }
+
+    .landing-app-benefits{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px 18px;
+      margin:22px 0 28px;
+    }
+
+    .landing-app-benefits span{
+      color:rgba(255,255,255,.82);
+      font-size:12px;
+      font-weight:600;
+    }
+
+    .landing-app-benefits i{
+      color:#a9d18f;
+      margin-right:5px;
+    }
+
+    .landing-download-buttons{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+    }
+
+    .landing-download-btn{
+      min-width:170px;
+      padding:12px 16px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      border-radius:12px;
+      background:#fff;
+      color:#173d2b;
+      transition:.25s ease;
+    }
+
+    .landing-download-btn:hover{
+      color:#173d2b;
+      transform:translateY(-2px);
+    }
+
+    .landing-download-btn i{
+      font-size:27px;
+    }
+
+    .landing-download-btn small,
+    .landing-download-btn strong{
+      display:block;
+      line-height:1.1;
+    }
+
+    .landing-download-btn small{
+      color:#819087;
+      font-size:9px;
+    }
+
+    .landing-download-btn strong{
+      margin-top:3px;
+      font-size:13px;
+    }
+
+    .landing-app-logo-box{
+      width:250px;
+      height:250px;
+      margin:0 auto;
+      display:grid;
+      place-items:center;
+      border-radius:50%;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+    }
+
+    .landing-app-logo-box img{
+      width:190px;
+      height:190px;
+      object-fit:contain;
+      filter:drop-shadow(0 14px 24px rgba(0,0,0,.16));
+    }
+
+    /* Footer */
+    #footer{
+      background:#087a45;
+    }
+
+    #footer .footer-top{
+      padding-top:55px;
+      border-top:0;
+    }
+
+    #footer h4,
+    #footer .sitename{
+      color:#fff;
+    }
+
+    #footer p,
+    #footer .footer-links a{
+      color:rgba(255,255,255,.74);
+    }
+
+    #footer .footer-links a:hover{
+      color:#fff;
+    }
+
+    #footer .copyright{
+      background:rgba(0,0,0,.08);
+    }
+
+    /* Login modal */
+    #loginModal .modal-content{
+      overflow:hidden;
+      border:0;
+      border-radius:22px !important;
+      box-shadow:0 28px 75px rgba(16,52,34,.22);
+    }
+
+    #loginModal .modal-header{
+      background:var(--smh-green) !important;
+      padding:18px 22px;
+    }
+
+    #loginModal .modal-body{
+      padding:30px !important;
+    }
+
+    #loginModal .modal-body img{
+      max-width:80px !important;
+    }
+
+    #loginModal .form-control{
+      border-radius:12px;
+      border-color:#dfe8e3;
+    }
+
+    #loginModal .form-control:focus{
+      border-color:var(--smh-green);
+      box-shadow:0 0 0 .2rem rgba(7,127,70,.10);
+    }
+
+    #loginModal .btn-success{
+      border-radius:12px;
+      background:var(--smh-green);
+      border-color:var(--smh-green);
+    }
+
+    /* Mobile */
+    @media(max-width:991px){
+      #hero{
+        padding:65px 0 75px;
+      }
+
+      .landing-hero-image{
+        margin:25px auto 0;
+      }
+
+      .landing-about-content{
+        padding-left:0;
+        margin-top:18px;
+      }
+
+      .landing-app-logo-box{
+        margin-top:20px;
+      }
+    }
+
+    @media(max-width:767px){
+      #header .sitename{
+        font-size:18px;
+      }
+
+      #header .logo img{
+        height:50px !important;
+        width:50px;
+      }
+
+      .landing-stats{
+        grid-template-columns:1fr;
+      }
+
+      .landing-stat{
+        border-right:0;
+        border-bottom:1px solid var(--smh-line);
+      }
+
+      .landing-stat:last-child{
+        border-bottom:0;
+      }
+
+      .landing-hero-image-main{
+        height:400px;
+      }
+
+      .landing-community-card{
+        left:10px;
+        right:10px;
+        bottom:14px;
+        min-width:0;
+      }
+
+      .landing-about-image{
+        height:390px;
+      }
+
+      .landing-about-points{
+        grid-template-columns:1fr;
+      }
+
+      .landing-app-wrap{
+        padding:32px 22px;
+      }
+
+      .landing-download-buttons{
+        flex-direction:column;
+      }
+
+      .landing-download-btn{
+        width:100%;
+      }
+
+      .landing-app-logo-box{
+        width:210px;
+        height:210px;
+      }
+
+      .landing-app-logo-box img{
+        width:160px;
+        height:160px;
+      }
+    }
+  </style>
 </head>
 
 <body class="index-page">
-
-
 
   <header id="header" class="header d-flex align-items-center sticky-top">
     <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
 
       <a href="index.php" class="logo d-flex align-items-center">
-        <img src="assets/img/sm_logo.png" alt="South Meridian Homes Logo" style="max-height: 70px;">
+        <img src="assets/img/sm_logo.png" alt="South Meridian Homes Logo">
         <h1 class="sitename">South Meridian Homes</h1>
       </a>
 
       <nav id="navmenu" class="navmenu">
         <ul>
-          <li><a href="#hero">Home</a></li>
+          <li><a href="#hero" class="active">Home</a></li>
           <li><a href="#about">About</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#download-app">Download App</a></li>
-
-          <a href="#" data-bs-toggle="modal" data-bs-target="#loginModal" style="color: #077f46; background-color: white; border-radius: 50px; width: 100px; height: 50px;">
-            &nbsp;&nbsp; Log in
-          </a>
+          <li>
+            <a href="#" class="landing-login" data-bs-toggle="modal" data-bs-target="#loginModal">
+              Log in
+            </a>
+          </li>
         </ul>
         <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
       </nav>
@@ -186,30 +894,31 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     </div>
   </header>
 
-  <!-- ================= LOGIN MODAL ================= -->
+
+  <!-- LOGIN MODAL -->
   <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content rounded-4 shadow">
+      <div class="modal-content shadow">
 
-        <div class="modal-header bg-success text-white rounded-top-4">
-          <h5 class="modal-title" style="color: white;">South Meridian Homes</h5>
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title" style="color:white;">South Meridian Homes</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
 
-        <div class="modal-body px-4 py-4 text-center">
+        <div class="modal-body text-center">
 
-          <img src="assets/img/sm_logo.png" alt="Logo" class="mb-3" style="max-width:90px;">
-          <!-- CHANGED: "Homeowners Login" → "Member Login" (admins also log in here) -->
-          <h6 class="fw-bold mb-1 text-success">Member Login</h6>
-          <p class="text-muted small mb-3">Homeowners and administrators may log in here.</p>
+          <img src="assets/img/sm_logo.png" alt="Logo" class="mb-3">
+          <h5 class="fw-bold mb-1 text-success">Member Login</h5>
+          <p class="text-muted small mb-4">Homeowners, tenants, and administrators may log in here.</p>
 
           <form id="loginForm">
-            <div class="form-floating mb-3">
+
+            <div class="form-floating mb-3 text-start">
               <input type="email" class="form-control" id="email" name="email" placeholder="Email" required>
               <label for="email">Email address</label>
             </div>
 
-            <div class="form-floating mb-3">
+            <div class="form-floating mb-3 text-start">
               <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
               <label for="password">Password</label>
             </div>
@@ -217,383 +926,376 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             <div class="loading text-primary mb-2" style="display:none;">Checking credentials...</div>
             <div class="error-message text-danger mb-2" style="display:none;"></div>
 
-            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">Log in</button>
+            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
+              Log in
+            </button>
           </form>
 
-<div class="mt-3">
-    <div class="d-flex justify-content-start mt-3">
-        <a href="forgot_password.php" class="text-success text-decoration-none">
-            Forgot password?
-        </a>
-    </div>
-</div>
+          <div class="d-flex justify-content-start mt-3">
+            <a href="forgot_password.php" class="text-success text-decoration-none small fw-semibold">
+              Forgot password?
+            </a>
+          </div>
 
         </div>
       </div>
     </div>
   </div>
 
+
   <main class="main">
 
-    <!-- Hero Section -->
+    <!-- HERO -->
     <section id="hero" class="hero section">
       <div class="container" data-aos="fade-up" data-aos-delay="100">
-        <div class="hero-wrapper">
-          <div class="row g-4">
 
-            <div class="col-lg-7">
-              <div class="hero-content" data-aos="zoom-in" data-aos-delay="200">
-                <div class="content-header">
-                  <h1>Welcome to South Meridian Homes</h1>
-                  <!--
-                    CHANGED: Generic description replaced with one that reflects all system modules:
-                    authentication, communication, payments, parking, facility rental, voting,
-                    homeowner management, financial management, and mobile access.
-                  -->
-                  <p>South Meridian Homes is an integrated HOA management platform built for the South Meridian Homeowners Association in Salitran 4, Dasmariñas, Cavite. It centralizes all essential community services — from online due payments, parking permits, and facility reservations, to community voting, complaint tracking, and announcements — into one secure and accessible digital system for both homeowners and administrators.</p>
+        <div class="row align-items-center gy-5 gx-lg-5">
+
+          <div class="col-lg-7">
+            <div class="landing-hero-copy" data-aos="fade-up" data-aos-delay="150">
+
+              <div class="landing-eyebrow">
+                <i class="bi bi-house-heart"></i>
+                South Meridian Homeowners Association
+              </div>
+
+              <h1 class="landing-hero-title">
+                Welcome to <span>South Meridian Homes</span>
+              </h1>
+
+              <p class="landing-hero-text">
+                One secure digital platform for the South Meridian Homes community.
+                Access HOA payments, parking permits, facility reservations, announcements,
+                complaints, community voting, and other resident services in one place.
+              </p>
+
+              <div class="landing-hero-actions">
+                <a href="#" class="landing-primary-btn" data-bs-toggle="modal" data-bs-target="#loginModal">
+                  <i class="bi bi-person-circle"></i>
+                  Member Login
+                </a>
+
+                <a href="#features" class="landing-secondary-btn">
+                  Explore Services
+                  <i class="bi bi-arrow-down"></i>
+                </a>
+              </div>
+
+              <div class="landing-stats" data-aos="fade-up" data-aos-delay="250">
+
+                <div class="landing-stat">
+                  <strong>
+                    <span data-purecounter-start="0" data-purecounter-end="3" data-purecounter-duration="1" class="purecounter"></span>
+                  </strong>
+                  <span>Community Phases</span>
                 </div>
 
-                <div class="achievement-grid" data-aos="fade-up" data-aos-delay="400">
-                  <!--
-                    CHANGED: Replaced "1250+ Active Communities / 89+ Active HOAs / 96% Active Homeowners"
-                    with figures that are accurate and relevant to South Meridian HOA:
-                    - 3 Community Phases (Phase 1, 2, 3 as referenced in the codebase)
-                    - 8+ System Modules (the 8 functional modules described in the project context)
-                    - 100% Online Services (the fully digital nature of the platform)
-                    Update the homeowner count below with actual data when available.
-                  -->
-                  <div class="achievement-item">
-                    <div class="achievement-number">
-                      <span data-purecounter-start="0" data-purecounter-end="3" data-purecounter-duration="1" class="purecounter"></span>
-                    </div>
-                    <span class="achievement-text">Community Phases</span>
-                  </div>
-                  <div class="achievement-item">
-                    <div class="achievement-number">
-                      <span data-purecounter-start="0" data-purecounter-end="8" data-purecounter-duration="1" class="purecounter"></span>+
-                    </div>
-                    <span class="achievement-text">Integrated System Modules</span>
-                  </div>
-                  <div class="achievement-item">
-                    <div class="achievement-number">
-                      <span data-purecounter-start="0" data-purecounter-end="100" data-purecounter-duration="1" class="purecounter"></span>%
-                    </div>
-                    <span class="achievement-text">Online HOA Services</span>
-                  </div>
+                <div class="landing-stat">
+                  <strong>
+                    <span data-purecounter-start="0" data-purecounter-end="8" data-purecounter-duration="1" class="purecounter"></span>+
+                  </strong>
+                  <span>Integrated Modules</span>
+                </div>
+
+                <div class="landing-stat">
+                  <strong>
+                    <span data-purecounter-start="0" data-purecounter-end="100" data-purecounter-duration="1" class="purecounter"></span>%
+                  </strong>
+                  <span>Online HOA Services</span>
                 </div>
 
               </div>
-            </div>
 
-            <div class="col-lg-5">
-              <div class="hero-visual" data-aos="fade-left" data-aos-delay="400">
-                <div class="visual-container">
-                  <div class="featured-property">
-                    <img src="assets/img/real-estate/property-exterior-8.webp" alt="South Meridian Property" class="img-fluid">
-                    <div class="property-info"></div>
-                  </div>
-
-                  <div class="overlay-images">
-                    <div class="overlay-img overlay-1">
-                      <img src="assets/img/real-estate/property-interior-4.webp" alt="Interior View" class="img-fluid">
-                    </div>
-                    <div class="overlay-img overlay-2">
-                      <img src="assets/img/real-estate/property-exterior-2.webp" alt="Exterior View" class="img-fluid">
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- About Section -->
-    <section id="about" class="home-about section">
-      <div class="container" data-aos="fade-up" data-aos-delay="100">
-        <div class="row gy-5">
-
-          <div class="col-lg-5" data-aos="zoom-in" data-aos-delay="200">
-            <div class="image-gallery">
-              <div class="primary-image">
-                <img src="assets/img/real-estate/property-exterior-1.webp" alt="South Meridian Property" class="img-fluid">
-              </div>
-              <div class="secondary-image">
-                <img src="assets/img/real-estate/property-interior-4.webp" alt="South Meridian Interior" class="img-fluid">
-              </div>
             </div>
           </div>
 
-          <div class="col-lg-7" data-aos="fade-left" data-aos-delay="300">
-            <div class="content">
-              <div class="section-header">
-                <span class="section-label">About South Meridian Homes</span>
-                <h2>Building Communities, One Home at a Time</h2>
+          <div class="col-lg-5">
+            <div class="landing-hero-image" data-aos="fade-left" data-aos-delay="250">
+
+              <div class="landing-hero-image-main">
+                <img src="assets/img/real-estate/property-exterior-8.webp" alt="South Meridian Homes Community">
               </div>
 
-              <!--
-                CHANGED: Description now references the integrated HOA system and its purpose,
-                not just a generic community description.
-              -->
-              <p>South Meridian Homes is a residential community located in Salitran 4, Dasmariñas, Cavite, guided by a Homeowners Association committed to transparency, order, and community participation. This platform was developed to centralize and digitize HOA operations — giving homeowners and administrators a secure, organized, and system to manage the community efficiently.</p>
-
-              <div class="achievements-list">
-                <!--
-                  CHANGED: Expanded from 3 generic items to 6 items that reflect the actual
-                  modules in the project context: Communication & Complaint, Payments,
-                  Parking, Facility Rental, Voting, Financial & Reporting.
-                -->
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-megaphone"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Communication &amp; Complaint Management</h4>
-                    <p>Stay informed through announcements, community chat, and private messaging. Homeowners can submit and track complaints while administrators manage resolutions.</p>
-                  </div>
+              <div class="landing-community-card">
+                <img src="assets/img/sm_logo.png" alt="SMH">
+                <div>
+                  <span>Community Portal</span>
+                  <strong>Salitran 4, Dasmariñas, Cavite</strong>
                 </div>
-
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-credit-card"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Online Payment Management</h4>
-                    <p>Pay monthly dues and other fees securely online. Administrators can monitor payments, track records, and maintain full transaction histories.</p>
-                  </div>
-                </div>
-
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-car-front"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Parking Management</h4>
-                    <p>Apply for or renew parking permits. Administrators manage vehicle registration, approvals, and parking compliance within the subdivision.</p>
-                  </div>
-                </div>
-
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-building"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Facility Rental Management</h4>
-                    <p>Reserve community facilities — courts, tables, and function areas — online, with scheduling features and administrator approval management.</p>
-                  </div>
-                </div>
-
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-check2-square"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Community Voting System</h4>
-                    <p>Participate in secure online HOA elections. The system enforces one vote per resident and automatically tallies and displays results when voting ends.</p>
-                  </div>
-                </div>
-
-                <div class="achievement-item">
-                  <div class="achievement-icon">
-                    <i class="bi bi-graph-up-arrow"></i>
-                  </div>
-                  <div class="achievement-content">
-                    <h4>Financial &amp; Reporting Management</h4>
-                    <p>Track all HOA financial activities including dues collection, transaction records, and system-wide reports that support transparency and informed decisions.</p>
-                  </div>
-                </div>
-
               </div>
+
             </div>
           </div>
 
         </div>
+
       </div>
     </section>
 
-    <!-- ================= FEATURES SECTION (NEW) ================= -->
-    <!--
-      NEW: Added a dedicated module overview section with all 9 system modules
-      from the project context displayed as cards for clear visibility.
-    -->
-    <section id="features" class="section" style="background: #f8f9fa;">
+
+    <!-- ABOUT -->
+    <section id="about" class="section">
+      <div class="container" data-aos="fade-up">
+
+        <div class="row align-items-center gy-5 gx-lg-5">
+
+          <div class="col-lg-5" data-aos="fade-right">
+
+            <div class="landing-about-image">
+              <img src="assets/img/real-estate/property-exterior-1.webp" alt="South Meridian Homes">
+
+              <div class="landing-about-note">
+                <i class="bi bi-shield-check"></i>
+                <div>
+                  <strong>Built for the South Meridian community</strong>
+                  <span>Simple, secure, and organized HOA services.</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+
+            <div class="landing-about-content">
+
+              <span class="landing-section-label">About South Meridian Homes</span>
+
+              <h2 class="landing-section-title">
+                Community management made simpler and more accessible.
+              </h2>
+
+              <p class="landing-section-text">
+                South Meridian Homes is a residential community located in Salitran 4,
+                Dasmariñas, Cavite. The HOA management platform centralizes essential
+                community services so homeowners, tenants, and administrators can manage
+                requests and records through one organized system.
+              </p>
+
+              <div class="landing-about-points">
+
+                <div class="landing-about-point">
+                  <i class="bi bi-megaphone"></i>
+                  <div>
+                    <strong>Communication</strong>
+                    <span>Announcements, messaging, and complaint tracking.</span>
+                  </div>
+                </div>
+
+                <div class="landing-about-point">
+                  <i class="bi bi-credit-card"></i>
+                  <div>
+                    <strong>Payments</strong>
+                    <span>Online dues and organized transaction records.</span>
+                  </div>
+                </div>
+
+                <div class="landing-about-point">
+                  <i class="bi bi-calendar-check"></i>
+                  <div>
+                    <strong>Reservations</strong>
+                    <span>Request and manage community facility schedules.</span>
+                  </div>
+                </div>
+
+                <div class="landing-about-point">
+                  <i class="bi bi-check2-square"></i>
+                  <div>
+                    <strong>Community Participation</strong>
+                    <span>Secure voting and community-wide updates.</span>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
       <div class="container" data-aos="fade-up">
 
         <div class="row justify-content-center text-center mb-5">
           <div class="col-lg-8">
-            <span class="section-label">What the System Offers</span>
-            <h2 class="fw-bold mt-2">Complete HOA Management in One Platform</h2>
-            <p class="text-muted">
-              The South Meridian HOA Management System covers all operational needs of your community —
-              accessible on both web and mobile.
+            <span class="landing-section-label">What the System Offers</span>
+            <h2 class="landing-section-title">Complete HOA Management in One Platform</h2>
+            <p class="landing-section-text">
+              Essential community services are grouped into one accessible system for residents and administrators.
             </p>
           </div>
         </div>
 
         <div class="row g-4">
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="100">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-shield-lock" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">User Authentication</h6>
-              <p class="text-muted small">Secure login and account registration for homeowners. Administrators access the system via default accounts without registration.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-shield-lock"></i></div>
+              <h5>User Authentication</h5>
+              <p>Secure account access for homeowners, tenants, administrators, and other authorized users.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="150">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-chat-dots" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Communication &amp; Complaints</h6>
-              <p class="text-muted small">Announcements, community chat, private messaging, and a structured complaint submission and tracking system for homeowners and admins.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-chat-dots"></i></div>
+              <h5>Communication & Complaints</h5>
+              <p>Announcements, community chat, private messaging, and structured complaint tracking.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="200">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-wallet2" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Payment Management</h6>
-              <p class="text-muted small">Online processing of monthly dues and fees, with full transaction history and payment monitoring for administrators.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-wallet2"></i></div>
+              <h5>Payment Management</h5>
+              <p>Process HOA dues and other fees online with organized payment and transaction records.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="250">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-car-front" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Parking Management</h6>
-              <p class="text-muted small">Vehicle registration, parking permit applications and renewals, violation monitoring, and administrator approvals.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-car-front"></i></div>
+              <h5>Parking Management</h5>
+              <p>Manage registered vehicles, parking permits, renewals, and related approvals.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="300">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-calendar-check" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Facility Rental</h6>
-              <p class="text-muted small">Request and reserve community facilities — courts, tables, and function areas — with scheduling and booking management features.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-calendar-check"></i></div>
+              <h5>Facility Rental</h5>
+              <p>Reserve courts, tables, function areas, and other available community facilities.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="350">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-ballot" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Voting Management</h6>
-              <p class="text-muted small">Secure online HOA elections with one vote per resident, automated result processing, and candidate and election management.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-check2-square"></i></div>
+              <h5>Voting Management</h5>
+              <p>Participate in secure HOA elections with automated vote and result management.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="400">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-people" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Homeowner &amp; User Management</h6>
-              <p class="text-muted small">Manage homeowner profiles, property records, residency status, account creation, updates, and role assignments for all system users.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-people"></i></div>
+              <h5>Homeowner & User Management</h5>
+              <p>Manage resident profiles, account information, properties, and community records.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="450">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-graph-up-arrow" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Financial &amp; Reporting</h6>
-              <p class="text-muted small">Dues collection tracking, financial reporting, activity monitoring, and system-wide insights to support accountability and informed decisions.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-graph-up-arrow"></i></div>
+              <h5>Financial & Reporting</h5>
+              <p>Support transparent HOA operations through financial records and organized reports.</p>
             </div>
           </div>
 
-          <div class="col-md-4 col-sm-6" data-aos="fade-up" data-aos-delay="500">
-            <div class="card border-0 shadow-sm h-100 p-4 text-center">
-              <div class="mb-3"><i class="bi bi-phone" style="font-size:36px; color:#077f46;"></i></div>
-              <h6 class="fw-bold">Mobile Application</h6>
-              <p class="text-muted small">Access all HOA features anytime via the mobile app, syncedv in with the web system for a seamless and consistent experience.</p>
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <div class="landing-feature-icon"><i class="bi bi-phone"></i></div>
+              <h5>Mobile Application</h5>
+              <p>Access important South Meridian Homes services using a compatible mobile device.</p>
             </div>
           </div>
 
         </div>
+
+      </div>
+    </section>
+
+
+    <!-- DOWNLOAD APP -->
+    <section id="download-app" class="section">
+      <div class="container" data-aos="fade-up">
+
+        <div class="landing-app-wrap">
+
+          <div class="row align-items-center gy-5">
+
+            <div class="col-lg-7">
+
+              <div class="landing-app-copy">
+                <span class="landing-section-label" style="color:#b6d9a1;">South Meridian Mobile</span>
+
+                <h2>Keep your community services within reach.</h2>
+
+                <p>
+                  Access HOA services using your mobile device and stay connected to
+                  important South Meridian Homes updates wherever you are.
+                </p>
+
+                <div class="landing-app-benefits">
+                  <span><i class="bi bi-check-circle-fill"></i> Resident access</span>
+                  <span><i class="bi bi-check-circle-fill"></i> HOA services</span>
+                  <span><i class="bi bi-check-circle-fill"></i> Community updates</span>
+                </div>
+
+                <div class="landing-download-buttons">
+
+                  <a href="#"
+                     class="landing-download-btn"
+                     data-bs-toggle="modal"
+                     data-bs-target="#androidNoticeModal">
+                    <i class="bi bi-android2"></i>
+                    <div>
+                      <small>Download for</small>
+                      <strong>Android</strong>
+                    </div>
+                  </a>
+
+                  <a href="ios_source.tar" download class="landing-download-btn">
+                    <i class="bi bi-apple"></i>
+                    <div>
+                      <small>Download for</small>
+                      <strong>iOS</strong>
+                    </div>
+                  </a>
+
+                </div>
+              </div>
+
+            </div>
+
+            <div class="col-lg-5">
+              <div class="landing-app-logo-box">
+                <img src="assets/img/sm_logo.png" alt="South Meridian Homes App">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
     </section>
 
   </main>
 
-  <!-- ================= DOWNLOAD APP SECTION ================= -->
-  <section id="download-app" class="section" style="background:#ffffff;">
-    <div class="container" data-aos="fade-up">
-
-      <div class="row justify-content-center text-center mb-4">
-        <div class="col-lg-8">
-          <h2 class="fw-bold">Download the South Meridian Homes App</h2>
-          <!--
-            CHANGED: Subtitle updated to reference the Mobile Application Module's key feature:
-            real-time sync with the web system, as stated in the project context.
-          -->
-          <p class="text-muted">
-            Access your HOA services anytime, anywhere using your mobile phone.
-            Keeping you connected to your community on the go.
-          </p>
-        </div>
-      </div>
-
-      <div class="row justify-content-center g-4">
-
-        <!-- ANDROID -->
-        <div class="col-md-4 text-center">
-          <div class="card shadow border-0 p-4 h-100">
-            <div class="mb-3">
-              <i class="bi bi-android2" style="font-size:50px;color:#3DDC84;"></i>
-            </div>
-            <h5 class="fw-bold">Android App</h5>
-            <p class="text-muted small">
-              Download the Android version of the South Meridian Homes application and manage your HOA services from your phone.
-            </p>
-            <a href="#"
-               class="btn btn-success mt-2 w-100"
-               data-bs-toggle="modal"
-               data-bs-target="#androidNoticeModal">
-              Download for Android
-            </a>
-          </div>
-        </div>
-
-        <!-- IOS -->
-        <div class="col-md-4 text-center">
-          <div class="card shadow border-0 p-4 h-100">
-            <div class="mb-3">
-              <i class="bi bi-apple" style="font-size:50px;color:black;"></i>
-            </div>
-            <h5 class="fw-bold">iOS App</h5>
-            <p class="text-muted small">
-              Download the iOS version of the South Meridian Homes application for iPhone and iPad users.
-            </p>
-            <a href="ios_source.tar"
-               download
-               class="btn btn-dark mt-2 w-100">
-              Download for iOS
-            </a>
-          </div>
-        </div>
-
-      </div>
-
-    </div>
-  </section>
 
   <footer id="footer" class="footer accent-background">
 
     <div class="container footer-top">
       <div class="row gy-4">
 
-        <!-- About -->
         <div class="col-lg-5 col-md-12 footer-about">
           <a href="index.php" class="logo d-flex align-items-center">
             <span class="sitename">South Meridian Homes</span>
           </a>
-          <!--
-            CHANGED: Footer description now references the integrated HOA management system
-            instead of a generic community blurb.
-          -->
+
           <p>
-            South Meridian Homes is a residential community in Salitran 4, Dasmariñas, Cavite,
-            supported by an integrated HOA management system that centralizes community services,
-            promotes transparency, and empowers residents through digital tools.
+            South Meridian Homes is a residential community in Salitran 4,
+            Dasmariñas, Cavite, supported by an integrated HOA management system
+            for organized and accessible community services.
           </p>
+
           <div class="social-links d-flex mt-4">
             <a href="#"><i class="bi bi-facebook"></i></a>
             <a href="#"><i class="bi bi-instagram"></i></a>
@@ -601,68 +1303,64 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
           </div>
         </div>
 
-        <!-- Quick Links — CHANGED: Added Features and Register links -->
         <div class="col-lg-2 col-6 footer-links">
           <h4>Quick Links</h4>
           <ul>
-            <li><a href="index.php">Home</a></li>
+            <li><a href="#hero">Home</a></li>
             <li><a href="#about">About Us</a></li>
             <li><a href="#features">Features</a></li>
             <li><a href="#download-app">Download App</a></li>
           </ul>
         </div>
 
-        <!--
-          CHANGED: "What We Provide" now lists actual system module services
-          instead of generic placeholders. Aligned with all 8 modules in the project context.
-        -->
         <div class="col-lg-2 col-6 footer-links">
-          <h4>What We Provide</h4>
+          <h4>Services</h4>
           <ul>
-            <li><a href="#features">Online Due Payments</a></li>
+            <li><a href="#features">Online Payments</a></li>
             <li><a href="#features">Parking Permits</a></li>
             <li><a href="#features">Facility Reservations</a></li>
             <li><a href="#features">Community Voting</a></li>
             <li><a href="#features">Complaint Tracking</a></li>
-            <li><a href="#features">HOA Announcements</a></li>
-            <li><a href="#features">Financial Reports</a></li>
           </ul>
         </div>
 
-        <!-- Contact — CHANGED: "South Meridian Homes" → "South Meridian Homeowners Association" -->
         <div class="col-lg-3 col-md-12 footer-contact text-center text-md-start">
           <h4>Contact Us</h4>
           <p>South Meridian Homeowners Association</p>
           <p>Salitran 4, Dasmariñas</p>
           <p>Cavite, Philippines</p>
           <p class="mt-4">
-            <strong>Email:</strong> <span>admin@southmeridianhomes.com</span>
+            <strong>Email:</strong>
+            <span>admin@southmeridianhomes.com</span>
           </p>
         </div>
 
       </div>
     </div>
 
-    <!-- ================= ANDROID NOTICE MODAL ================= -->
+
+    <!-- ANDROID NOTICE MODAL -->
     <div class="modal fade" id="androidNoticeModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 shadow border-0">
 
           <div class="modal-header bg-success text-white rounded-top-4">
-            <h5 class="modal-title">
+            <h5 class="modal-title" style="color:white;">
               <i class="bi bi-android2 me-2"></i>Android Download Notice
             </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
 
           <div class="modal-body text-center px-4 py-4">
             <div class="mb-3">
-              <i class="bi bi-phone" style="font-size: 48px; color:#3DDC84;"></i>
+              <i class="bi bi-phone" style="font-size:48px;color:#3DDC84;"></i>
             </div>
+
             <h5 class="fw-bold mb-2">This app is for Android devices only</h5>
+
             <p class="text-muted mb-0">
               Please continue only if you are using an Android phone or tablet.
-              This download is not supported for iOS devices such as iPhone or iPad.
+              This download is not supported for iOS devices.
             </p>
           </div>
 
@@ -670,6 +1368,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
               Cancel
             </button>
+
             <a href="https://median.co/share/dyemawl#apk" class="btn btn-success">
               Continue Download
             </a>
@@ -679,7 +1378,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       </div>
     </div>
 
-    <!-- Copyright — CHANGED: "South Meridian Homes" → "South Meridian Homeowners Association" -->
+
     <div class="container copyright text-center mt-4">
       <p>
         © <span>Copyright</span>
@@ -690,25 +1389,25 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
   </footer>
 
-  <!-- Scroll Top -->
-  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 
-  <!-- Preloader -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center">
+    <i class="bi bi-arrow-up-short"></i>
+  </a>
+
   <div id="preloader"></div>
 
-  <!-- Vendor JS Files -->
   <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="assets/vendor/php-email-form/validate.js"></script>
   <script src="assets/vendor/aos/aos.js"></script>
   <script src="assets/vendor/purecounter/purecounter_vanilla.js"></script>
   <script src="assets/vendor/swiper/swiper-bundle.min.js"></script>
 
-  <!-- Main JS File -->
   <script src="assets/js/main.js"></script>
 
   <script>
     document.getElementById("loginForm").addEventListener("submit", function(e) {
       e.preventDefault();
+
       const form = this;
       const loading = form.querySelector('.loading');
       const error = form.querySelector('.error-message');
@@ -719,22 +1418,26 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       const formData = new FormData(form);
       formData.append('action', 'login');
 
-      fetch('index.php', { method: 'POST', body: formData })
-        .then(res => res.text())
-        .then(data => {
-          loading.style.display = 'none';
-          if (data.includes('.php')) {
-            window.location.href = data.trim();
-          } else {
-            error.innerText = data;
-            error.style.display = 'block';
-          }
-        })
-        .catch(err => {
-          loading.style.display = 'none';
-          error.innerText = "An error occurred. Try again.";
+      fetch('index.php', {
+        method: 'POST',
+        body: formData
+      })
+      .then(res => res.text())
+      .then(data => {
+        loading.style.display = 'none';
+
+        if (data.includes('.php')) {
+          window.location.href = data.trim();
+        } else {
+          error.innerText = data;
           error.style.display = 'block';
-        });
+        }
+      })
+      .catch(() => {
+        loading.style.display = 'none';
+        error.innerText = "An error occurred. Try again.";
+        error.style.display = 'block';
+      });
     });
   </script>
 

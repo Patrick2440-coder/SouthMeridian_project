@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'admin_access.php';
+require_once '../config/database.php';
 requireAccess('homeowner_management');
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
@@ -9,19 +10,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-// Database connection
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "u972459197_south_meridian.sql"; // Database name (do not include .sql)
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-
-$conn->set_charset("utf8mb4");
 
 if (!function_exists('esc')) {
   function esc($value): string {
@@ -38,6 +26,77 @@ function phase_prefix(string $phase): string {
   $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
   return $n > 0 ? ('P'.$n) : 'P';
 }
+
+/**
+ * Read Block and Lot from the new database columns when available, while
+ * remaining compatible with existing records saved as "Block 1 Lot 2" in
+ * house_lot_number.
+ */
+function subdivision_block_lot(array $record): array {
+  $block = (int)($record['block'] ?? 0);
+  $lot = (int)($record['lot'] ?? 0);
+
+  if ($block <= 0 || $lot <= 0) {
+    $legacy = trim((string)($record['house_lot_number'] ?? ''));
+    if (preg_match('/(?:block|b)\s*[-:]?\s*(\d+)\D+(?:lot|l)\s*[-:]?\s*(\d+)/i', $legacy, $match)) {
+      $block = (int)$match[1];
+      $lot = (int)$match[2];
+    }
+  }
+
+  return [$block, $lot];
+}
+
+/**
+ * Load the exact 335-house Block/Lot positions from the corrected map.
+ * The Word map uses EMU coordinates on a US Letter page. They are converted
+ * here to pixel positions on the supplied 2550 x 3300 map image.
+ */
+function south_meridian_locations(): array {
+  static $locations = null;
+  if ($locations !== null) {
+    return $locations;
+  }
+
+  $locations = [];
+  $mappingPath = __DIR__ . '/southmeri_block_lot_mapping.json';
+  if (!is_readable($mappingPath)) {
+    return $locations;
+  }
+
+  $decoded = json_decode((string)file_get_contents($mappingPath), true);
+  if (!is_array($decoded)) {
+    return $locations;
+  }
+
+  $pageWidthEmu = 8.5 * 914400;
+  $pageHeightEmu = 11 * 914400;
+  $pageMarginEmu = 914400;
+  $markerCenterOffsetEmu = 90000;
+
+  foreach ($decoded as $row) {
+    $block = (int)($row['block'] ?? 0);
+    $lot = (int)($row['lot'] ?? 0);
+    $xEmu = (float)($row['x_emu'] ?? -1);
+    $yEmu = (float)($row['y_emu'] ?? -1);
+
+    if ($block < 1 || $lot < 1 || $xEmu < -$pageMarginEmu || $yEmu < -$pageMarginEmu) {
+      continue;
+    }
+
+    $locations[$block . ':' . $lot] = [
+      'block' => $block,
+      'lot' => $lot,
+      'street' => trim((string)($row['street'] ?? '')),
+      'x' => round((($pageMarginEmu + $xEmu + $markerCenterOffsetEmu) / $pageWidthEmu) * 2550, 2),
+      'y' => round((($pageMarginEmu + $yEmu + $markerCenterOffsetEmu) / $pageHeightEmu) * 3300, 2),
+    ];
+  }
+
+  return $locations;
+}
+
+$southMeridianLocations = south_meridian_locations();
 
 // admin info (always read from DB)
 $admin_id = (int)$_SESSION['admin_id'];
@@ -58,29 +117,67 @@ if (!isset($permissions) || !is_array($permissions)) {
 
 // AJAX homeowner profile used by the View button on this page.
 if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
-  $homeownerId = (int)($_GET['id'] ?? 0);
-  if ($homeownerId <= 0) {
-    http_response_code(400);
-    echo '<div class="p-4"><div class="alert alert-danger mb-0">Invalid homeowner ID.</div></div>';
-    exit();
-  }
 
-  if ($admin_role === 'superadmin') {
-    $profileStmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? LIMIT 1");
-    $profileStmt->bind_param('i', $homeownerId);
-  } else {
-    $profileStmt = $conn->prepare("SELECT * FROM homeowners WHERE id=? AND phase=? LIMIT 1");
-    $profileStmt->bind_param('is', $homeownerId, $admin_phase);
-  }
-  $profileStmt->execute();
-  $homeowner = $profileStmt->get_result()->fetch_assoc();
-  $profileStmt->close();
+    $homeownerId = (int)($_GET['id'] ?? 0);
 
-  if (!$homeowner) {
-    http_response_code(404);
-    echo '<div class="p-4"><div class="alert alert-warning mb-0">Homeowner not found or outside your assigned phase.</div></div>';
-    exit();
-  }
+    if ($homeownerId <= 0) {
+        http_response_code(400);
+        echo '<div class="p-4"><div class="alert alert-danger mb-0">Invalid homeowner ID.</div></div>';
+        exit();
+    }
+
+    if ($admin_role === 'superadmin') {
+
+        $profileStmt = $conn->prepare(
+            "SELECT *
+             FROM homeowners
+             WHERE id=?
+             LIMIT 1"
+        );
+
+        $profileStmt->bind_param(
+            'i',
+            $homeownerId
+        );
+
+    } else {
+
+        $profileStmt = $conn->prepare(
+            "SELECT *
+             FROM homeowners
+             WHERE id=?
+               AND phase=?
+             LIMIT 1"
+        );
+
+        $profileStmt->bind_param(
+            'is',
+            $homeownerId,
+            $admin_phase
+        );
+    }
+
+    $profileStmt->execute();
+
+    $homeowner =
+        $profileStmt
+            ->get_result()
+            ->fetch_assoc();
+
+    $profileStmt->close();
+
+    if (!$homeowner) {
+
+        http_response_code(404);
+
+        echo '<div class="p-4">
+                <div class="alert alert-warning mb-0">
+                    Homeowner not found or outside your assigned phase.
+                </div>
+              </div>';
+
+        exit();
+    }
 
   $memberStmt = $conn->prepare("SELECT first_name, middle_name, last_name, relation FROM household_members WHERE homeowner_id=? ORDER BY id ASC");
   $memberStmt->bind_param('i', $homeownerId);
@@ -89,86 +186,361 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
   $memberStmt->close();
 
   $fullName = trim(($homeowner['first_name'] ?? '').' '.($homeowner['middle_name'] ?? '').' '.($homeowner['last_name'] ?? ''));
+
+  $displayValue = static function($value, string $fallback = 'Not provided'): string {
+    $value = trim((string)($value ?? ''));
+    return $value !== '' ? $value : $fallback;
+  };
+
+  [$homeownerBlock, $homeownerLot] = subdivision_block_lot($homeowner);
+  $mapLocation = $southMeridianLocations[$homeownerBlock . ':' . $homeownerLot] ?? null;
+  $blockLotAddress = ($homeownerBlock > 0 && $homeownerLot > 0)
+    ? ('Block ' . $homeownerBlock . ', Lot ' . $homeownerLot)
+    : '';
+
   $addressParts = array_filter([
-    $homeowner['house_lot_number'] ?? '',
+    $blockLotAddress,
+    $mapLocation['street'] ?? '',
     $homeowner['other_location_info'] ?? '',
     $homeowner['barangay'] ?? '',
     $homeowner['city_municipality'] ?? '',
-    $homeowner['province'] ?? '',
-    $homeowner['region'] ?? '',
-    $homeowner['zip_code'] ?? '',
-    $homeowner['country'] ?? ''
+    $homeowner['province'] ?? ''
   ], static fn($v) => trim((string)$v) !== '');
+
   $address = implode(', ', $addressParts);
-  $lat = $homeowner['latitude'];
-  $lng = $homeowner['longitude'];
   $status = (string)($homeowner['status'] ?? 'pending');
   $validId = trim((string)($homeowner['valid_id_path'] ?? ''));
   $billing = trim((string)($homeowner['proof_of_billing_path'] ?? ''));
+
   $isImportPlaceholder = static function(string $path): bool {
     return $path === '' || str_starts_with($path, 'imports/');
   };
   ?>
   <div class="p-4">
     <div class="row g-4">
-      <div class="col-lg-7">
+
+      <div class="col-lg-8">
+
         <div class="card border-0 shadow-sm mb-3">
-          <div class="card-body">
+          <div class="card-body p-4">
             <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
               <div>
-                <h4 class="mb-1"><?= esc($fullName) ?></h4>
-                <div class="text-muted"><?= esc($homeowner['public_id'] ?: (phase_prefix($homeowner['phase']).$homeowner['id'])) ?> · <?= esc($homeowner['phase']) ?></div>
+                <div class="text-muted small fw-semibold text-uppercase mb-1">Homeowner Profile</div>
+                <h4 class="mb-1"><?= esc($fullName ?: 'Unnamed Resident') ?></h4>
+                <div class="text-muted">
+                  <?= esc($homeowner['public_id'] ?: (phase_prefix((string)$homeowner['phase']).$homeowner['id'])) ?>
+                  · <?= esc($displayValue($homeowner['phase'] ?? null)) ?>
+                </div>
               </div>
-              <span class="badge <?= $status === 'approved' ? 'badge-success' : ($status === 'rejected' ? 'badge-danger' : 'badge-warning') ?>"><?= esc(ucfirst($status)) ?></span>
+              <span class="badge <?= $status === 'approved' ? 'badge-success' : ($status === 'rejected' ? 'badge-danger' : 'badge-warning') ?>">
+                <?= esc(ucfirst($status)) ?>
+              </span>
             </div>
-            <hr>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Personal Information</h6>
             <div class="row g-3">
-              <div class="col-md-6"><strong>Email</strong><div><?= esc($homeowner['email']) ?></div></div>
-              <div class="col-md-6"><strong>Contact</strong><div><?= esc($homeowner['contact_number']) ?></div></div>
-              <div class="col-12"><strong>Address</strong><div><?= esc($address ?: 'Not provided') ?></div></div>
-              <div class="col-md-6"><strong>Valid ID</strong><div><?php if (!$isImportPlaceholder($validId)): ?><a href="<?= esc($validId) ?>" target="_blank">Open file</a><?php else: ?><span class="text-muted">Not provided by import</span><?php endif; ?></div></div>
-              <div class="col-md-6"><strong>Proof of Billing</strong><div><?php if (!$isImportPlaceholder($billing)): ?><a href="<?= esc($billing) ?>" target="_blank">Open file</a><?php else: ?><span class="text-muted">Not provided by import</span><?php endif; ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">First Name</div><div class="fw-semibold"><?= esc($displayValue($homeowner['first_name'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Middle Name</div><div class="fw-semibold"><?= esc($displayValue($homeowner['middle_name'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Last Name</div><div class="fw-semibold"><?= esc($displayValue($homeowner['last_name'] ?? null)) ?></div></div>
+              <div class="col-md-6"><div class="text-muted small">Contact Number</div><div class="fw-semibold"><?= esc($displayValue($homeowner['contact_number'] ?? null)) ?></div></div>
+              <div class="col-md-6"><div class="text-muted small">Email</div><div class="fw-semibold text-break"><?= esc($displayValue($homeowner['email'] ?? null)) ?></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Address &amp; Residency Information</h6>
+            <div class="row g-3">
+              <div class="col-md-4"><div class="text-muted small">Phase</div><div class="fw-semibold"><?= esc($displayValue($homeowner['phase'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Block</div><div class="fw-semibold"><?= esc($homeownerBlock > 0 ? $homeownerBlock : 'Not provided') ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Lot</div><div class="fw-semibold"><?= esc($homeownerLot > 0 ? $homeownerLot : 'Not provided') ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Street</div><div class="fw-semibold"><?= esc($displayValue($mapLocation['street'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Residential Type</div><div class="fw-semibold"><?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Barangay</div><div class="fw-semibold"><?= esc($displayValue($homeowner['barangay'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">City/Municipality</div><div class="fw-semibold"><?= esc($displayValue($homeowner['city_municipality'] ?? null)) ?></div></div>
+              <div class="col-md-4"><div class="text-muted small">Province</div><div class="fw-semibold"><?= esc($displayValue($homeowner['province'] ?? null)) ?></div></div>
+              <div class="col-md-6"><div class="text-muted small">Other Location Info</div><div class="fw-semibold"><?= esc($displayValue($homeowner['other_location_info'] ?? null)) ?></div></div>
+              <div class="col-md-6"><div class="text-muted small">Length of Residency in the Barangay</div><div class="fw-semibold"><?= esc($displayValue($homeowner['length_of_residency'] ?? null)) ?></div></div>
+              <div class="col-12"><div class="text-muted small">Complete Address</div><div class="fw-semibold"><?= esc($address ?: 'Not provided') ?></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Emergency Contact</h6>
+            <div class="row g-3">
+              <div class="col-md-6"><div class="text-muted small">Emergency Contact Person</div><div class="fw-semibold"><?= esc($displayValue($homeowner['emergency_contact_person'] ?? null)) ?></div></div>
+              <div class="col-md-6"><div class="text-muted small">Emergency Contact Number</div><div class="fw-semibold"><?= esc($displayValue($homeowner['emergency_contact_number'] ?? null)) ?></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Supporting Documents</h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="text-muted small">Valid ID</div>
+                <div><?php if (!$isImportPlaceholder($validId)): ?><a href="<?= esc($validId) ?>" target="_blank" class="fw-semibold">Open file</a><?php else: ?><span class="text-muted">Not provided by Excel import</span><?php endif; ?></div>
+              </div>
+              <div class="col-md-6">
+                <div class="text-muted small">Proof of Billing</div>
+                <div><?php if (!$isImportPlaceholder($billing)): ?><a href="<?= esc($billing) ?>" target="_blank" class="fw-semibold">Open file</a><?php else: ?><span class="text-muted">Not provided by Excel import</span><?php endif; ?></div>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <h6 class="fw-bold">Household Members</h6>
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Household Members</h6>
             <?php if (!$members): ?>
               <div class="text-muted">No household members recorded.</div>
             <?php else: ?>
-              <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Relation</th></tr></thead><tbody>
-              <?php foreach ($members as $m): ?>
-                <tr><td><?= esc(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])) ?></td><td><?= esc($m['relation']) ?></td></tr>
-              <?php endforeach; ?>
-              </tbody></table></div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>Name</th><th>Relation</th></tr></thead>
+                  <tbody>
+                    <?php foreach ($members as $m): ?>
+                      <tr><td><?= esc(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])) ?></td><td><?= esc($m['relation']) ?></td></tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
             <?php endif; ?>
           </div>
         </div>
+
       </div>
 
-      <div class="col-lg-5">
-        <?php if ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng)): ?>
-          <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>" class="rounded shadow-sm mb-3"></div>
+      <div class="col-lg-4">
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body p-4">
+            <h6 class="fw-bold mb-3">Record Summary</h6>
+            <div class="mb-3"><div class="text-muted small">Homeowner ID</div><div class="fw-semibold"><?= esc($homeowner['public_id'] ?: (phase_prefix((string)$homeowner['phase']).$homeowner['id'])) ?></div></div>
+            <div class="mb-3"><div class="text-muted small">Status</div><div class="fw-semibold"><?= esc(ucfirst($status)) ?></div></div>
+            <div><div class="text-muted small">Residential Type</div><div class="fw-semibold"><?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div></div>
+          </div>
+        </div>
+
+        <?php if ($mapLocation): ?>
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+              <h6 class="fw-bold mb-1">Mapped Location</h6>
+              <div class="text-muted small mb-3">
+                Block <?= (int)$homeownerBlock ?>, Lot <?= (int)$homeownerLot ?><?= !empty($mapLocation['street']) ? ' · ' . esc($mapLocation['street']) : '' ?>
+              </div>
+              <div id="coverMap"
+                   data-map-x="<?= esc($mapLocation['x']) ?>"
+                   data-map-y="<?= esc($mapLocation['y']) ?>"
+                   data-block="<?= (int)$homeownerBlock ?>"
+                   data-lot="<?= (int)$homeownerLot ?>"
+                   data-street="<?= esc($mapLocation['street'] ?? '') ?>"
+                   data-map-image="../assets/img/south_meridian_block_lot_map.png"
+                   class="rounded"></div>
+            </div>
+          </div>
         <?php else: ?>
-          <div class="alert alert-secondary">No map coordinates saved for this homeowner.</div>
+          <div class="alert alert-secondary shadow-sm"><strong>Map location:</strong><br>No matching Block and Lot was found on the finalized subdivision map.</div>
         <?php endif; ?>
 
         <?php if ($status === 'pending'): ?>
-          <div class="card border-0 shadow-sm"><div class="card-body">
-            <h6 class="fw-bold">Approval Action</h6>
-            <div class="d-grid gap-2">
-              <button class="btn btn-success approveHomeowner" data-id="<?= (int)$homeownerId ?>">Approve Homeowner</button>
-              <button class="btn btn-danger rejectHomeowner" data-id="<?= (int)$homeownerId ?>">Reject Homeowner</button>
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+              <h6 class="fw-bold mb-3">Approval Action</h6>
+              <div class="d-grid gap-2">
+                <button class="btn btn-success approveHomeowner" data-id="<?= (int)$homeownerId ?>">Approve Homeowner</button>
+                <button class="btn btn-danger rejectHomeowner" data-id="<?= (int)$homeownerId ?>">Reject Homeowner</button>
+              </div>
             </div>
-          </div></div>
+          </div>
         <?php endif; ?>
+
       </div>
+
     </div>
   </div>
   <?php
   exit();
+}
+// All residents imported from Excel:
+// - valid imports from homeowners
+// - duplicate imports from homeowner_import_queue
+
+$importQueueAvailable = true;
+$resultImportQueue = false;
+
+try {
+
+    if ($admin_role === 'superadmin') {
+
+        $queueStmt = $conn->prepare(
+            "
+            SELECT
+                'duplicate' AS source_type,
+                q.id AS source_id,
+                NULL AS homeowner_id,
+                NULL AS public_id,
+
+                q.first_name,
+                q.middle_name,
+                q.last_name,
+                q.contact_number,
+                q.email,
+
+                q.phase,
+                q.block,
+                q.lot,
+                q.street,
+                q.house_lot_number,
+
+                q.residential_type,
+
+                'duplicate' AS status,
+
+                q.created_at
+
+            FROM homeowner_import_queue q
+
+            WHERE q.status='duplicate'
+
+
+            UNION ALL
+
+
+            SELECT
+                'homeowner' AS source_type,
+                h.id AS source_id,
+                h.id AS homeowner_id,
+                h.public_id,
+
+                h.first_name,
+                h.middle_name,
+                h.last_name,
+                h.contact_number,
+                h.email,
+
+                h.phase,
+                h.block,
+                h.lot,
+                h.street,
+                h.house_lot_number,
+
+                h.residential_type,
+
+                h.status,
+
+                h.created_at
+
+FROM homeowners h
+
+WHERE h.status = 'pending'
+  AND h.valid_id_path LIKE 'imports/%'
+
+ORDER BY created_at DESC
+            "
+        );
+
+    } else {
+
+        $queueStmt = $conn->prepare(
+            "
+            SELECT
+                'duplicate' AS source_type,
+                q.id AS source_id,
+                NULL AS homeowner_id,
+                NULL AS public_id,
+
+                q.first_name,
+                q.middle_name,
+                q.last_name,
+                q.contact_number,
+                q.email,
+
+                q.phase,
+                q.block,
+                q.lot,
+                q.street,
+                q.house_lot_number,
+
+                q.residential_type,
+
+                'duplicate' AS status,
+
+                q.created_at
+
+            FROM homeowner_import_queue q
+
+            WHERE q.status='duplicate'
+              AND q.phase=?
+
+
+            UNION ALL
+
+
+            SELECT
+                'homeowner' AS source_type,
+                h.id AS source_id,
+                h.id AS homeowner_id,
+                h.public_id,
+
+                h.first_name,
+                h.middle_name,
+                h.last_name,
+                h.contact_number,
+                h.email,
+
+                h.phase,
+                h.block,
+                h.lot,
+                h.street,
+                h.house_lot_number,
+
+                h.residential_type,
+
+                h.status,
+
+                h.created_at
+
+FROM homeowners h
+
+WHERE h.status = 'pending'
+  AND h.valid_id_path LIKE 'imports/%'
+  AND h.phase=?
+
+ORDER BY created_at DESC
+            "
+        );
+
+        $queueStmt->bind_param(
+            'ss',
+            $admin_phase,
+            $admin_phase
+        );
+    }
+
+    $queueStmt->execute();
+
+    $resultImportQueue =
+        $queueStmt->get_result();
+
+    $queueStmt->close();
+
+} catch (Throwable $e) {
+
+    $importQueueAvailable = false;
+
+    error_log(
+        'Imported residents query error: ' .
+        $e->getMessage()
+    );
 }
 
 // pending homeowners
@@ -244,6 +616,20 @@ $resultHO = $sqlHO->get_result();
 		#viewHomeownerModal #coverMap{
 			min-height:320px;
 			background:#e9eef6;
+		}
+
+		#viewHomeownerModal .card{
+			border-radius:14px;
+		}
+
+		#viewHomeownerModal .text-muted.small{
+			font-size:12px;
+			margin-bottom:3px;
+		}
+
+		#viewHomeownerModal .fw-semibold{
+			color:#263238;
+			word-break:break-word;
 		}
 
 		#viewHomeownerModal{
@@ -363,15 +749,158 @@ $resultHO = $sqlHO->get_result();
 				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
 					<div>
 						<h5 class="mb-1">Homeowner Import</h5>
-						<small class="text-muted">Upload .xlsx, .xls, or .csv. Use the template so the column names match.</small>
+						<small class="text-muted">Upload .xlsx, .xls, or .csv.</small>
 					</div>
 					<div class="d-flex gap-2">
-						<button type="button" class="btn btn-outline-success" id="downloadTemplateBtn">Download Excel Template</button>
+						<a href="download_homeowner_template.php" class="btn btn-outline-success">Download Excel Template</a>
 						<button type="button" class="btn btn-success" id="importExcelBtn">Import Excel</button>
 						<input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" hidden>
 					</div>
 				</div>
 				<div id="importStatus" class="alert d-none mb-3" role="alert"></div>
+
+        <?php if (!$importQueueAvailable): ?>
+          <div class="alert alert-warning mb-3">
+            Temporary import queue is not available yet. Import <strong>create_homeowner_import_queue.sql</strong> in phpMyAdmin first.
+          </div>
+        <?php elseif ($resultImportQueue && $resultImportQueue->num_rows > 0): ?>
+          <div class="mb-4">
+            <h6 class="fw-bold mb-2">Excel Imported Residents</h6>
+            <small class="text-muted d-block mb-3">
+              All nonblank Excel imports are listed here. Duplicates stay in the duplicate queue; valid imports come from homeowner records.
+            </small>
+            <div class="table-responsive">
+              <table id="importQueueTable" class="table table-bordered table-striped align-middle" style="width:100%">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phase / Block / Lot</th>
+                    <th>Residential Type</th>
+                    <th>Import Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php while ($qrow = $resultImportQueue->fetch_assoc()): ?>
+                    <?php [$queueBlock, $queueLot] = subdivision_block_lot($qrow); ?>
+                    <tr>
+                      <td>
+<?php if (($qrow['source_type'] ?? '') === 'duplicate'): ?>
+
+    DUP-<?= (int)$qrow['source_id'] ?>
+
+<?php else: ?>
+
+    <?php
+    $importDisplayId =
+        trim(
+            (string)(
+                $qrow['public_id'] ?? ''
+            )
+        );
+
+    if ($importDisplayId === '') {
+
+        $importDisplayId =
+            phase_prefix(
+                (string)$qrow['phase']
+            )
+            .
+            (int)$qrow['source_id'];
+    }
+    ?>
+
+    <?= esc($importDisplayId) ?>
+
+<?php endif; ?>
+</td>
+                      <td><?= esc(trim(($qrow['first_name'] ?? '').' '.($qrow['middle_name'] ?? '').' '.($qrow['last_name'] ?? ''))) ?></td>
+                      <td><?= esc($qrow['email'] ?? '') ?></td>
+                      <td><?= esc(($qrow['phase'] ?? '').' / Block '.$queueBlock.' / Lot '.$queueLot) ?></td>
+                      <td><?= esc($qrow['residential_type'] ?? '') ?></td>
+<td>
+
+<?php if (($qrow['source_type'] ?? '') === 'duplicate'): ?>
+
+    <span class="badge badge-danger">
+        Duplicate
+    </span>
+
+<?php else: ?>
+
+    <?php
+    $importStatus = strtolower(trim((string)($qrow['status'] ?? 'pending')));
+
+    $importBadgeClass =
+        $importStatus === 'approved'
+            ? 'badge-success'
+            : (
+                $importStatus === 'rejected'
+                    ? 'badge-danger'
+                    : 'badge-warning'
+            );
+
+    $importStatusLabel =
+        $importStatus === 'approved'
+            ? 'Approved'
+            : (
+                $importStatus === 'rejected'
+                    ? 'Rejected'
+                    : 'Awaiting Final Approval'
+            );
+    ?>
+
+    <span class="badge <?= esc($importBadgeClass) ?>">
+        <?= esc($importStatusLabel) ?>
+    </span>
+
+<?php endif; ?>
+
+</td>
+<td>
+
+<?php if (($qrow['source_type'] ?? '') === 'duplicate'): ?>
+
+    <button
+        type="button"
+        class="btn btn-sm btn-danger viewDuplicateResidentBtn"
+        data-id="<?= (int)$qrow['source_id'] ?>"
+    >
+        View Duplicate
+    </button>
+
+<?php else: ?>
+
+    <button
+        type="button"
+        class="btn btn-sm btn-info viewHomeownerBtn"
+        data-id="<?= (int)$qrow['homeowner_id'] ?>"
+        title="View Homeowner"
+    >
+        <i class="dw dw-eye"></i>
+        View
+    </button>
+
+<?php endif; ?>
+
+</td>
+                    </tr>
+                  <?php endwhile; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <hr class="mb-4">
+        <?php else: ?>
+          <div class="alert alert-light border mb-4">
+            No Excel imported residents found.
+          </div>
+        <?php endif; ?>
+
+        <h6 class="fw-bold mb-2">Homeowners Awaiting Final Approval</h6>
+
 				<div class="table-responsive">
 					<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
 						<thead>
@@ -388,6 +917,7 @@ $resultHO = $sqlHO->get_result();
 								<?php
 									$status = (string)($row['status'] ?? 'pending');
 									$badgeClass = ($status==='pending') ? 'badge-warning' : (($status==='approved') ? 'badge-success' : 'badge-danger');
+									[$rowBlock, $rowLot] = subdivision_block_lot($row);
 
 									$displayId = trim((string)($row['public_id'] ?? ''));
 									if ($displayId === '') {
@@ -399,7 +929,7 @@ $resultHO = $sqlHO->get_result();
 								<tr>
 									<td><?= esc($displayId) ?></td>
 									<td><?= esc(trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''))) ?></td>
-									<td><?= esc(trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''))) ?></td>
+									<td><?= esc(trim(($row['phase'] ?? '').', Block '.$rowBlock.', Lot '.$rowLot)) ?></td>
 									<td><span class="badge <?= $badgeClass ?>"><?= esc(ucfirst($status)) ?></span></td>
 									<td>
 										<button type="button" class="btn btn-sm btn-info viewHomeownerBtn" data-id="<?= (int)$row['id'] ?>" title="View">
@@ -461,6 +991,70 @@ $resultHO = $sqlHO->get_result();
 			</div>
 		</div>
 	</div>
+	<div class="modal fade" id="duplicateResidentModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+
+        <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title fw-bold">
+                    Duplicate Resident Review
+                </h5>
+
+                <button 
+                    type="button" 
+                    class="btn-close" 
+                    data-bs-dismiss="modal">
+                </button>
+
+            </div>
+
+
+            <div class="modal-body">
+
+                <div id="duplicateResidentContent">
+
+                    <div class="text-muted">
+                        Loading duplicate information...
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="modal-footer">
+
+                <button 
+                    type="button" 
+                    class="btn btn-light"
+                    data-bs-dismiss="modal">
+
+                    Close
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="btn btn-danger"
+                    id="notifyDeleteDuplicateBtn"
+                    data-id="">
+
+                    Notify & Delete Duplicate
+
+                </button>
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+</div>
 
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
@@ -490,150 +1084,910 @@ $resultHO = $sqlHO->get_result();
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-	function showToast(message, type='success') {
-		const toastEl = document.getElementById('appToast');
-		const msgEl = document.getElementById('appToastMsg');
-		msgEl.textContent = message;
+function showToast(
+    message,
+    type = 'success'
+) {
 
-		toastEl.classList.remove('text-bg-success','text-bg-danger','text-bg-warning','text-bg-info','text-bg-dark');
-		toastEl.classList.add(type === 'success' ? 'text-bg-success' : 'text-bg-danger');
+    const toastEl =
+        document.getElementById(
+            'appToast'
+        );
 
-		bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2800 }).show();
-	}
+    const msgEl =
+        document.getElementById(
+            'appToastMsg'
+        );
+
+    msgEl.textContent =
+        message;
+
+
+    toastEl.classList.remove(
+        'text-bg-success',
+        'text-bg-danger',
+        'text-bg-warning',
+        'text-bg-info',
+        'text-bg-dark'
+    );
+
+
+    if (type === 'success') {
+
+        toastEl.classList.add(
+            'text-bg-success'
+        );
+
+    } else if (type === 'warning') {
+
+        toastEl.classList.add(
+            'text-bg-warning'
+        );
+
+    } else if (type === 'info') {
+
+        toastEl.classList.add(
+            'text-bg-info'
+        );
+
+    } else {
+
+        toastEl.classList.add(
+            'text-bg-danger'
+        );
+    }
+
+
+    bootstrap.Toast
+        .getOrCreateInstance(
+            toastEl,
+            {
+                delay: 4000
+            }
+        )
+        .show();
+}
 
 	const homeownerImportCsrf = <?= json_encode($homeownerImportCsrf) ?>;
-	const importHeaders = [
-		'first_name','middle_name','last_name','contact_number','email','password','phase','house_lot_number',
-		'barangay','city_municipality','province','region','zip_code','country','other_location_info','exact_location',
-		'latitude','longitude','status'
-	];
+	const southMeridianLocations = <?= json_encode(array_values($southMeridianLocations), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+	const southMeridianLocationIndex = new Map(
+		southMeridianLocations.map(location => [`${Number(location.block)}:${Number(location.lot)}`, location])
+	);
 
 	function normalizeExcelKey(key) {
-		return String(key || '')
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '_')
-			.replace(/^_+|_+$/g, '');
-	}
+	return String(key || '')
+		.trim()
+		.toLowerCase()
+		.replace(/&/g, ' and ')
+		.replace(/[^a-z0-9]+/g, '_')
+		.replace(/^_+|_+$/g, '');
+}
 
-	function normalizeExcelRow(row) {
-		const aliases = {
-			firstname: 'first_name', first: 'first_name',
-			middlename: 'middle_name', middle: 'middle_name',
-			lastname: 'last_name', last: 'last_name',
-			contact: 'contact_number', contact_no: 'contact_number', phone: 'contact_number', mobile: 'contact_number',
-			house_lot: 'house_lot_number', house_lot_no: 'house_lot_number', lot_number: 'house_lot_number', address: 'other_location_info',
-			city: 'city_municipality', municipality: 'city_municipality', zip: 'zip_code'
-		};
-		const clean = {};
-		Object.entries(row || {}).forEach(([key, value]) => {
-			let normalized = normalizeExcelKey(key);
-			normalized = aliases[normalized] || normalized;
-			clean[normalized] = typeof value === 'string' ? value.trim() : value;
-		});
-		return clean;
-	}
+function normalizeExcelRow(row) {
+	const aliases = {
+		firstname: 'first_name',
+		first: 'first_name',
 
+		middlename: 'middle_name',
+		middle: 'middle_name',
+
+		lastname: 'last_name',
+		last: 'last_name',
+
+		contact: 'contact_number',
+		contact_no: 'contact_number',
+		phone: 'contact_number',
+		mobile: 'contact_number',
+
+		block_number: 'block',
+		block_no: 'block',
+
+		lot_number: 'lot',
+		lot_no: 'lot',
+
+		address: 'other_location_info',
+
+		city: 'city_municipality',
+		municipality: 'city_municipality',
+
+		zipcode: 'zip_code',
+		zip: 'zip_code',
+		postal_code: 'zip_code',
+		postalcode: 'zip_code',
+
+		residentialtype: 'residential_type',
+
+		emergency_contact: 'emergency_contact_person',
+		emergency_person: 'emergency_contact_person',
+		emergency_number: 'emergency_contact_number',
+
+		length_of_residency_in_the_barangay:
+			'length_of_residency'
+	};
+
+	const clean = {};
+
+	Object.entries(row || {}).forEach(([key, value]) => {
+		let normalized = normalizeExcelKey(key);
+		normalized = aliases[normalized] || normalized;
+
+		clean[normalized] =
+			typeof value === 'string'
+				? value.trim()
+				: value;
+	});
+
+	return clean;
+}
 	function setImportStatus(message, kind='info') {
 		const el = document.getElementById('importStatus');
 		el.className = 'alert mb-3 alert-' + kind;
 		el.textContent = message;
 	}
 
-	function downloadCredentials(rows) {
-		if (!rows || !rows.length || typeof XLSX === 'undefined') return;
-		const ws = XLSX.utils.json_to_sheet(rows);
-		const wb = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
-		XLSX.writeFile(wb, 'imported_homeowner_credentials.xlsx');
-	}
+document.addEventListener('DOMContentLoaded', function () {
 
-	document.addEventListener('DOMContentLoaded', function () {
-		const importBtn = document.getElementById('importExcelBtn');
-		const fileInput = document.getElementById('excelFileInput');
-		const templateBtn = document.getElementById('downloadTemplateBtn');
+    const importBtn =
+        document.getElementById('importExcelBtn');
 
-		templateBtn?.addEventListener('click', function () {
-			if (typeof XLSX === 'undefined') {
-				showToast('Excel library failed to load.', 'error');
-				return;
-			}
-			const sample = [{
-				first_name: 'Juan', middle_name: 'Santos', last_name: 'Dela Cruz', contact_number: '09123456789',
-				email: 'juan@example.com', password: '', phase: 'Phase 1', house_lot_number: 'Blk 5 Lot 12',
-				barangay: 'Salitran', city_municipality: 'Dasmariñas', province: 'Cavite', region: 'CALABARZON',
-				zip_code: '4114', country: 'Philippines', other_location_info: 'Example Street', exact_location: '',
-				latitude: '14.3545000', longitude: '120.9460000', status: 'pending'
-			}];
-			const ws = XLSX.utils.json_to_sheet(sample, { header: importHeaders });
-			const wb = XLSX.utils.book_new();
-			XLSX.utils.book_append_sheet(wb, ws, 'Homeowners');
-			XLSX.writeFile(wb, 'south_meridian_homeowners_import_template.xlsx');
-		});
+    const fileInput =
+        document.getElementById('excelFileInput');
 
-		importBtn?.addEventListener('click', () => fileInput?.click());
 
-		fileInput?.addEventListener('change', async function () {
-			const file = this.files && this.files[0];
-			if (!file) return;
+    importBtn?.addEventListener(
+        'click',
+        function () {
 
-			try {
-				if (typeof XLSX === 'undefined') throw new Error('Excel library failed to load.');
-				importBtn.disabled = true;
-				setImportStatus('Reading ' + file.name + '...', 'info');
+            fileInput.click();
 
-				const buffer = await file.arrayBuffer();
-				const workbook = XLSX.read(buffer, { type: 'array' });
-				const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-				let rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
-				rows = rows.map(normalizeExcelRow).filter(r => Object.values(r).some(v => String(v).trim() !== ''));
+        }
+    );
 
-				if (!rows.length) throw new Error('No data rows were found in the first worksheet.');
 
-				const missing = ['first_name','last_name','contact_number','email','house_lot_number'].filter(h => !(h in rows[0]));
-				if (missing.length) throw new Error('Missing required column(s): ' + missing.join(', '));
+    fileInput?.addEventListener(
+        'change',
+        async function () {
 
-				let imported = 0, skipped = 0;
-				const errors = [];
-				const credentials = [];
-				const chunkSize = 100;
+            const file =
+                this.files &&
+                this.files[0];
 
-				for (let i = 0; i < rows.length; i += chunkSize) {
-					const chunk = rows.slice(i, i + chunkSize);
-					setImportStatus(`Importing rows ${i + 1}-${Math.min(i + chunk.length, rows.length)} of ${rows.length}...`, 'info');
+            if (!file) {
+                return;
+            }
 
-					const response = await fetch('import_homeowners.php', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ csrf: homeownerImportCsrf, rows: chunk, row_offset: i })
-					});
-					const data = await response.json().catch(() => null);
-					if (!response.ok || !data || !data.success) {
-						throw new Error((data && data.message) ? data.message : 'Import request failed.');
-					}
-					imported += Number(data.imported || 0);
-					skipped += Number(data.skipped || 0);
-					(data.errors || []).forEach(e => errors.push(e));
-					(data.generated_credentials || []).forEach(c => credentials.push(c));
-				}
+        try {
 
-				const summary = `Import finished: ${imported} imported, ${skipped} skipped${errors.length ? `, ${errors.length} row error(s)` : ''}.`;
-				setImportStatus(summary + (errors.length ? ' First error: ' + errors[0] : ''), errors.length ? 'warning' : 'success');
-				showToast(summary, errors.length ? 'error' : 'success');
-				if (credentials.length) downloadCredentials(credentials);
-				setTimeout(() => location.reload(), 1800);
-			} catch (err) {
-				console.error(err);
-				setImportStatus(err.message || 'Import failed.', 'danger');
-				showToast(err.message || 'Import failed.', 'error');
-			} finally {
-				importBtn.disabled = false;
-				fileInput.value = '';
-			}
-		});
-	});
+            if (
+                typeof XLSX ===
+                'undefined'
+            ) {
+                throw new Error(
+                    'Excel library failed to load.'
+                );
+            }
+
+            importBtn.disabled = true;
+
+            setImportStatus(
+                'Reading ' +
+                file.name +
+                '...',
+                'info'
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Read Excel
+            |--------------------------------------------------------------------------
+            */
+
+            const buffer =
+                await file.arrayBuffer();
+
+            const workbook =
+                XLSX.read(
+                    buffer,
+                    {
+                        type: 'array'
+                    }
+                );
+
+            const firstSheet =
+                workbook.Sheets[
+                    workbook.SheetNames[0]
+                ];
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Find column headings
+            |--------------------------------------------------------------------------
+            */
+
+            const matrix =
+                XLSX.utils.sheet_to_json(
+                    firstSheet,
+                    {
+                        header: 1,
+                        defval: '',
+                        raw: false
+                    }
+                );
+
+            const headerIndex =
+                matrix.findIndex(
+                    row => {
+
+                        const headers =
+                            row.map(
+                                value =>
+                                    normalizeExcelKey(
+                                        value
+                                    )
+                            );
+
+                        return (
+                            headers.includes(
+                                'first_name'
+                            ) &&
+
+                            headers.includes(
+                                'last_name'
+                            ) &&
+
+                            headers.includes(
+                                'contact_number'
+                            ) &&
+
+                            headers.includes(
+                                'email'
+                            ) &&
+
+                            headers.includes(
+                                'block'
+                            ) &&
+
+                            headers.includes(
+                                'lot'
+                            )
+                        );
+                    }
+                );
+
+            if (headerIndex === -1) {
+
+                throw new Error(
+                    'Could not find the Excel column headings. Please use the revised South Meridian Block and Lot template.'
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Convert worksheet into rows
+            |--------------------------------------------------------------------------
+            */
+
+            let rows =
+                XLSX.utils.sheet_to_json(
+                    firstSheet,
+                    {
+                        range:
+                            headerIndex,
+
+                        defval: '',
+
+                        raw: false
+                    }
+                );
+
+rows =
+    rows
+        .map(normalizeExcelRow)
+        .filter(row => {
+
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT use Object.values(row), because the Excel
+             * template automatically fills Barangay, City,
+             * Province, Region, ZIP and Country down to row 500.
+             *
+             * We only consider a row a real resident row when
+             * one of the actual homeowner-input fields contains
+             * information.
+             */
+
+            const residentFields = [
+                row.first_name,
+                row.middle_name,
+                row.last_name,
+                row.contact_number,
+                row.email,
+
+                row.block,
+                row.lot,
+
+                row.other_location_info,
+                row.length_of_residency,
+                row.residential_type,
+
+                row.emergency_contact_person,
+                row.emergency_contact_number
+            ];
+
+            return residentFields.some(
+                value =>
+                    String(value ?? '')
+                        .trim() !== ''
+            );
+        });
+
+            if (!rows.length) {
+
+                throw new Error(
+                    'No resident data rows were found in the Excel file.'
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Required columns
+            |--------------------------------------------------------------------------
+            */
+
+            const requiredHeaders = [
+                'first_name',
+                'last_name',
+                'contact_number',
+                'email',
+
+                'phase',
+                'block',
+                'lot',
+
+                'barangay',
+                'city_municipality',
+                'province',
+                'region',
+                'zip_code',
+                'country',
+
+                'length_of_residency',
+                'residential_type',
+
+                'emergency_contact_person',
+                'emergency_contact_number'
+            ];
+
+            const missing =
+                requiredHeaders.filter(
+                    header =>
+                        !(header in rows[0])
+                );
+
+            if (missing.length) {
+
+                throw new Error(
+                    'Missing required column(s): ' +
+                    missing.join(', ')
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Map required
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                !southMeridianLocationIndex.size
+            ) {
+
+                throw new Error(
+                    'The subdivision Block/Lot mapping file is missing. Upload southmeri_block_lot_mapping.json beside this PHP file.'
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Validate Block / Lot and attach map data
+            |--------------------------------------------------------------------------
+            */
+
+            rows =
+                rows.map(
+                    (row, index) => {
+
+ const rawBlock =
+    String(row.block ?? '').trim();
+
+const rawLot =
+    String(row.lot ?? '').trim();
+
+const excelRow =
+    headerIndex +
+    index +
+    2;
+
+
+/*
+|--------------------------------------------------------------------------
+| Block / Lot required
+|--------------------------------------------------------------------------
+*/
+
+if (rawBlock === '' && rawLot === '') {
+
+    throw new Error(
+        `Excel row ${excelRow}: Block and Lot are required.`
+    );
+}
+
+if (rawBlock === '') {
+
+    throw new Error(
+        `Excel row ${excelRow}: Block is required.`
+    );
+}
+
+if (rawLot === '') {
+
+    throw new Error(
+        `Excel row ${excelRow}: Lot is required.`
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Convert to numbers
+|--------------------------------------------------------------------------
+*/
+
+const block =
+    Number.parseInt(
+        rawBlock,
+        10
+    );
+
+const lot =
+    Number.parseInt(
+        rawLot,
+        10
+    );
+
+
+if (
+    !Number.isInteger(block) ||
+    block <= 0
+) {
+
+    throw new Error(
+        `Excel row ${excelRow}: "${rawBlock}" is not a valid Block number.`
+    );
+}
+
+
+if (
+    !Number.isInteger(lot) ||
+    lot <= 0
+) {
+
+    throw new Error(
+        `Excel row ${excelRow}: "${rawLot}" is not a valid Lot number.`
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Check official South Meridian map
+|--------------------------------------------------------------------------
+*/
+
+const location =
+    southMeridianLocationIndex.get(
+        `${block}:${lot}`
+    );
+
+
+if (!location) {
+
+    throw new Error(
+        `Excel row ${excelRow}: Block ${block}, Lot ${lot} is not a valid South Meridian address. Please select a Block and Lot from the Excel dropdowns.`
+    );
+}
+
+                        return {
+                            ...row,
+
+                            block:
+                                String(block),
+
+                            lot:
+                                String(lot),
+
+                            house_lot_number:
+                                `Block ${block} Lot ${lot}`,
+
+                            street:
+                                location.street,
+
+                            map_x:
+                                location.x,
+
+                            map_y:
+                                location.y,
+
+                            barangay:
+                                String(
+                                    row.barangay ||
+                                    'Salitran IV'
+                                ).trim(),
+
+                            city_municipality:
+                                String(
+                                    row.city_municipality ||
+                                    'Dasmarinas City'
+                                ).trim(),
+
+                            province:
+                                String(
+                                    row.province ||
+                                    'Cavite'
+                                ).trim(),
+
+                            region:
+                                String(
+                                    row.region ||
+                                    'CALABARZON'
+                                ).trim(),
+
+                            zip_code:
+                                String(
+                                    row.zip_code ||
+                                    '4114'
+                                ).trim(),
+
+                            country:
+                                String(
+                                    row.country ||
+                                    'Philippines'
+                                ).trim()
+                        };
+                    }
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Counters
+            |--------------------------------------------------------------------------
+            */
+
+            let imported = 0;
+            let duplicates = 0;
+            let skipped = 0;
+
+            const errors = [];
+
+            /*
+             * THIS WAS MISSING
+             * FROM YOUR CURRENT FILE.
+             */
+            const chunkSize = 100;
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Upload chunks
+            |--------------------------------------------------------------------------
+            */
+
+            for (
+                let i = 0;
+                i < rows.length;
+                i += chunkSize
+            ) {
+
+                const chunk =
+                    rows.slice(
+                        i,
+                        i + chunkSize
+                    );
+
+                setImportStatus(
+                    `Importing rows ${i + 1}-${Math.min(
+                        i + chunk.length,
+                        rows.length
+                    )} of ${rows.length}...`,
+                    'info'
+                );
+
+
+                const response =
+                    await fetch(
+                        'import_homeowner.php',
+                        {
+                            method:
+                                'POST',
+
+                            headers: {
+                                'Content-Type':
+                                    'application/json'
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    csrf:
+                                        homeownerImportCsrf,
+
+                                    rows:
+                                        chunk,
+
+                                    row_offset:
+                                        i +
+                                        headerIndex +
+                                        1
+                                })
+                        }
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Read JSON response
+                |--------------------------------------------------------------------------
+                */
+
+                const responseText =
+                    await response.text();
+
+                let data = null;
+
+                try {
+
+                    data =
+                        JSON.parse(
+                            responseText
+                        );
+
+                } catch (parseError) {
+
+                    console.error(
+                        'Raw import server response:',
+                        responseText
+                    );
+
+                    const readableResponse =
+                        String(
+                            responseText || ''
+                        )
+                            .replace(
+                                /<[^>]*>/g,
+                                ' '
+                            )
+                            .replace(
+                                /\s+/g,
+                                ' '
+                            )
+                            .trim()
+                            .slice(
+                                0,
+                                500
+                            );
+
+                    throw new Error(
+                        'Import server returned an invalid response (HTTP ' +
+                        response.status +
+                        '). ' +
+                        (
+                            readableResponse
+                                ? 'Server says: ' +
+                                  readableResponse
+                                : 'The response was empty.'
+                        )
+                    );
+                }
+
+
+                if (
+                    !response.ok ||
+                    !data ||
+                    !data.success
+                ) {
+
+                    throw new Error(
+                        data &&
+                        data.message
+
+                            ? data.message
+
+                            : 'Import request failed.'
+                    );
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Totals
+                |--------------------------------------------------------------------------
+                */
+
+                imported +=
+                    Number(
+                        data.imported || 0
+                    );
+
+                duplicates +=
+                    Number(
+                        data.duplicates || 0
+                    );
+
+                skipped +=
+                    Number(
+                        data.skipped || 0
+                    );
+
+                (
+                    data.errors || []
+                ).forEach(
+                    error =>
+                        errors.push(
+                            error
+                        )
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Summary
+            |--------------------------------------------------------------------------
+            */
+
+            let summary =
+                `Import finished: ${imported} added to final approval`;
+
+            if (duplicates > 0) {
+
+                summary +=
+                    `, ${duplicates} duplicate(s) detected`;
+            }
+
+            if (skipped > 0) {
+
+                summary +=
+                    `, ${skipped} skipped`;
+            }
+
+            if (errors.length > 0) {
+
+                summary +=
+                    `, ${errors.length} row error(s)`;
+            }
+
+            summary += '.';
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Display result
+            |--------------------------------------------------------------------------
+            */
+
+            if (duplicates > 0) {
+
+                setImportStatus(
+                    summary +
+                    ' Duplicate residents are listed below for review.',
+                    'warning'
+                );
+
+                showToast(
+                    `${duplicates} duplicate resident(s) detected.`,
+                    'warning'
+                );
+
+            } else if (
+                errors.length > 0
+            ) {
+
+                setImportStatus(
+                    summary +
+                    ' First error: ' +
+                    errors[0],
+                    'warning'
+                );
+
+                showToast(
+                    summary,
+                    'error'
+                );
+
+            } else {
+
+                setImportStatus(
+                    summary,
+                    'success'
+                );
+
+                showToast(
+                    summary,
+                    'success'
+                );
+            }
+
+
+            /*
+             * Reload so:
+             *
+             * - duplicates appear in the
+             *   duplicate table
+             *
+             * - valid imports appear in
+             *   final approval
+             */
+
+            setTimeout(
+                () => {
+                    location.reload();
+                },
+                1800
+            );
+
+
+        } catch (err) {
+
+            console.error(err);
+
+            setImportStatus(
+                err.message ||
+                'Import failed.',
+                'danger'
+            );
+
+            showToast(
+                err.message ||
+                'Import failed.',
+                'error'
+            );
+
+        } finally {
+
+            importBtn.disabled =
+                false;
+
+            fileInput.value =
+                '';
+        }
+    });
+
+});
+
 
 	$(function () {
+        if (
+            $.fn.DataTable &&
+            $('#importQueueTable').length &&
+            !$.fn.DataTable.isDataTable('#importQueueTable')
+        ) {
+            $('#importQueueTable').DataTable({
+                responsive: true,
+                pageLength: 25,
+                order: [],
+                columnDefs: [
+                    { orderable: false, targets: 6 }
+                ]
+            });
+        }
+
 		if ($.fn.DataTable && $('#approvalTable').length && !$.fn.DataTable.isDataTable('#approvalTable')) {
 			$('#approvalTable').DataTable({
 				responsive: true,
@@ -702,48 +2056,235 @@ $resultHO = $sqlHO->get_result();
 		});
 
 		confirmBtnEl.addEventListener('click', function () {
-			const { id, status } = pendingAction;
-			if (!id || !status) return;
 
-			let reason = '';
-			if (status === 'rejected') {
-				reason = (reasonInputEl.value || '').trim();
-				if (!reason) {
-					reasonErrorEl.style.display = 'block';
-					reasonInputEl.focus();
-					return;
-				}
-			}
+    const { id, status } = pendingAction;
 
-			confirmBtnEl.disabled = true;
-			const oldText = confirmBtnEl.textContent;
-			confirmBtnEl.textContent = status === 'approved' ? 'Approving...' : 'Rejecting...';
+    if (!id || !status) {
+        return;
+    }
 
-			$.post('update_homeowner_status_email.php', { id, status, reason }, function (res) {
-				if (!res || !res.success) {
-					showToast((res && res.message) ? res.message : 'Action failed.', 'error');
-					confirmBtnEl.disabled = false;
-					confirmBtnEl.textContent = oldText;
-					return;
-				}
+    let reason = '';
 
-				showToast(res.message || 'Updated successfully.', 'success');
-				confirmModal.hide();
+    if (status === 'rejected') {
 
-				const viewModalEl = document.getElementById('viewHomeownerModal');
-				const viewModalInstance = bootstrap.Modal.getInstance(viewModalEl);
-				if (viewModalInstance) {
-					viewModalInstance.hide();
-				}
+        reason =
+            (reasonInputEl.value || '')
+                .trim();
 
-				setTimeout(() => location.reload(), 600);
-			}, 'json').fail(function (xhr) {
-				console.error(xhr.responseText);
-				showToast('Request failed. Please try again.', 'error');
-				confirmBtnEl.disabled = false;
-				confirmBtnEl.textContent = oldText;
-			});
-		});
+        if (!reason) {
+
+            reasonErrorEl.style.display =
+                'block';
+
+            reasonInputEl.focus();
+
+            return;
+        }
+    }
+
+    confirmBtnEl.disabled = true;
+
+    const oldText =
+        confirmBtnEl.textContent;
+
+    confirmBtnEl.textContent =
+        status === 'approved'
+            ? 'Approving...'
+            : 'Rejecting...';
+
+
+    $.ajax({
+
+        url:
+            'update_homeowner_status_email.php',
+
+        type:
+            'POST',
+
+        dataType:
+            'json',
+
+        data: {
+            id: id,
+            status: status,
+            reason: reason,
+            csrf: homeownerImportCsrf
+        },
+
+
+        success: function (res) {
+
+            if (!res || !res.success) {
+
+                showToast(
+                    res && res.message
+                        ? res.message
+                        : 'Action failed.',
+                    'error'
+                );
+
+                confirmBtnEl.disabled =
+                    false;
+
+                confirmBtnEl.textContent =
+                    oldText;
+
+                return;
+            }
+
+
+            showToast(
+                res.message ||
+                'Updated successfully.',
+                'success'
+            );
+
+
+            confirmModal.hide();
+
+
+            const viewModalEl =
+                document.getElementById(
+                    'viewHomeownerModal'
+                );
+
+
+            const viewModalInstance =
+                bootstrap.Modal.getInstance(
+                    viewModalEl
+                );
+
+
+            if (viewModalInstance) {
+                viewModalInstance.hide();
+            }
+
+
+            setTimeout(
+                function () {
+                    location.reload();
+                },
+                800
+            );
+        },
+
+
+        error: function (xhr) {
+
+            console.error(
+                'Approval request failed.'
+            );
+
+            console.error(
+                'HTTP Status:',
+                xhr.status
+            );
+
+            console.error(
+                'Server Response:',
+                xhr.responseText
+            );
+
+
+            let message =
+                'Request failed. Please try again.';
+
+
+            /*
+             * Try to read JSON returned by PHP.
+             */
+            if (xhr.responseText) {
+
+                try {
+
+                    const data =
+                        JSON.parse(
+                            xhr.responseText
+                        );
+
+
+                    if (
+                        data &&
+                        data.message
+                    ) {
+
+                        message =
+                            data.message;
+                    }
+
+                } catch (error) {
+
+                    /*
+                     * PHP returned HTML/text
+                     * instead of JSON.
+                     */
+
+                    if (xhr.status === 401) {
+
+                        message =
+                            'Your admin session expired. Please login again.';
+
+                    } else if (xhr.status === 403) {
+
+                        message =
+                            'Access denied or security token expired. Refresh the page and try again.';
+
+                    } else if (xhr.status === 404) {
+
+                        message =
+                            'Homeowner or approval endpoint was not found.';
+
+                    } else if (xhr.status === 500) {
+
+                        message =
+                            'Server error occurred while approving the homeowner. Check the PHP error log or email configuration.';
+
+                    } else {
+
+                        const cleanResponse =
+                            String(
+                                xhr.responseText
+                            )
+                            .replace(
+                                /<[^>]*>/g,
+                                ' '
+                            )
+                            .replace(
+                                /\s+/g,
+                                ' '
+                            )
+                            .trim();
+
+
+                        if (cleanResponse) {
+
+                            message =
+                                cleanResponse.substring(
+                                    0,
+                                    300
+                                );
+                        }
+                    }
+                }
+            }
+
+
+            showToast(
+                message,
+                'error'
+            );
+
+
+            confirmBtnEl.disabled =
+                false;
+
+            confirmBtnEl.textContent =
+                oldText;
+        }
+
+    });
+
+});
 
 		confirmModalEl.addEventListener('hidden.bs.modal', function () {
 			pendingAction = { id: null, status: null };
@@ -778,31 +2319,39 @@ function initCoverMapIfAny() {
 	const mapEl = document.getElementById('coverMap');
 	if (!mapEl || typeof L === 'undefined') return;
 
-	const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
-	const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
-	if (!isFinite(lat) || !isFinite(lng)) return;
+	const x = parseFloat(mapEl.getAttribute('data-map-x') || '');
+	const y = parseFloat(mapEl.getAttribute('data-map-y') || '');
+	const block = mapEl.getAttribute('data-block') || '';
+	const lot = mapEl.getAttribute('data-lot') || '';
+	const street = mapEl.getAttribute('data-street') || '';
+	const imageUrl = mapEl.getAttribute('data-map-image') || '';
+	if (!isFinite(x) || !isFinite(y) || !imageUrl) return;
+	const leafletY = 3300 - y;
 
 	destroyCoverMap();
 
 	coverMapInstance = L.map(mapEl, {
-		center: [lat, lng],
-		zoom: 18,
+		crs: L.CRS.Simple,
+		center: [leafletY, x],
+		zoom: -1,
+		minZoom: -3,
+		maxZoom: 3,
+		zoomSnap: 0.25,
 		zoomControl: true,
-		attributionControl: true
+		attributionControl: false
 	});
 
-	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		maxZoom: 19,
-		subdomains: ['a', 'b', 'c'],
-		attribution: '&copy; OpenStreetMap contributors'
-	}).addTo(coverMapInstance);
-
-	L.marker([lat, lng]).addTo(coverMapInstance);
+	const mapBounds = [[0, 0], [3300, 2550]];
+	L.imageOverlay(imageUrl, mapBounds).addTo(coverMapInstance);
+	L.marker([leafletY, x])
+		.addTo(coverMapInstance)
+		.bindPopup(`<strong>Block ${block}, Lot ${lot}</strong>${street ? `<br>${street}` : ''}`)
+		.openPopup();
 
 	setTimeout(function () {
 		if (coverMapInstance) {
 			coverMapInstance.invalidateSize(true);
-			coverMapInstance.setView([lat, lng], 18);
+			coverMapInstance.setView([leafletY, x], -1);
 		}
 	}, 300);
 
@@ -884,5 +2433,412 @@ function initCoverMapIfAny() {
 
 	});
 	</script>
+	<script>
+		
+const duplicateResidentModalEl =
+    document.getElementById(
+        'duplicateResidentModal'
+    );
+
+const duplicateResidentModal =
+    duplicateResidentModalEl
+        ? new bootstrap.Modal(
+            duplicateResidentModalEl
+        )
+        : null;
+
+const duplicateResidentContent =
+    document.getElementById(
+        'duplicateResidentContent'
+    );
+
+const notifyDeleteDuplicateBtn =
+    document.getElementById(
+        'notifyDeleteDuplicateBtn'
+    );
+
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+
+$(document).on(
+    'click',
+    '.viewDuplicateResidentBtn',
+    async function () {
+
+        const id =
+            Number(
+                this.dataset.id || 0
+            );
+
+        if (!id) {
+            return;
+        }
+
+        duplicateResidentContent.innerHTML =
+            '<div class="text-muted">Loading duplicate information...</div>';
+
+        notifyDeleteDuplicateBtn.dataset.id =
+            String(id);
+
+        notifyDeleteDuplicateBtn.disabled =
+            true;
+
+        duplicateResidentModal.show();
+
+
+        try {
+
+            const response =
+                await fetch(
+                    'get_duplicate_homeowner.php?id='
+                    +
+                    encodeURIComponent(id),
+                    {
+                        headers: {
+                            'Accept':
+                                'application/json'
+                        }
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+                throw new Error(
+                    data.message ||
+                    'Unable to load duplicate information.'
+                );
+            }
+
+
+            const q =
+                data.queue;
+
+            const existing =
+                data.existing;
+
+
+            duplicateResidentContent.innerHTML = `
+
+                <div class="alert alert-warning">
+                    The imported email address is already registered in the system.
+                    Review both records before removing the duplicate import.
+                </div>
+
+                <div class="row g-3">
+
+                    <div class="col-md-6">
+
+                        <div class="card h-100 border-warning">
+
+                            <div class="card-header fw-bold">
+                                Imported Resident
+                            </div>
+
+                            <div class="card-body">
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Name</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(q.name)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Email</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(q.email)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Contact</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(q.contact_number)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Phase</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(q.phase)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Address</small>
+                                    <div class="fw-semibold">
+                                        Block ${escapeHtml(q.block)},
+                                        Lot ${escapeHtml(q.lot)}
+                                        ${q.street ? ' · ' + escapeHtml(q.street) : ''}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <small class="text-muted">Residential Type</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(q.residential_type)}
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="col-md-6">
+
+                        <div class="card h-100 border-success">
+
+                            <div class="card-header fw-bold">
+                                Existing Registered Homeowner
+                            </div>
+
+                            <div class="card-body">
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Homeowner ID</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.public_id || existing.id)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Name</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.name)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Email</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.email)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Contact</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.contact_number)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Phase</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.phase)}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <small class="text-muted">Address</small>
+                                    <div class="fw-semibold">
+                                        Block ${escapeHtml(existing.block)},
+                                        Lot ${escapeHtml(existing.lot)}
+                                        ${existing.street ? ' · ' + escapeHtml(existing.street) : ''}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <small class="text-muted">Status</small>
+                                    <div class="fw-semibold">
+                                        ${escapeHtml(existing.status)}
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+            `;
+
+
+            notifyDeleteDuplicateBtn.disabled =
+                false;
+
+
+        } catch (err) {
+
+            duplicateResidentContent.innerHTML =
+                '<div class="alert alert-danger mb-0">'
+                +
+                escapeHtml(
+                    err.message ||
+                    'Unable to load duplicate information.'
+                )
+                +
+                '</div>';
+        }
+    }
+);
+notifyDeleteDuplicateBtn?.addEventListener(
+    'click',
+    async function () {
+
+        const id =
+            Number(
+                this.dataset.id || 0
+            );
+
+        if (!id) {
+            return;
+        }
+
+
+        const confirmed =
+            window.confirm(
+                'Send duplicate email notification and remove this duplicate import?'
+            );
+
+
+        if (!confirmed) {
+            return;
+        }
+
+
+        this.disabled = true;
+        this.textContent = "Sending...";
+
+
+        try {
+
+            const body =
+                new URLSearchParams();
+
+            body.set(
+                'id',
+                String(id)
+            );
+
+            body.set(
+                'csrf',
+                homeownerImportCsrf
+            );
+
+
+            const response =
+                await fetch(
+                    'notify_delete_duplicate_homeowner.php',
+                    {
+                        method:'POST',
+                        headers:{
+                            'Content-Type':
+                            'application/x-www-form-urlencoded;charset=UTF-8'
+                        },
+                        body:body.toString()
+                    }
+                );
+
+
+ const responseText =
+    await response.text();
+let data;
+
+try {
+    data = JSON.parse(responseText);
+} catch (e) {
+
+    console.error(
+        'Raw server response:',
+        responseText
+    );
+
+    throw new Error(
+        'Server returned invalid JSON: ' +
+        String(responseText || '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 300)
+    );
+}
+
+
+if (!response.ok || !data.success) {
+
+    throw new Error(
+        data.message ||
+        'Failed to process duplicate.'
+    );
+
+}
+
+
+            if (data.email_sent === false) {
+
+                console.error(
+                    'Email error:',
+                    data.email_error || ''
+                );
+
+                showToast(
+                    data.message +
+                    (
+                        data.email_error
+                            ? ' Error: ' + data.email_error
+                            : ''
+                    ),
+                    'error'
+                );
+
+            } else {
+
+                showToast(
+                    data.message,
+                    'success'
+                );
+            }
+
+
+            duplicateResidentModal.hide();
+
+
+            setTimeout(
+                function(){
+                    location.reload();
+                },
+                1000
+            );
+
+
+        } catch(error) {
+
+
+            showToast(
+                error.message,
+                'error'
+            );
+
+
+            this.disabled = false;
+            this.textContent =
+                "Notify & Delete Duplicate";
+
+        }
+
+    }
+);
+
+		</script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 <?php
 session_start();
 ob_start(); // 
-
+require_once '../config/database.php';
 
 /* =========================
    1) SESSION COMPATIBILITY
@@ -25,20 +25,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit('Unauthorized');
 }
 
-/* =========================
-   3) LOCAL DB CONNECTION
-   ========================= */
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "u972459197_south_meridian.sql";
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) {
-  http_response_code(500);
-  exit("DB error");
-}
-$conn->set_charset("utf8mb4");
 
 function esc($v) {
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -193,6 +179,91 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
       <div class="col-md-6">
         <label class="form-label fw-semibold">House / Lot Number</label>
         <input type="text" class="form-control" name="house_lot_number" value="<?= esc($home['house_lot_number'] ?? '') ?>" required>
+      </div>
+
+      <div class="col-12">
+        <hr class="my-2">
+        <div class="fw-bold mb-1">Address &amp; Residency Information</div>
+        <div class="text-muted mb-2" style="font-size:13px;">
+          These fields match the South Meridian Excel resident import template.
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Barangay</label>
+        <input type="text"
+               class="form-control bg-light"
+               name="barangay"
+               value="Salitran 4"
+               readonly>
+        <div class="form-text">Fixed community location.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">City / Municipality</label>
+        <input type="text"
+               class="form-control bg-light"
+               name="city_municipality"
+               value="Dasmariñas City"
+               readonly>
+        <div class="form-text">Fixed community location.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Province</label>
+        <input type="text"
+               class="form-control bg-light"
+               name="province"
+               value="Cavite"
+               readonly>
+        <div class="form-text">Fixed community location.</div>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Other Location Info</label>
+        <input type="text"
+               class="form-control"
+               name="other_location_info"
+               value="<?= esc($home['other_location_info'] ?? '') ?>"
+               placeholder="Optional landmark, street, block, etc.">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Length of Residency in the Barangay</label>
+        <input type="text"
+               class="form-control"
+               name="length_of_residency"
+               value="<?= esc($home['length_of_residency'] ?? '') ?>"
+               placeholder="Example: 5 years"
+               required>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Residential Type</label>
+        <?php $residentialType = trim((string)($home['residential_type'] ?? '')); ?>
+        <select class="form-select" name="residential_type" required>
+          <option value="">Select residential type</option>
+          <option value="Owner" <?= $residentialType === 'Owner' ? 'selected' : '' ?>>Owner</option>
+          <option value="Renter/Tenant" <?= $residentialType === 'Renter/Tenant' ? 'selected' : '' ?>>Renter/Tenant</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Emergency Contact Person</label>
+        <input type="text"
+               class="form-control"
+               name="emergency_contact_person"
+               value="<?= esc($home['emergency_contact_person'] ?? '') ?>"
+               required>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Emergency Contact Number</label>
+        <input type="text"
+               class="form-control"
+               name="emergency_contact_number"
+               value="<?= esc($home['emergency_contact_number'] ?? '') ?>"
+               required>
       </div>
 
       <div class="col-12">
@@ -381,14 +452,41 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
   $last_name       = trim((string)($_POST['last_name'] ?? ''));
   $contact_number  = trim((string)($_POST['contact_number'] ?? ''));
   $email           = trim((string)($_POST['email'] ?? ''));
-  $phase_in        = trim((string)($_POST['phase'] ?? ''));
-  $house_lot_number= trim((string)($_POST['house_lot_number'] ?? ''));
-  $lat             = trim((string)($_POST['latitude'] ?? ''));
-  $lng             = trim((string)($_POST['longitude'] ?? ''));
+  $phase_in                 = trim((string)($_POST['phase'] ?? ''));
+  $house_lot_number         = trim((string)($_POST['house_lot_number'] ?? ''));
+  // Fixed South Meridian community location.
+  // Do not trust browser-submitted values for these fields.
+  $barangay                 = 'Salitran 4';
+  $city_municipality        = 'Dasmariñas City';
+  $province                 = 'Cavite';
+  $other_location_info      = trim((string)($_POST['other_location_info'] ?? ''));
+  $length_of_residency      = trim((string)($_POST['length_of_residency'] ?? ''));
+  $residential_type         = trim((string)($_POST['residential_type'] ?? ''));
+  $emergency_contact_person = trim((string)($_POST['emergency_contact_person'] ?? ''));
+  $emergency_contact_number = trim((string)($_POST['emergency_contact_number'] ?? ''));
+  $lat                      = trim((string)($_POST['latitude'] ?? ''));
+  $lng                      = trim((string)($_POST['longitude'] ?? ''));
 
-  if ($first_name === '' || $last_name === '' || $contact_number === '' || $email === '' ||
-      $phase_in === '' || $house_lot_number === '') {
+  if (
+    $first_name === '' ||
+    $last_name === '' ||
+    $contact_number === '' ||
+    $email === '' ||
+    $phase_in === '' ||
+    $house_lot_number === '' ||
+    $barangay === '' ||
+    $city_municipality === '' ||
+    $province === '' ||
+    $length_of_residency === '' ||
+    $residential_type === '' ||
+    $emergency_contact_person === '' ||
+    $emergency_contact_number === ''
+  ) {
     json_out(['success' => false, 'message' => 'Please fill in all required fields.']);
+  }
+
+  if (!in_array($residential_type, ['Owner', 'Renter/Tenant'], true)) {
+    json_out(['success' => false, 'message' => 'Invalid residential type.']);
   }
 
   // Lock phase if not superadmin
@@ -465,6 +563,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
       email=?,
       phase=?,
       house_lot_number=?,
+      barangay=?,
+      city_municipality=?,
+      province=?,
+      other_location_info=?,
+      length_of_residency=?,
+      residential_type=?,
+      emergency_contact_person=?,
+      emergency_contact_number=?,
       latitude=?,
       longitude=?,
       valid_id_path=?,
@@ -474,7 +580,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
   ");
 
   $stmt->bind_param(
-    "sssssssssssi",
+    "sssssssssssssssssssi",
     $first_name,
     $middle_name,
     $last_name,
@@ -482,6 +588,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     $email,
     $phase,
     $house_lot_number,
+    $barangay,
+    $city_municipality,
+    $province,
+    $other_location_info,
+    $length_of_residency,
+    $residential_type,
+    $emergency_contact_person,
+    $emergency_contact_number,
     $lat,
     $lng,
     $valid_id_path,

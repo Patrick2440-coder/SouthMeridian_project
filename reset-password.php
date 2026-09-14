@@ -1,6 +1,7 @@
 <?php
-$conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
-if ($conn->connect_error) die("DB error.");
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+require_once 'config/database.php';
 
 $token = $_GET['token'] ?? '';
 $token = trim($token);

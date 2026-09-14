@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'admin_access.php';
+require_once '../config/database.php';
 requireAccess('homeowner_management');
 
 // ---------- Admin guard ----------
@@ -17,21 +18,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     exit;
 }
 
-// ---------- DB ----------
-$conn = new mysqli("localhost", "u972459197_patrick", "Idle2440", "u972459197_south_meridian");
-if ($conn->connect_error) {
-    if (isset($_GET['ajax'])) {
-        http_response_code(500);
-        echo '<div class="p-4"><div class="alert alert-danger mb-0">Database connection failed.</div></div>';
-        exit;
-    }
-    die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
-
-function esc($v){
-    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-}
 
 /**
  * PHP 7.2 safe startsWith helper
