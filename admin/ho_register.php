@@ -4,8 +4,14 @@ require_once 'admin_access.php';
 require_once '../config/database.php';
 requireAccess('homeowner_management');
 
-function esc($v){
-  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+if (!function_exists('esc')) {
+    function esc($v): string {
+        return htmlspecialchars(
+            (string)$v,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+    }
 }
 
 function redirect_with_message(string $type, string $message, string $location = 'ho_register.php'){
@@ -14,11 +20,423 @@ function redirect_with_message(string $type, string $message, string $location =
   header("Location: " . $location);
   exit;
 }
-
 function normalizePhase($phase){
-  $phase = trim((string)$phase);
-  $allowed = ['Phase 1','Phase 2','Phase 3'];
-  return in_array($phase, $allowed, true) ? $phase : '';
+    $phase = trim((string)$phase);
+
+    $allowed = [
+        'Phase 1',
+        'Phase 2',
+        'Phase 3'
+    ];
+
+    return in_array(
+        $phase,
+        $allowed,
+        true
+    )
+        ? $phase
+        : '';
+}
+
+/*
+|--------------------------------------------------------------------------
+| Secure document upload
+|--------------------------------------------------------------------------
+*/
+function saveRegistrationDocument(
+    array $file,
+    string $documentType
+): string {
+
+    /*
+     * Allowed document types used in the filename.
+     */
+    if (
+        !in_array(
+            $documentType,
+            ['id', 'proof'],
+            true
+        )
+    ) {
+        throw new RuntimeException(
+            'Invalid document type.'
+        );
+    }
+
+
+    /*
+     * Make sure PHP received a normal upload.
+     */
+    if (
+        !isset($file['error']) ||
+        is_array($file['error'])
+    ) {
+        throw new RuntimeException(
+            'Invalid uploaded file.'
+        );
+    }
+
+
+    switch ($file['error']) {
+
+        case UPLOAD_ERR_OK:
+            break;
+
+        case UPLOAD_ERR_NO_FILE:
+            throw new RuntimeException(
+                'Please select the required document.'
+            );
+
+        case UPLOAD_ERR_INI_SIZE:
+        case UPLOAD_ERR_FORM_SIZE:
+            throw new RuntimeException(
+                'The uploaded document is too large.'
+            );
+
+        default:
+            throw new RuntimeException(
+                'The document upload failed.'
+            );
+    }
+
+
+    /*
+     * Maximum file size: 5 MB.
+     */
+    $maxSize =
+        5 * 1024 * 1024;
+
+
+    if (
+        (int)($file['size'] ?? 0) <= 0 ||
+        (int)$file['size'] > $maxSize
+    ) {
+
+        throw new RuntimeException(
+            'Documents must be 5 MB or smaller.'
+        );
+    }
+
+
+    $tmpName =
+        (string)($file['tmp_name'] ?? '');
+
+
+    if (
+        $tmpName === '' ||
+        !is_uploaded_file($tmpName)
+    ) {
+
+        throw new RuntimeException(
+            'Invalid uploaded document.'
+        );
+    }
+
+
+    /*
+     * Detect the REAL file MIME type.
+     * Never trust $_FILES["type"].
+     */
+    $finfo =
+        new finfo(
+            FILEINFO_MIME_TYPE
+        );
+
+
+    $mimeType =
+        $finfo->file(
+            $tmpName
+        );
+
+
+    $allowedTypes = [
+
+        'image/jpeg' =>
+            'jpg',
+
+        'image/png' =>
+            'png',
+
+        'application/pdf' =>
+            'pdf'
+    ];
+
+
+    if (
+        !isset(
+            $allowedTypes[
+                $mimeType
+            ]
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Only JPG, PNG, and PDF documents are allowed.'
+        );
+    }
+
+
+    $extension =
+        $allowedTypes[
+            $mimeType
+        ];
+
+
+    /*
+     * Project-root uploads directory.
+     */
+    $uploadDirFs =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        'uploads' .
+        DIRECTORY_SEPARATOR;
+
+
+    if (
+        !is_dir($uploadDirFs) &&
+        !mkdir(
+            $uploadDirFs,
+            0755,
+            true
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Unable to create upload directory.'
+        );
+    }
+
+
+    /*
+     * Random server-generated filename.
+     *
+     * Example:
+     * 28ba8f...._id.jpg
+     */
+    $fileName =
+        bin2hex(
+            random_bytes(16)
+        ) .
+        '_' .
+        $documentType .
+        '.' .
+        $extension;
+
+
+    $filePath =
+        $uploadDirFs .
+        $fileName;
+
+
+    if (
+        !move_uploaded_file(
+            $tmpName,
+            $filePath
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Failed to save uploaded document.'
+        );
+    }
+
+
+    /*
+     * Path stored in database.
+     */
+    return
+        'uploads/' .
+        $fileName;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Verify a document carried from Step 1 to Step 2
+|--------------------------------------------------------------------------
+*/
+function validRegistrationDocument(
+    string $dbPath,
+    string $documentType
+): bool {
+
+    if (
+        !in_array(
+            $documentType,
+            ['id', 'proof'],
+            true
+        )
+    ) {
+        return false;
+    }
+
+
+    /*
+     * Only accept filenames generated by
+     * saveRegistrationDocument().
+     */
+    $pattern =
+        '~^uploads/' .
+        '[a-f0-9]{32}_' .
+        preg_quote(
+            $documentType,
+            '~'
+        ) .
+        '\.(?:jpg|png|pdf)$~D';
+
+
+    if (
+        !preg_match(
+            $pattern,
+            $dbPath
+        )
+    ) {
+
+        return false;
+    }
+
+
+    $fullPath =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        str_replace(
+            '/',
+            DIRECTORY_SEPARATOR,
+            $dbPath
+        );
+
+
+    return is_file(
+        $fullPath
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| Official South Meridian Block / Lot Mapping
+|--------------------------------------------------------------------------
+*/
+function loadSouthMeridianLocations(): array
+{
+    $path =
+        __DIR__ .
+        '/southmeri_block_lot_mapping.json';
+
+    if (!is_readable($path)) {
+        throw new RuntimeException(
+            'South Meridian Block/Lot mapping file was not found.'
+        );
+    }
+
+    $decoded =
+        json_decode(
+            (string) file_get_contents($path),
+            true
+        );
+
+    if (!is_array($decoded)) {
+        throw new RuntimeException(
+            'South Meridian Block/Lot mapping file is invalid.'
+        );
+    }
+
+
+    $pageWidthEmu =
+        8.5 * 914400;
+
+    $pageHeightEmu =
+        11 * 914400;
+
+    $pageMarginEmu =
+        914400;
+
+    $markerCenterOffsetEmu =
+        90000;
+
+
+    $locations = [];
+
+
+    foreach ($decoded as $item) {
+
+        $block =
+            (int)($item['block'] ?? 0);
+
+        $lot =
+            (int)($item['lot'] ?? 0);
+
+
+        if (
+            $block <= 0 ||
+            $lot <= 0
+        ) {
+            continue;
+        }
+
+
+        $xEmu =
+            (float)($item['x_emu'] ?? 0);
+
+        $yEmu =
+            (float)($item['y_emu'] ?? 0);
+
+
+        $mapX =
+            (int) round(
+                (
+                    (
+                        $pageMarginEmu +
+                        $xEmu +
+                        $markerCenterOffsetEmu
+                    )
+                    /
+                    $pageWidthEmu
+                )
+                * 2550
+            );
+
+
+        $mapY =
+            (int) round(
+                (
+                    (
+                        $pageMarginEmu +
+                        $yEmu +
+                        $markerCenterOffsetEmu
+                    )
+                    /
+                    $pageHeightEmu
+                )
+                * 3300
+            );
+
+
+        $locations[
+            $block . ':' . $lot
+        ] = [
+            'block' =>
+                $block,
+
+            'lot' =>
+                $lot,
+
+            'street' =>
+                trim(
+                    (string)(
+                        $item['street'] ?? ''
+                    )
+                ),
+
+            'map_x' =>
+                $mapX,
+
+            'map_y' =>
+                $mapY
+        ];
+    }
+
+
+    return $locations;
 }
 
 function phase_prefix(string $phase): string {
@@ -26,43 +444,6 @@ function phase_prefix(string $phase): string {
   return $n > 0 ? ('P'.$n) : 'P';
 }
 
-/*
- * Generate public ID like:
- * Phase 1 + sequence 37 = P137
- * Phase 2 + sequence 5  = P25
- * Phase 3 + sequence 12 = P312
- */
-function generatePublicId(mysqli $conn, string $phase): string {
-  $phaseNumber = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
-  if ($phaseNumber <= 0) {
-    $phaseNumber = 1;
-  }
-
-  // Count homeowners in the same phase, then add 1
-  $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM homeowners WHERE phase = ?");
-  $stmt->bind_param("s", $phase);
-  $stmt->execute();
-  $result = $stmt->get_result()->fetch_assoc();
-  $stmt->close();
-
-  $sequence = (int)($result['total'] ?? 0) + 1;
-
-  do {
-    $candidate = 'P' . $phaseNumber . $sequence;
-
-    $stmt = $conn->prepare("SELECT id FROM homeowners WHERE public_id = ? LIMIT 1");
-    $stmt->bind_param("s", $candidate);
-    $stmt->execute();
-    $exists = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if ($exists) {
-      $sequence++;
-    }
-  } while ($exists);
-
-  return $candidate;
-}
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
@@ -91,53 +472,282 @@ if (!isset($permissions) || !is_array($permissions)) {
   $permissions = [];
 }
 
-// ---- STEP 2: Final submission with pinned map ----
+/*
+ * Load official subdivision locations once.
+ */
+try {
+
+    $southMeridianLocations =
+        loadSouthMeridianLocations();
+
+} catch (Throwable $e) {
+
+    redirect_with_message(
+        'danger',
+        $e->getMessage()
+    );
+}
+
+// ---- STEP 2: Final submission with confirmed Block/Lot location ----
 if (isset($_POST['submit_location'])) {
   try {
-    $first_name         = trim($_POST['first_name'] ?? '');
-    $middle_name        = trim($_POST['middle_name'] ?? '');
-    $last_name          = trim($_POST['last_name'] ?? '');
-    $contact_number     = trim($_POST['contact_number'] ?? '');
-    $email              = trim($_POST['email'] ?? '');
-    $password_raw       = (string)($_POST['password'] ?? '');
-    $confirm_password   = (string)($_POST['confirm_password'] ?? '');
-    $phase              = normalizePhase($_POST['phase'] ?? '');
-    $house_lot_number   = trim($_POST['house_lot_number'] ?? '');
-    $latitude           = trim((string)($_POST['latitude'] ?? ''));
-    $longitude          = trim((string)($_POST['longitude'] ?? ''));
+$first_name =
+    trim(
+        (string)(
+            $_POST['first_name'] ?? ''
+        )
+    );
 
-    if ($first_name === '' || $last_name === '' || $contact_number === '' || $email === '' ||
-        $password_raw === '' || $phase === '' || $house_lot_number === '') {
-      redirect_with_message('danger', 'Missing required fields.');
-    }
+$middle_name =
+    trim(
+        (string)(
+            $_POST['middle_name'] ?? ''
+        )
+    );
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-      redirect_with_message('danger', 'Invalid email address.');
-    }
+$last_name =
+    trim(
+        (string)(
+            $_POST['last_name'] ?? ''
+        )
+    );
 
-    if (strlen($password_raw) < 8) {
-      redirect_with_message('danger', 'Password must be at least 8 characters.');
-    }
+$contact_number =
+    trim(
+        (string)(
+            $_POST['contact_number'] ?? ''
+        )
+    );
 
-    if ($password_raw !== $confirm_password) {
-      redirect_with_message('danger', 'Password and Confirm Password do not match.');
-    }
+$email =
+    trim(
+        (string)(
+            $_POST['email'] ?? ''
+        )
+    );
 
-    if ($latitude === '' || $longitude === '' || !is_numeric($latitude) || !is_numeric($longitude)) {
-      redirect_with_message('danger', 'Please pin the homeowner location on the map.');
-    }
 
-    $latitudeF  = (float)$latitude;
-    $longitudeF = (float)$longitude;
+/*
+|--------------------------------------------------------------------------
+| Phase
+|--------------------------------------------------------------------------
+|
+| Normal admins are locked to their assigned phase.
+| Superadmin may choose Phase 1, 2 or 3.
+|
+*/
 
-    // carried from step1
-    $valid_id_path = (string)($_POST['valid_id_tmp'] ?? '');
-    $proof_path    = (string)($_POST['proof_tmp'] ?? '');
+if ($admin_role === 'superadmin') {
 
-    if ($valid_id_path === '' || $proof_path === '') {
-      redirect_with_message('danger', 'Missing uploaded documents. Please re-submit registration.');
-    }
+    $phase =
+        normalizePhase(
+            $_POST['phase'] ?? ''
+        );
 
+} else {
+
+    $phase =
+        normalizePhase(
+            $admin_phase
+        );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Block / Lot
+|--------------------------------------------------------------------------
+*/
+
+$block =
+    (int)(
+        $_POST['block'] ?? 0
+    );
+
+$lot =
+    (int)(
+        $_POST['lot'] ?? 0
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Required Fields
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $first_name === '' ||
+    $last_name === '' ||
+    $contact_number === '' ||
+    $email === '' ||
+    $phase === '' ||
+    $block <= 0 ||
+    $lot <= 0
+) {
+
+    redirect_with_message(
+        'danger',
+        'Missing required fields.'
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Verify Block / Lot against official South Meridian map
+|--------------------------------------------------------------------------
+*/
+
+$locationKey =
+    $block . ':' . $lot;
+
+
+if (
+    !isset(
+        $southMeridianLocations[
+            $locationKey
+        ]
+    )
+) {
+
+    redirect_with_message(
+        'danger',
+        "Block {$block}, Lot {$lot} is not a valid South Meridian property."
+    );
+}
+
+
+$location =
+    $southMeridianLocations[
+        $locationKey
+    ];
+
+
+/*
+|--------------------------------------------------------------------------
+| Canonical Location Values
+|--------------------------------------------------------------------------
+|
+| These values come from the official subdivision mapping.
+| Do NOT accept them directly from the browser.
+|
+*/
+
+$street =
+    trim(
+        (string)(
+            $location['street'] ?? ''
+        )
+    );
+
+$map_x =
+    (int)(
+        $location['map_x'] ?? 0
+    );
+
+$map_y =
+    (int)(
+        $location['map_y'] ?? 0
+    );
+
+
+$house_lot_number =
+    "Block {$block} Lot {$lot}";
+
+
+$barangay =
+    'Salitran IV';
+
+$city_municipality =
+    'Dasmarinas City';
+
+$province =
+    'Cavite';
+
+$region =
+    'CALABARZON';
+
+$zip_code =
+    '4114';
+
+$country =
+    'Philippines';
+
+
+/*
+|--------------------------------------------------------------------------
+| Validate account fields
+|--------------------------------------------------------------------------
+*/
+
+if (
+    !filter_var(
+        $email,
+        FILTER_VALIDATE_EMAIL
+    )
+) {
+
+    redirect_with_message(
+        'danger',
+        'Invalid email address.'
+    );
+}
+
+
+if (
+    strlen(
+        $contact_number
+    ) > 15
+) {
+
+    redirect_with_message(
+        'danger',
+        'Contact number must not exceed 15 characters.'
+    );
+}
+
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Documents carried from Step 1
+|--------------------------------------------------------------------------
+*/
+
+$valid_id_path =
+    trim(
+        (string)(
+            $_POST['valid_id_tmp'] ?? ''
+        )
+    );
+
+$proof_path =
+    trim(
+        (string)(
+            $_POST['proof_tmp'] ?? ''
+        )
+    );
+
+
+if (
+    !validRegistrationDocument(
+        $valid_id_path,
+        'id'
+    )
+    ||
+    !validRegistrationDocument(
+        $proof_path,
+        'proof'
+    )
+) {
+
+    redirect_with_message(
+        'danger',
+        'The uploaded documents are missing or invalid. Please restart the registration.'
+    );
+}
     // check duplicate email first
     $stmtCheck = $conn->prepare("SELECT id FROM homeowners WHERE email = ? LIMIT 1");
     $stmtCheck->bind_param("s", $email);
@@ -167,58 +777,214 @@ if (isset($_POST['submit_location'])) {
       $assigned_admin_id = (int)$resAdmin['id'];
     }
 
-    $password  = password_hash($password_raw, PASSWORD_DEFAULT);
-    $status    = 'pending';
-    $public_id = generatePublicId($conn, $phase);
+/*
+|--------------------------------------------------------------------------
+| Temporary Pending Account Password
+|--------------------------------------------------------------------------
+|
+| The admin does not choose the homeowner password.
+| A random password is stored while the account is pending.
+| The homeowner will set the real password after approval.
+|
+*/
 
-    $conn->begin_transaction();
+$temporaryPassword =
+    bin2hex(
+        random_bytes(32)
+    );
 
-    $stmtHome = $conn->prepare("
-      INSERT INTO homeowners
-      (
+$password =
+    password_hash(
+        $temporaryPassword,
+        PASSWORD_DEFAULT
+    );
+
+unset(
+    $temporaryPassword
+);
+
+$status = 'pending';
+
+$conn->begin_transaction();
+
+$stmtHome = $conn->prepare("
+    INSERT INTO homeowners
+    (
         public_id,
+
         first_name,
         middle_name,
         last_name,
+
         contact_number,
         email,
         password,
+        must_change_password,
+
         phase,
+
         house_lot_number,
+        block,
+        lot,
+        street,
+
+        barangay,
+        city_municipality,
+        province,
+        region,
+        zip_code,
+        country,
+
         valid_id_path,
         proof_of_billing_path,
-        latitude,
-        longitude,
+
+        map_x,
+        map_y,
+
         admin_id,
         status
-      )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ");
+    )
+VALUES
+(
+    NULL,
 
-    $stmtHome->bind_param(
-      "sssssssssssddis",
-      $public_id,
-      $first_name,
-      $middle_name,
-      $last_name,
-      $contact_number,
-      $email,
-      $password,
-      $phase,
-      $house_lot_number,
-      $valid_id_path,
-      $proof_path,
-      $latitudeF,
-      $longitudeF,
-      $assigned_admin_id,
-      $status
+    ?,?,?,
+
+    ?,?,?,
+    1,
+
+    ?,
+
+    ?,?,?,?,
+
+    ?,?,?,?,?,?,
+
+    ?,?,
+
+    ?,?,
+
+    ?,?
+)
+");
+
+$stmtHome->bind_param(
+    "ssssssssiisssssssssiiis",
+
+    $first_name,
+    $middle_name,
+    $last_name,
+
+    $contact_number,
+    $email,
+    $password,
+
+    $phase,
+
+    $house_lot_number,
+    $block,
+    $lot,
+    $street,
+
+    $barangay,
+    $city_municipality,
+    $province,
+    $region,
+    $zip_code,
+    $country,
+
+    $valid_id_path,
+    $proof_path,
+
+    $map_x,
+    $map_y,
+
+    $assigned_admin_id,
+    $status
+);
+
+$stmtHome->execute();
+
+$homeowner_id =
+    (int)$stmtHome->insert_id;
+
+$stmtHome->close();
+
+
+/*
+|--------------------------------------------------------------------------
+| Generate Public Homeowner ID
+|--------------------------------------------------------------------------
+|
+| Public ID now uses the actual database homeowner ID.
+|
+| Examples:
+|
+| homeowner id 25 + Phase 1 = P125
+| homeowner id 26 + Phase 2 = P226
+| homeowner id 27 + Phase 3 = P327
+|
+*/
+
+$phaseNumber =
+    (int)filter_var(
+        $phase,
+        FILTER_SANITIZE_NUMBER_INT
     );
 
-    $stmtHome->execute();
-    $homeowner_id = $stmtHome->insert_id;
-    $stmtHome->close();
 
-    if (isset($_POST['member_first_name']) && is_array($_POST['member_first_name'])) {
+if (
+    $phaseNumber < 1 ||
+    $phaseNumber > 3
+) {
+
+    throw new RuntimeException(
+        'Unable to generate homeowner public ID.'
+    );
+}
+
+
+$public_id =
+    'P' .
+    $phaseNumber .
+    $homeowner_id;
+
+
+$stmtPublicId =
+    $conn->prepare("
+        UPDATE homeowners
+        SET public_id=?
+        WHERE id=?
+        LIMIT 1
+    ");
+
+
+$stmtPublicId->bind_param(
+    "si",
+    $public_id,
+    $homeowner_id
+);
+
+
+$stmtPublicId->execute();
+
+
+if ($stmtPublicId->affected_rows !== 1) {
+
+    $stmtPublicId->close();
+
+    throw new RuntimeException(
+        'Failed to generate homeowner public ID.'
+    );
+}
+
+
+$stmtPublicId->close();
+
+
+if (
+    isset($_POST['member_first_name']) &&
+    is_array($_POST['member_first_name'])
+) {
       $stmtMember = $conn->prepare("
         INSERT INTO household_members
         (homeowner_id, first_name, middle_name, last_name, relation)
@@ -276,47 +1042,63 @@ $proof_tmp = '';
 
 if ($showMap) {
   try {
-    $password_raw     = (string)($_POST['password'] ?? '');
-    $confirm_password = (string)($_POST['confirm_password'] ?? '');
 
-    if ($password_raw !== $confirm_password) {
-      redirect_with_message('danger', 'Password and Confirm Password do not match.');
+    /*
+|--------------------------------------------------------------------------
+| Secure document uploads
+|--------------------------------------------------------------------------
+*/
+
+$valid_id_tmp = '';
+$proof_tmp = '';
+
+
+try {
+
+    $valid_id_tmp =
+        saveRegistrationDocument(
+            $_FILES['valid_id'] ?? [],
+            'id'
+        );
+
+
+    $proof_tmp =
+        saveRegistrationDocument(
+            $_FILES['proof_of_billing'] ?? [],
+            'proof'
+        );
+
+
+} catch (Throwable $uploadError) {
+
+    /*
+     * If Valid ID was already saved
+     * but Proof of Billing failed,
+     * remove the first uploaded file.
+     */
+    if ($valid_id_tmp !== '') {
+
+        $validFsPath =
+            dirname(__DIR__) .
+            DIRECTORY_SEPARATOR .
+            str_replace(
+                '/',
+                DIRECTORY_SEPARATOR,
+                $valid_id_tmp
+            );
+
+
+        if (is_file($validFsPath)) {
+
+            @unlink(
+                $validFsPath
+            );
+        }
     }
 
-    if (empty($_FILES['valid_id']['tmp_name']) || empty($_FILES['proof_of_billing']['tmp_name'])) {
-      redirect_with_message('danger', 'Please upload Valid ID and Proof of Billing.');
-    }
 
-    // Save files to project-root /uploads and store DB path as uploads/...
-    $uploadDirFs = dirname(__DIR__) . "/uploads/";
-    $uploadDirDb = "uploads/";
-
-    if (!is_dir($uploadDirFs) && !mkdir($uploadDirFs, 0755, true)) {
-      redirect_with_message('danger', 'Failed to create upload directory.');
-    }
-
-    $validName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($_FILES['valid_id']['name']));
-    $proofName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($_FILES['proof_of_billing']['name']));
-
-    $stamp = time() . '_' . bin2hex(random_bytes(4));
-
-    $validDbPath = $uploadDirDb . $stamp . "_id_" . $validName;
-    $proofDbPath = $uploadDirDb . $stamp . "_proof_" . $proofName;
-
-    $validFsPath = $uploadDirFs . $stamp . "_id_" . $validName;
-    $proofFsPath = $uploadDirFs . $stamp . "_proof_" . $proofName;
-
-    if (!move_uploaded_file($_FILES['valid_id']['tmp_name'], $validFsPath)) {
-      redirect_with_message('danger', 'Failed to upload Valid ID.');
-    }
-
-    if (!move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $proofFsPath)) {
-      @unlink($validFsPath);
-      redirect_with_message('danger', 'Failed to upload Proof of Billing.');
-    }
-
-    $valid_id_tmp = $validDbPath;
-    $proof_tmp    = $proofDbPath;
+    throw $uploadError;
+}
 
   } catch (Throwable $e) {
     redirect_with_message('danger', $e->getMessage());
@@ -348,13 +1130,11 @@ if ($showMap) {
 	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
-	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	
 
 	<style>
 		:root{--brand:#077f46;}
 		.card-box{border-radius:14px}
-		#map{height:520px;width:100%}
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.step-pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#f8fafc;font-weight:800;font-size:12px}
@@ -462,42 +1242,146 @@ if ($showMap) {
 							</div>
 						</div>
 
-						<div class="row g-3 mb-4">
-							<div class="col-md-6">
-								<label class="form-label fw-semibold">Password</label>
-								<input type="password" name="password" class="form-control" minlength="8" required>
-							</div>
-							<div class="col-md-6">
-								<label class="form-label fw-semibold">Confirm Password</label>
-								<input type="password" name="confirm_password" class="form-control" minlength="8" required>
-							</div>
-						</div>
 
-						<div class="row g-3 mb-4">
-							<div class="col-md-6">
-								<label class="form-label fw-semibold">Phase</label>
-								<select name="phase" class="form-control" required>
-									<option value="" disabled selected>Select Phase</option>
-									<option value="Phase 1">Phase 1</option>
-									<option value="Phase 2">Phase 2</option>
-									<option value="Phase 3">Phase 3</option>
-								</select>
-							</div>
-							<div class="col-md-6">
-								<label class="form-label fw-semibold">House / Lot Number</label>
-								<input type="text" name="house_lot_number" class="form-control" required>
-							</div>
-						</div>
+<div class="row g-3 mb-4">
+
+    <div class="col-md-4">
+
+        <label class="form-label fw-semibold">
+            Phase
+        </label>
+
+        <?php if ($admin_role === 'superadmin'): ?>
+
+            <select
+                name="phase"
+                class="form-select"
+                required
+            >
+                <option
+                    value=""
+                    disabled
+                    selected
+                >
+                    Select Phase
+                </option>
+
+                <option value="Phase 1">
+                    Phase 1
+                </option>
+
+                <option value="Phase 2">
+                    Phase 2
+                </option>
+
+                <option value="Phase 3">
+                    Phase 3
+                </option>
+
+            </select>
+
+        <?php else: ?>
+
+            <input
+                type="text"
+                class="form-control"
+                value="<?= esc($admin_phase) ?>"
+                readonly
+            >
+
+            <input
+                type="hidden"
+                name="phase"
+                value="<?= esc($admin_phase) ?>"
+            >
+
+        <?php endif; ?>
+
+    </div>
+
+
+    <div class="col-md-4">
+
+        <label class="form-label fw-semibold">
+            Block
+        </label>
+
+        <select
+            name="block"
+            id="registerBlock"
+            class="form-select"
+            required
+        >
+
+            <option value="">
+                Select Block
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <div class="col-md-4">
+
+        <label class="form-label fw-semibold">
+            Lot
+        </label>
+
+        <select
+            name="lot"
+            id="registerLot"
+            class="form-select"
+            required
+            disabled
+        >
+
+            <option value="">
+                Select Block First
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <div class="col-12">
+
+        <div
+            id="selectedPropertyInfo"
+            class="alert alert-light border mb-0"
+        >
+
+            Select a Block and Lot to view the
+            official South Meridian property location.
+
+        </div>
+
+    </div>
+
+</div>
 
 						<h5 class="mt-4 mb-3 border-bottom pb-2">Required Documents</h5>
 						<div class="row g-4 mb-4">
 							<div class="col-md-6">
 								<label class="form-label fw-semibold">Valid ID</label>
-								<input type="file" name="valid_id" class="form-control" required>
+								<input
+    type="file"
+    name="valid_id"
+    class="form-control"
+    accept=".jpg,.jpeg,.png,.pdf"
+    required
+>
 							</div>
 							<div class="col-md-6">
 								<label class="form-label fw-semibold">Proof of Billing</label>
-								<input type="file" name="proof_of_billing" class="form-control" required>
+								<input
+    type="file"
+    name="proof_of_billing"
+    class="form-control"
+    accept=".jpg,.jpeg,.png,.pdf"
+    required
+>
 							</div>
 						</div>
 
@@ -533,92 +1417,295 @@ if ($showMap) {
 						<button type="button" class="btn btn-outline-success mb-3" onclick="addMember()">+ Add Member</button>
 
 						<div class="d-flex justify-content-end">
-							<button type="submit" name="registration_submit" class="btn btn-success px-4">
-								Next: Pin Location
-							</button>
+<button
+    type="submit"
+    name="registration_submit"
+    class="btn btn-success px-4"
+>
+    Next: Confirm Location
+</button>
 						</div>
 					</form>
 
-				<?php else: ?>
-					<div class="d-flex justify-content-between align-items-center mb-2">
-						<span class="step-pill">✅ Step 1: Details</span>
-						<span class="step-pill">📍 Step 2: Pin Location</span>
-					</div>
+<?php else: ?>
 
-					<form method="POST">
-						<h5 class="mb-3 border-bottom pb-2 text-success">Pin Homeowner Location</h5>
+    <?php
 
-						<?php
-						$skipHiddenFields = ['registration_submit'];
-						foreach ($_POST as $key => $value) {
-							if (in_array($key, $skipHiddenFields, true)) {
-								continue;
-							}
+    $stepBlock =
+        (int)(
+            $_POST['block'] ?? 0
+        );
 
-							if (is_array($value)) {
-								foreach ($value as $v) {
-									echo '<input type="hidden" name="'.esc($key).'[]" value="'.esc($v).'">';
-								}
-							} else {
-								echo '<input type="hidden" name="'.esc($key).'" value="'.esc($value).'">';
-							}
-						}
-						?>
+    $stepLot =
+        (int)(
+            $_POST['lot'] ?? 0
+        );
 
-						<input type="hidden" name="valid_id_tmp" value="<?= esc($valid_id_tmp) ?>">
-						<input type="hidden" name="proof_tmp" value="<?= esc($proof_tmp) ?>">
 
-						<input type="hidden" name="latitude" id="latitude">
-						<input type="hidden" name="longitude" id="longitude">
+    $stepLocationKey =
+        $stepBlock .
+        ':' .
+        $stepLot;
 
-						<div id="map" style="border:2px solid var(--brand); border-radius:14px;"></div>
 
-						<button type="submit" name="submit_location" class="btn btn-success w-100 mt-3">
-							Submit Registration
-						</button>
-					</form>
+    $stepLocation =
+        $southMeridianLocations[
+            $stepLocationKey
+        ]
+        ?? null;
 
-					<script>
-						let map, marker;
 
-						document.addEventListener('DOMContentLoaded', function(){
-							map = L.map('map').setView([14.3545, 120.946], 16);
+    if (!$stepLocation) {
 
-							L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-								attribution: '&copy; OpenStreetMap contributors'
-							}).addTo(map);
+        redirect_with_message(
+            'danger',
+            'The selected Block and Lot could not be found on the official South Meridian map.'
+        );
+    }
 
-							const allowedArea = L.polygon([
-								[14.357391, 120.943993],
-								[14.351903, 120.944937],
-								[14.352257, 120.948118],
-								[14.357828, 120.947329]
-							], { color: 'green' }).addTo(map);
 
-							map.fitBounds(allowedArea.getBounds());
-							const center = allowedArea.getBounds().getCenter();
+    $stepMapX =
+        (int)$stepLocation['map_x'];
 
-							marker = L.marker(center, { draggable:true }).addTo(map);
+    $stepMapY =
+        (int)$stepLocation['map_y'];
 
-							function setHidden(pos){
-								document.getElementById('latitude').value = pos.lat;
-								document.getElementById('longitude').value = pos.lng;
-							}
+    $stepStreet =
+        trim(
+            (string)(
+                $stepLocation['street'] ?? ''
+            )
+        );
 
-							marker.on('dragend', function(e){
-								setHidden(e.target.getLatLng());
-							});
 
-							map.on('click', function(e){
-								marker.setLatLng(e.latlng);
-								setHidden(e.latlng);
-							});
+    $markerLeft =
+        ($stepMapX / 2550) * 100;
 
-							setHidden(center);
-							setTimeout(function(){ map.invalidateSize(); }, 250);
-						});
-					</script>
-				<?php endif; ?>
+    $markerTop =
+        ($stepMapY / 3300) * 100;
+
+    ?>
+
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+
+        <span class="step-pill">
+            ✅ Step 1: Details
+        </span>
+
+        <span class="step-pill">
+            📍 Step 2: Confirm Location
+        </span>
+
+    </div>
+
+
+    <form method="POST">
+
+        <h5 class="mb-3 border-bottom pb-2 text-success">
+            Confirm Property Location
+        </h5>
+
+
+        <?php
+
+        /*
+         * Carry Step 1 fields to final submission.
+         */
+        $skipHiddenFields = [
+            'registration_submit'
+        ];
+
+
+        foreach (
+            $_POST as
+            $key =>
+            $value
+        ) {
+
+            if (
+                in_array(
+                    $key,
+                    $skipHiddenFields,
+                    true
+                )
+            ) {
+                continue;
+            }
+
+
+            if (is_array($value)) {
+
+                foreach (
+                    $value as
+                    $v
+                ) {
+
+                    echo
+                        '<input type="hidden" name="' .
+                        esc($key) .
+                        '[]" value="' .
+                        esc($v) .
+                        '">';
+                }
+
+            } else {
+
+                echo
+                    '<input type="hidden" name="' .
+                    esc($key) .
+                    '" value="' .
+                    esc($value) .
+                    '">';
+            }
+        }
+
+        ?>
+
+
+        <input
+            type="hidden"
+            name="valid_id_tmp"
+            value="<?= esc($valid_id_tmp) ?>"
+        >
+
+        <input
+            type="hidden"
+            name="proof_tmp"
+            value="<?= esc($proof_tmp) ?>"
+        >
+
+
+        <div class="alert alert-success">
+
+            <strong>
+                Selected Property
+            </strong>
+
+            <br>
+
+            Phase:
+            <?= esc(
+                $admin_role === 'superadmin'
+                    ? ($_POST['phase'] ?? '')
+                    : $admin_phase
+            ) ?>
+
+            <br>
+
+            Block:
+            <?= (int)$stepBlock ?>
+
+            <br>
+
+            Lot:
+            <?= (int)$stepLot ?>
+
+            <?php if ($stepStreet !== ''): ?>
+
+                <br>
+
+                Street:
+                <?= esc($stepStreet) ?>
+
+            <?php endif; ?>
+
+        </div>
+
+
+        <div
+            style="
+                position:relative;
+                width:100%;
+                max-width:850px;
+                margin:0 auto;
+                overflow:hidden;
+                border:2px solid var(--brand);
+                border-radius:14px;
+                background:#f3f4f6;
+            "
+        >
+
+            <img
+                src="../assets/img/south_meridian_block_lot_map.png"
+                alt="South Meridian Block and Lot Map"
+                style="
+                    display:block;
+                    width:100%;
+                    height:auto;
+                "
+            >
+
+
+            <div
+                title="Block <?= (int)$stepBlock ?>, Lot <?= (int)$stepLot ?>"
+                style="
+                    position:absolute;
+
+                    left:
+                        <?= esc(
+                            number_format(
+                                $markerLeft,
+                                4,
+                                '.',
+                                ''
+                            )
+                        ) ?>%;
+
+                    top:
+                        <?= esc(
+                            number_format(
+                                $markerTop,
+                                4,
+                                '.',
+                                ''
+                            )
+                        ) ?>%;
+
+                    transform:
+                        translate(-50%, -100%);
+
+                    font-size:30px;
+
+                    color:#dc3545;
+
+                    text-shadow:
+                        0 1px 4px rgba(0,0,0,.45);
+
+                    z-index:5;
+                "
+            >
+                📍
+            </div>
+
+        </div>
+
+
+        <div class="text-center mt-2 text-muted">
+
+            Block <?= (int)$stepBlock ?>,
+            Lot <?= (int)$stepLot ?>
+
+            <?php if ($stepStreet !== ''): ?>
+
+                · <?= esc($stepStreet) ?>
+
+            <?php endif; ?>
+
+        </div>
+
+
+        <button
+            type="submit"
+            name="submit_location"
+            class="btn btn-success w-100 mt-3"
+        >
+            Confirm &amp; Submit Registration
+        </button>
+
+    </form>
+
+<?php endif; ?>
 
 			</div>
 
@@ -674,5 +1761,227 @@ if ($showMap) {
 	  });
 	});
 	</script>
+
+	<script>
+const registerLocations =
+    <?= json_encode(
+        array_values($southMeridianLocations),
+        JSON_UNESCAPED_UNICODE |
+        JSON_UNESCAPED_SLASHES
+    ) ?>;
+
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        const blockSelect =
+            document.getElementById(
+                'registerBlock'
+            );
+
+        const lotSelect =
+            document.getElementById(
+                'registerLot'
+            );
+
+        const propertyInfo =
+            document.getElementById(
+                'selectedPropertyInfo'
+            );
+
+
+        if (
+            !blockSelect ||
+            !lotSelect
+        ) {
+            return;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Build Block list
+        |--------------------------------------------------------------------------
+        */
+
+        const blocks =
+            [
+                ...new Set(
+                    registerLocations.map(
+                        item =>
+                            Number(
+                                item.block
+                            )
+                    )
+                )
+            ]
+            .filter(
+                Number.isFinite
+            )
+            .sort(
+                (a, b) =>
+                    a - b
+            );
+
+
+        blocks.forEach(
+            block => {
+
+                const option =
+                    document.createElement(
+                        'option'
+                    );
+
+                option.value =
+                    block;
+
+                option.textContent =
+                    'Block ' + block;
+
+                blockSelect.appendChild(
+                    option
+                );
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Block changed
+        |--------------------------------------------------------------------------
+        */
+
+        blockSelect.addEventListener(
+            'change',
+            function () {
+
+                const block =
+                    Number(
+                        this.value
+                    );
+
+
+                lotSelect.innerHTML =
+                    '<option value="">Select Lot</option>';
+
+
+                propertyInfo.innerHTML =
+                    'Select a Lot.';
+
+
+                if (!block) {
+
+                    lotSelect.disabled =
+                        true;
+
+                    return;
+                }
+
+
+                const lots =
+                    registerLocations
+                        .filter(
+                            item =>
+                                Number(
+                                    item.block
+                                ) === block
+                        )
+                        .sort(
+                            (a, b) =>
+                                Number(a.lot) -
+                                Number(b.lot)
+                        );
+
+
+                lots.forEach(
+                    item => {
+
+                        const option =
+                            document.createElement(
+                                'option'
+                            );
+
+                        option.value =
+                            item.lot;
+
+                        option.textContent =
+                            'Lot ' +
+                            item.lot;
+
+                        lotSelect.appendChild(
+                            option
+                        );
+                    }
+                );
+
+
+                lotSelect.disabled =
+                    false;
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Lot changed
+        |--------------------------------------------------------------------------
+        */
+
+        lotSelect.addEventListener(
+            'change',
+            function () {
+
+                const block =
+                    Number(
+                        blockSelect.value
+                    );
+
+                const lot =
+                    Number(
+                        lotSelect.value
+                    );
+
+
+                const location =
+                    registerLocations.find(
+                        item =>
+                            Number(
+                                item.block
+                            ) === block
+                            &&
+                            Number(
+                                item.lot
+                            ) === lot
+                    );
+
+
+                if (!location) {
+
+                    propertyInfo.innerHTML =
+                        'Select a valid property.';
+
+                    return;
+                }
+
+
+                propertyInfo.innerHTML =
+                    '<strong>Selected Property:</strong> ' +
+                    'Block ' +
+                    block +
+                    ', Lot ' +
+                    lot +
+                    (
+                        location.street
+                            ? ' · ' +
+                              location.street
+                            : ''
+                    );
+            }
+        );
+
+    }
+);
+</script>
 </body>
 </html>

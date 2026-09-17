@@ -26,26 +26,488 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 }
 
 
-function esc($v) {
-  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+if (!function_exists('esc')) {
+    function esc($v): string {
+        return htmlspecialchars(
+            (string)$v,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+    }
+}
+/*
+|--------------------------------------------------------------------------
+| Secure optional document upload
+|--------------------------------------------------------------------------
+*/
+function saveOptionalHomeownerDocument(
+    array $file,
+    string $documentType
+): ?string {
+
+    if (
+        !in_array(
+            $documentType,
+            ['id', 'proof'],
+            true
+        )
+    ) {
+        throw new RuntimeException(
+            'Invalid document type.'
+        );
+    }
+
+
+    /*
+     * No replacement selected.
+     */
+    if (
+        empty($file) ||
+        (
+            isset($file['error']) &&
+            $file['error'] === UPLOAD_ERR_NO_FILE
+        )
+    ) {
+        return null;
+    }
+
+
+    if (
+        !isset($file['error']) ||
+        is_array($file['error'])
+    ) {
+        throw new RuntimeException(
+            'Invalid uploaded file.'
+        );
+    }
+
+
+    switch ($file['error']) {
+
+        case UPLOAD_ERR_OK:
+            break;
+
+        case UPLOAD_ERR_INI_SIZE:
+        case UPLOAD_ERR_FORM_SIZE:
+
+            throw new RuntimeException(
+                'The uploaded document is too large.'
+            );
+
+        default:
+
+            throw new RuntimeException(
+                'The document upload failed.'
+            );
+    }
+
+
+    /*
+     * Maximum size: 5 MB
+     */
+    $maxSize =
+        5 * 1024 * 1024;
+
+
+    $fileSize =
+        (int)($file['size'] ?? 0);
+
+
+    if (
+        $fileSize <= 0 ||
+        $fileSize > $maxSize
+    ) {
+
+        throw new RuntimeException(
+            'Documents must be 5 MB or smaller.'
+        );
+    }
+
+
+    $tmpName =
+        (string)($file['tmp_name'] ?? '');
+
+
+    if (
+        $tmpName === '' ||
+        !is_uploaded_file($tmpName)
+    ) {
+
+        throw new RuntimeException(
+            'Invalid uploaded document.'
+        );
+    }
+
+
+    /*
+     * Detect actual MIME type.
+     */
+    $finfo =
+        new finfo(
+            FILEINFO_MIME_TYPE
+        );
+
+
+    $mimeType =
+        $finfo->file(
+            $tmpName
+        );
+
+
+    $allowedTypes = [
+
+        'image/jpeg' =>
+            'jpg',
+
+        'image/png' =>
+            'png',
+
+        'application/pdf' =>
+            'pdf'
+    ];
+
+
+    if (
+        !isset(
+            $allowedTypes[$mimeType]
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Only JPG, PNG, and PDF documents are allowed.'
+        );
+    }
+
+
+    $extension =
+        $allowedTypes[$mimeType];
+
+
+    /*
+     * Project uploads folder
+     */
+    $uploadDir =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        'uploads' .
+        DIRECTORY_SEPARATOR;
+
+
+    if (
+        !is_dir($uploadDir) &&
+        !mkdir(
+            $uploadDir,
+            0755,
+            true
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Unable to create upload directory.'
+        );
+    }
+
+
+    /*
+     * Random server-generated filename
+     */
+    $fileName =
+        bin2hex(
+            random_bytes(16)
+        ) .
+        '_' .
+        $documentType .
+        '.' .
+        $extension;
+
+
+    $fullPath =
+        $uploadDir .
+        $fileName;
+
+
+    if (
+        !move_uploaded_file(
+            $tmpName,
+            $fullPath
+        )
+    ) {
+
+        throw new RuntimeException(
+            'Failed to save uploaded document.'
+        );
+    }
+
+
+    return
+        'uploads/' .
+        $fileName;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Safely remove homeowner document
+|--------------------------------------------------------------------------
+*/
+function removeHomeownerDocument(
+    string $dbPath
+): void {
+
+    $dbPath =
+        str_replace(
+            '\\',
+            '/',
+            trim($dbPath)
+        );
+
+
+    /*
+     * Only delete files inside uploads/
+     */
+    if (
+        !preg_match(
+            '~^uploads/[A-Za-z0-9._-]+$~D',
+            $dbPath
+        )
+    ) {
+        return;
+    }
+
+
+    $fullPath =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        str_replace(
+            '/',
+            DIRECTORY_SEPARATOR,
+            $dbPath
+        );
+
+
+    if (
+        is_file($fullPath)
+    ) {
+
+        @unlink(
+            $fullPath
+        );
+    }
+}
+/*
+|--------------------------------------------------------------------------
+| Official South Meridian Block / Lot Mapping
+|--------------------------------------------------------------------------
+*/
+function loadSouthMeridianLocations(): array
+{
+    $path =
+        __DIR__ .
+        '/southmeri_block_lot_mapping.json';
+
+    if (!is_readable($path)) {
+        throw new RuntimeException(
+            'South Meridian Block/Lot mapping file was not found.'
+        );
+    }
+
+    $decoded =
+        json_decode(
+            (string)file_get_contents($path),
+            true
+        );
+
+    if (!is_array($decoded)) {
+        throw new RuntimeException(
+            'South Meridian Block/Lot mapping file is invalid.'
+        );
+    }
+
+    $pageWidthEmu =
+        8.5 * 914400;
+
+    $pageHeightEmu =
+        11 * 914400;
+
+    $pageMarginEmu =
+        914400;
+
+    $markerCenterOffsetEmu =
+        90000;
+
+    $locations = [];
+
+    foreach ($decoded as $item) {
+
+        $block =
+            (int)($item['block'] ?? 0);
+
+        $lot =
+            (int)($item['lot'] ?? 0);
+
+        if (
+            $block <= 0 ||
+            $lot <= 0
+        ) {
+            continue;
+        }
+
+        $xEmu =
+            (float)($item['x_emu'] ?? 0);
+
+        $yEmu =
+            (float)($item['y_emu'] ?? 0);
+
+        $mapX =
+            (int)round(
+                (
+                    (
+                        $pageMarginEmu +
+                        $xEmu +
+                        $markerCenterOffsetEmu
+                    )
+                    /
+                    $pageWidthEmu
+                )
+                * 2550
+            );
+
+        $mapY =
+            (int)round(
+                (
+                    (
+                        $pageMarginEmu +
+                        $yEmu +
+                        $markerCenterOffsetEmu
+                    )
+                    /
+                    $pageHeightEmu
+                )
+                * 3300
+            );
+
+        $locations[
+            $block . ':' . $lot
+        ] = [
+            'block' =>
+                $block,
+
+            'lot' =>
+                $lot,
+
+            'street' =>
+                trim(
+                    (string)(
+                        $item['street'] ?? ''
+                    )
+                ),
+
+            'map_x' =>
+                $mapX,
+
+            'map_y' =>
+                $mapY
+        ];
+    }
+
+    return $locations;
+}
+
+
+function subdivision_block_lot(array $record): array
+{
+    $block =
+        (int)($record['block'] ?? 0);
+
+    $lot =
+        (int)($record['lot'] ?? 0);
+
+    if ($block <= 0 || $lot <= 0) {
+
+        $legacy =
+            trim(
+                (string)(
+                    $record[
+                        'house_lot_number'
+                    ] ?? ''
+                )
+            );
+
+        if (
+            preg_match(
+                '/(?:block|blk|b)\s*[-:]?\s*(\d+)\D+(?:lot|l)\s*[-:]?\s*(\d+)/i',
+                $legacy,
+                $match
+            )
+        ) {
+            $block =
+                (int)$match[1];
+
+            $lot =
+                (int)$match[2];
+        }
+    }
+
+    return [
+        $block,
+        $lot
+    ];
 }
 
 /* =========================
    4) HELPER FUNCTIONS
    ========================= */
 
-/* Student note:
-*/
-function admin_can_access_homeowner(mysqli $conn, string $admin_role, string $admin_phase, int $homeowner_id): bool {
-  if ($admin_role === 'superadmin') return true;
+function admin_can_access_homeowner(
+    mysqli $conn,
+    string $admin_role,
+    string $admin_phase,
+    int $homeowner_id
+): bool {
 
-  $stmt = $conn->prepare("SELECT id FROM homeowners WHERE id=? AND phase=? LIMIT 1");
-  $stmt->bind_param("is", $homeowner_id, $admin_phase);
-  $stmt->execute();
-  $ok = (bool)$stmt->get_result()->fetch_assoc();
-  $stmt->close();
+    if ($admin_role === 'superadmin') {
 
-  return $ok;
+        $stmt = $conn->prepare("
+            SELECT id
+            FROM homeowners
+            WHERE id=?
+              AND status='approved'
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            "i",
+            $homeowner_id
+        );
+
+    } else {
+
+        $stmt = $conn->prepare("
+            SELECT id
+            FROM homeowners
+            WHERE id=?
+              AND phase=?
+              AND status='approved'
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            "is",
+            $homeowner_id,
+            $admin_phase
+        );
+    }
+
+    $stmt->execute();
+
+    $ok =
+        (bool)$stmt
+            ->get_result()
+            ->fetch_assoc();
+
+    $stmt->close();
+
+    return $ok;
 }
 
 /* Get admin role + phase (fallback to DB if session missing) */
@@ -94,6 +556,21 @@ function stmt_bind(mysqli_stmt $stmt, string $types, array $values): void {
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
   $id = (int)($_GET['id'] ?? 0);
 
+  try {
+
+    $southMeridianLocations =
+        loadSouthMeridianLocations();
+
+} catch (Throwable $e) {
+
+    http_response_code(500);
+
+    exit(
+        '<div class="alert alert-danger">' .
+        esc($e->getMessage()) .
+        '</div>'
+    );
+}
   if ($id <= 0) {
     exit('<div class="p-4"><div class="alert alert-warning mb-0">Invalid ID.</div></div>');
   }
@@ -121,10 +598,94 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
   $members = $stmt->get_result(); // keep result to loop later
   $stmt->close();
 
-  $lat = (string)($home['latitude'] ?? '');
-  $lng = (string)($home['longitude'] ?? '');
-  $validId = (string)($home['valid_id_path'] ?? '');
-  $proof   = (string)($home['proof_of_billing_path'] ?? '');
+ [
+    $currentBlock,
+    $currentLot
+] = subdivision_block_lot($home);
+
+
+$currentLocation =
+    $southMeridianLocations[
+        $currentBlock . ':' . $currentLot
+    ]
+    ?? null;
+
+
+$currentStreet =
+    $currentLocation
+        ? trim(
+            (string)(
+                $currentLocation['street'] ?? ''
+            )
+        )
+        : trim(
+            (string)(
+                $home['street'] ?? ''
+            )
+        );
+
+
+/*
+|--------------------------------------------------------------------------
+| Available Blocks
+|--------------------------------------------------------------------------
+*/
+
+$availableBlocks = [];
+
+foreach ($southMeridianLocations as $location) {
+
+    $availableBlocks[] =
+        (int)$location['block'];
+}
+
+$availableBlocks =
+    array_values(
+        array_unique(
+            $availableBlocks
+        )
+    );
+
+sort(
+    $availableBlocks,
+    SORT_NUMERIC
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Lots for current Block
+|--------------------------------------------------------------------------
+*/
+
+$currentLots = [];
+
+if ($currentBlock > 0) {
+
+    foreach ($southMeridianLocations as $location) {
+
+        if (
+            (int)$location['block'] ===
+            $currentBlock
+        ) {
+
+            $currentLots[] =
+                (int)$location['lot'];
+        }
+    }
+
+    sort(
+        $currentLots,
+        SORT_NUMERIC
+    );
+}
+
+
+$validId =
+    (string)($home['valid_id_path'] ?? '');
+
+$proof =
+    (string)($home['proof_of_billing_path'] ?? '');
 
   // ✅ clear buffer so we output clean HTML only
   ob_clean();
@@ -176,10 +737,92 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
         <?php endif; ?>
       </div>
 
-      <div class="col-md-6">
-        <label class="form-label fw-semibold">House / Lot Number</label>
-        <input type="text" class="form-control" name="house_lot_number" value="<?= esc($home['house_lot_number'] ?? '') ?>" required>
-      </div>
+<div class="col-md-3">
+
+    <label class="form-label fw-semibold">
+        Block
+    </label>
+
+    <select
+        class="form-select"
+        name="block"
+        id="editBlock"
+        required
+    >
+
+        <option value="">
+            Select Block
+        </option>
+
+        <?php foreach ($availableBlocks as $block): ?>
+
+            <option
+                value="<?= (int)$block ?>"
+                <?= $block === $currentBlock ? 'selected' : '' ?>
+            >
+                Block <?= (int)$block ?>
+            </option>
+
+        <?php endforeach; ?>
+
+    </select>
+
+</div>
+
+
+<div class="col-md-3">
+
+    <label class="form-label fw-semibold">
+        Lot
+    </label>
+
+    <select
+        class="form-select"
+        name="lot"
+        id="editLot"
+        required
+        <?= $currentBlock <= 0 ? 'disabled' : '' ?>
+    >
+
+        <option value="">
+            Select Lot
+        </option>
+
+        <?php foreach ($currentLots as $lot): ?>
+
+            <option
+                value="<?= (int)$lot ?>"
+                <?= $lot === $currentLot ? 'selected' : '' ?>
+            >
+                Lot <?= (int)$lot ?>
+            </option>
+
+        <?php endforeach; ?>
+
+    </select>
+
+</div>
+
+
+<div class="col-md-6">
+
+    <label class="form-label fw-semibold">
+        Street
+    </label>
+
+    <input
+        type="text"
+        class="form-control bg-light"
+        id="editStreet"
+        value="<?= esc($currentStreet) ?>"
+        readonly
+    >
+
+    <div class="form-text">
+        Street is automatically determined by the selected Block and Lot.
+    </div>
+
+</div>
 
       <div class="col-12">
         <hr class="my-2">
@@ -194,20 +837,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
         <input type="text"
                class="form-control bg-light"
                name="barangay"
-               value="Salitran 4"
+               value="Salitran IV"
                readonly>
         <div class="form-text">Fixed community location.</div>
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label fw-semibold">City / Municipality</label>
-        <input type="text"
-               class="form-control bg-light"
-               name="city_municipality"
-               value="Dasmariñas City"
-               readonly>
-        <div class="form-text">Fixed community location.</div>
-      </div>
+<div class="col-md-4">
+    <label class="form-label fw-semibold">City / Municipality</label>
+    <input type="text"
+           class="form-control bg-light"
+           name="city_municipality"
+           value="Dasmarinas City"
+           readonly>
+    <div class="form-text">Fixed community location.</div>
+</div>
 
       <div class="col-md-4">
         <label class="form-label fw-semibold">Province</label>
@@ -266,27 +909,80 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
                required>
       </div>
 
-      <div class="col-12">
-        <hr class="my-2">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div>
-            <div class="fw-bold">Pin Location</div>
-            <div class="text-muted" style="font-size:13px;">Drag the marker to update location.</div>
-          </div>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCenterMarker">Center Marker</button>
-            <button type="button" class="btn btn-outline-success btn-sm" id="btnUseCurrentMarker">Use Marker Position</button>
-          </div>
-        </div>
+<div class="col-12">
 
-        <input type="hidden" name="latitude" id="edit_lat" value="<?= esc($lat) ?>">
-        <input type="hidden" name="longitude" id="edit_lng" value="<?= esc($lng) ?>">
+    <hr class="my-2">
 
-        <div id="editMap"
-             data-lat="<?= esc($lat) ?>"
-             data-lng="<?= esc($lng) ?>"
-             style="height:420px; border:2px solid #077f46; border-radius:14px; overflow:hidden; margin-top:10px;"></div>
-      </div>
+    <div class="fw-bold mb-1">
+        Official Property Location
+    </div>
+
+    <div
+        class="text-muted mb-2"
+        style="font-size:13px;"
+    >
+        The property marker is automatically determined
+        from the selected Block and Lot.
+    </div>
+
+
+    <div
+        id="editPropertyInfo"
+        class="alert alert-light border mb-3"
+    >
+
+        <?php if (
+            $currentBlock > 0 &&
+            $currentLot > 0
+        ): ?>
+
+            <strong>Selected Property:</strong>
+
+            Block <?= (int)$currentBlock ?>,
+            Lot <?= (int)$currentLot ?>
+
+            <?php if ($currentStreet !== ''): ?>
+
+                · <?= esc($currentStreet) ?>
+
+            <?php endif; ?>
+
+        <?php else: ?>
+
+            Select a Block and Lot.
+
+        <?php endif; ?>
+
+    </div>
+
+
+    <div
+        id="editMap"
+        data-map-image="../assets/img/south_meridian_block_lot_map.png"
+        style="
+            height:420px;
+            border:2px solid #077f46;
+            border-radius:14px;
+            overflow:hidden;
+            background:#e9eef6;
+        "
+    ></div>
+
+
+    <script
+        type="application/json"
+        id="editLocationData"
+    ><?= json_encode(
+        array_values($southMeridianLocations),
+        JSON_UNESCAPED_UNICODE |
+        JSON_UNESCAPED_SLASHES |
+        JSON_HEX_TAG |
+        JSON_HEX_AMP |
+        JSON_HEX_APOS |
+        JSON_HEX_QUOT
+    ) ?></script>
+
+</div>
 
       <div class="col-12">
         <hr class="my-2">
@@ -298,7 +994,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
             <?php if ($validId): ?>
               <div class="small mb-1">Current: <a href="<?= esc($validId) ?>" target="_blank">Open</a></div>
             <?php endif; ?>
-            <input type="file" class="form-control" name="valid_id">
+            <input
+    type="file"
+    class="form-control"
+    name="valid_id"
+    accept=".jpg,.jpeg,.png,.pdf"
+>
           </div>
 
           <div class="col-md-6">
@@ -306,7 +1007,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'edit_homeowner') {
             <?php if ($proof): ?>
               <div class="small mb-1">Current: <a href="<?= esc($proof) ?>" target="_blank">Open</a></div>
             <?php endif; ?>
-            <input type="file" class="form-control" name="proof_of_billing">
+            <input
+    type="file"
+    class="form-control"
+    name="proof_of_billing"
+    accept=".jpg,.jpeg,.png,.pdf"
+>
           </div>
         </div>
       </div>
@@ -441,49 +1147,244 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
   if ($id <= 0) json_out(['success' => false, 'message' => 'Invalid ID']);
 
   [$admin_role, $admin_phase] = get_admin_phase_role($conn);
+  try {
+
+    $southMeridianLocations =
+        loadSouthMeridianLocations();
+
+} catch (Throwable $e) {
+
+    json_out([
+        'success' => false,
+        'message' => $e->getMessage()
+    ]);
+}
 
   if (!admin_can_access_homeowner($conn, $admin_role, $admin_phase, $id)) {
     json_out(['success' => false, 'message' => 'Not allowed']);
   }
 
-  // Read fields
-  $first_name      = trim((string)($_POST['first_name'] ?? ''));
-  $middle_name     = trim((string)($_POST['middle_name'] ?? ''));
-  $last_name       = trim((string)($_POST['last_name'] ?? ''));
-  $contact_number  = trim((string)($_POST['contact_number'] ?? ''));
-  $email           = trim((string)($_POST['email'] ?? ''));
-  $phase_in                 = trim((string)($_POST['phase'] ?? ''));
-  $house_lot_number         = trim((string)($_POST['house_lot_number'] ?? ''));
-  // Fixed South Meridian community location.
-  // Do not trust browser-submitted values for these fields.
-  $barangay                 = 'Salitran 4';
-  $city_municipality        = 'Dasmariñas City';
-  $province                 = 'Cavite';
-  $other_location_info      = trim((string)($_POST['other_location_info'] ?? ''));
-  $length_of_residency      = trim((string)($_POST['length_of_residency'] ?? ''));
-  $residential_type         = trim((string)($_POST['residential_type'] ?? ''));
-  $emergency_contact_person = trim((string)($_POST['emergency_contact_person'] ?? ''));
-  $emergency_contact_number = trim((string)($_POST['emergency_contact_number'] ?? ''));
-  $lat                      = trim((string)($_POST['latitude'] ?? ''));
-  $lng                      = trim((string)($_POST['longitude'] ?? ''));
+// Read homeowner fields
+$first_name =
+    trim(
+        (string)(
+            $_POST['first_name'] ?? ''
+        )
+    );
 
-  if (
+$middle_name =
+    trim(
+        (string)(
+            $_POST['middle_name'] ?? ''
+        )
+    );
+
+$last_name =
+    trim(
+        (string)(
+            $_POST['last_name'] ?? ''
+        )
+    );
+
+$contact_number =
+    trim(
+        (string)(
+            $_POST['contact_number'] ?? ''
+        )
+    );
+
+$email =
+    trim(
+        (string)(
+            $_POST['email'] ?? ''
+        )
+    );
+
+$phase_in =
+    trim(
+        (string)(
+            $_POST['phase'] ?? ''
+        )
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Official Block / Lot
+|--------------------------------------------------------------------------
+*/
+
+$block =
+    (int)(
+        $_POST['block'] ?? 0
+    );
+
+$lot =
+    (int)(
+        $_POST['lot'] ?? 0
+    );
+
+
+$locationKey =
+    $block . ':' . $lot;
+
+
+if (
+    $block <= 0 ||
+    $lot <= 0 ||
+    !isset(
+        $southMeridianLocations[
+            $locationKey
+        ]
+    )
+) {
+
+    json_out([
+        'success' => false,
+        'message' =>
+            'Please select a valid South Meridian Block and Lot.'
+    ]);
+}
+
+
+$location =
+    $southMeridianLocations[
+        $locationKey
+    ];
+
+
+$street =
+    trim(
+        (string)(
+            $location['street'] ?? ''
+        )
+    );
+
+$map_x =
+    (int)(
+        $location['map_x'] ?? 0
+    );
+
+$map_y =
+    (int)(
+        $location['map_y'] ?? 0
+    );
+
+
+$house_lot_number =
+    "Block {$block} Lot {$lot}";
+
+
+/*
+|--------------------------------------------------------------------------
+| Fixed South Meridian Address
+|--------------------------------------------------------------------------
+*/
+
+$barangay =
+    'Salitran IV';
+
+$city_municipality =
+    'Dasmarinas City';
+
+$province =
+    'Cavite';
+
+$region =
+    'CALABARZON';
+
+$zip_code =
+    '4114';
+
+$country =
+    'Philippines';
+
+
+/*
+|--------------------------------------------------------------------------
+| Other homeowner information
+|--------------------------------------------------------------------------
+*/
+
+$other_location_info =
+    trim(
+        (string)(
+            $_POST['other_location_info'] ?? ''
+        )
+    );
+
+$length_of_residency =
+    trim(
+        (string)(
+            $_POST['length_of_residency'] ?? ''
+        )
+    );
+
+$residential_type =
+    trim(
+        (string)(
+            $_POST['residential_type'] ?? ''
+        )
+    );
+
+$emergency_contact_person =
+    trim(
+        (string)(
+            $_POST['emergency_contact_person'] ?? ''
+        )
+    );
+
+$emergency_contact_number =
+    trim(
+        (string)(
+            $_POST['emergency_contact_number'] ?? ''
+        )
+    );
+if (
     $first_name === '' ||
     $last_name === '' ||
     $contact_number === '' ||
     $email === '' ||
     $phase_in === '' ||
-    $house_lot_number === '' ||
-    $barangay === '' ||
-    $city_municipality === '' ||
-    $province === '' ||
+    $block <= 0 ||
+    $lot <= 0 ||
     $length_of_residency === '' ||
     $residential_type === '' ||
     $emergency_contact_person === '' ||
     $emergency_contact_number === ''
-  ) {
-    json_out(['success' => false, 'message' => 'Please fill in all required fields.']);
-  }
+) {
+
+    json_out([
+        'success' => false,
+        'message' =>
+            'Please fill in all required fields.'
+    ]);
+}
+if (
+    !filter_var(
+        $email,
+        FILTER_VALIDATE_EMAIL
+    )
+) {
+
+    json_out([
+        'success' => false,
+        'message' =>
+            'Invalid email address.'
+    ]);
+}
+
+
+if (
+    strlen($contact_number) > 15
+) {
+
+    json_out([
+        'success' => false,
+        'message' =>
+            'Contact number must not exceed 15 characters.'
+    ]);
+}
 
   if (!in_array($residential_type, ['Owner', 'Renter/Tenant'], true)) {
     json_out(['success' => false, 'message' => 'Invalid residential type.']);
@@ -501,6 +1402,27 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
 
     if (!empty($row['phase'])) $phase = (string)$row['phase'];
   }
+  $allowedPhases = [
+    'Phase 1',
+    'Phase 2',
+    'Phase 3'
+];
+
+
+if (
+    !in_array(
+        $phase,
+        $allowedPhases,
+        true
+    )
+) {
+
+    json_out([
+        'success' => false,
+        'message' =>
+            'Invalid homeowner phase.'
+    ]);
+}
 
   // Check duplicate email (other homeowner)
   $stmt = $conn->prepare("SELECT id FROM homeowners WHERE email=? AND id<>? LIMIT 1");
@@ -513,102 +1435,294 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_homeowner') {
     json_out(['success' => false, 'message' => 'Email already exists for another homeowner.']);
   }
 
-  // Get current file paths
-  $stmt = $conn->prepare("SELECT valid_id_path, proof_of_billing_path FROM homeowners WHERE id=? LIMIT 1");
-  $stmt->bind_param("i", $id);
-  $stmt->execute();
-  $cur = $stmt->get_result()->fetch_assoc();
-  $stmt->close();
+/*
+|--------------------------------------------------------------------------
+| Current documents
+|--------------------------------------------------------------------------
+*/
 
-  $valid_id_path = (string)($cur['valid_id_path'] ?? '');
-  $proof_path    = (string)($cur['proof_of_billing_path'] ?? '');
+$stmt =
+    $conn->prepare("
+        SELECT
+            valid_id_path,
+            proof_of_billing_path
+        FROM homeowners
+        WHERE id=?
+        LIMIT 1
+    ");
 
-  // Upload folder
-  $fsUploadDir = __DIR__ . "/../uploads/";
-  $dbUploadDir = "uploads/";
+$stmt->bind_param(
+    "i",
+    $id
+);
 
-  if (!is_dir($fsUploadDir)) {
-    @mkdir($fsUploadDir, 0755, true);
-  }
+$stmt->execute();
 
-  // Upload valid_id (optional)
-  if (!empty($_FILES['valid_id']['name']) && is_uploaded_file($_FILES['valid_id']['tmp_name'])) {
-    $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename((string)$_FILES['valid_id']['name']));
-    $dbPath = $dbUploadDir . time() . "_id_" . $safeName;
-    $fsPath = $fsUploadDir . basename($dbPath);
+$cur =
+    $stmt
+        ->get_result()
+        ->fetch_assoc();
 
-    if (move_uploaded_file($_FILES['valid_id']['tmp_name'], $fsPath)) {
-      $valid_id_path = $dbPath;
+$stmt->close();
+
+
+$old_valid_id_path =
+    (string)(
+        $cur['valid_id_path'] ?? ''
+    );
+
+$old_proof_path =
+    (string)(
+        $cur['proof_of_billing_path'] ?? ''
+    );
+
+
+$valid_id_path =
+    $old_valid_id_path;
+
+$proof_path =
+    $old_proof_path;
+
+
+/*
+|--------------------------------------------------------------------------
+| Secure optional replacement documents
+|--------------------------------------------------------------------------
+*/
+
+$new_valid_id_path =
+    null;
+
+$new_proof_path =
+    null;
+
+
+try {
+
+    $new_valid_id_path =
+        saveOptionalHomeownerDocument(
+            $_FILES['valid_id'] ?? [],
+            'id'
+        );
+
+
+    $new_proof_path =
+        saveOptionalHomeownerDocument(
+            $_FILES['proof_of_billing'] ?? [],
+            'proof'
+        );
+
+
+    if (
+        $new_valid_id_path !== null
+    ) {
+
+        $valid_id_path =
+            $new_valid_id_path;
     }
-  }
 
-  // Upload proof_of_billing (optional)
-  if (!empty($_FILES['proof_of_billing']['name']) && is_uploaded_file($_FILES['proof_of_billing']['tmp_name'])) {
-    $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename((string)$_FILES['proof_of_billing']['name']));
-    $dbPath = $dbUploadDir . time() . "_proof_" . $safeName;
-    $fsPath = $fsUploadDir . basename($dbPath);
 
-    if (move_uploaded_file($_FILES['proof_of_billing']['tmp_name'], $fsPath)) {
-      $proof_path = $dbPath;
+    if (
+        $new_proof_path !== null
+    ) {
+
+        $proof_path =
+            $new_proof_path;
     }
-  }
 
-  // Update homeowner row
-  $stmt = $conn->prepare("
+
+} catch (Throwable $uploadError) {
+
+    /*
+     * Clean up any new upload created
+     * before another upload failed.
+     */
+    if (
+        $new_valid_id_path !== null
+    ) {
+
+        removeHomeownerDocument(
+            $new_valid_id_path
+        );
+    }
+
+
+    if (
+        $new_proof_path !== null
+    ) {
+
+        removeHomeownerDocument(
+            $new_proof_path
+        );
+    }
+
+
+    json_out([
+        'success' =>
+            false,
+
+        'message' =>
+            $uploadError->getMessage()
+    ]);
+}
+
+ // Update homeowner row
+$stmt = $conn->prepare("
     UPDATE homeowners SET
-      first_name=?,
-      middle_name=?,
-      last_name=?,
-      contact_number=?,
-      email=?,
-      phase=?,
-      house_lot_number=?,
-      barangay=?,
-      city_municipality=?,
-      province=?,
-      other_location_info=?,
-      length_of_residency=?,
-      residential_type=?,
-      emergency_contact_person=?,
-      emergency_contact_number=?,
-      latitude=?,
-      longitude=?,
-      valid_id_path=?,
-      proof_of_billing_path=?
+
+        first_name=?,
+        middle_name=?,
+        last_name=?,
+
+        contact_number=?,
+        email=?,
+
+        phase=?,
+
+        house_lot_number=?,
+        block=?,
+        lot=?,
+        street=?,
+
+        barangay=?,
+        city_municipality=?,
+        province=?,
+        region=?,
+        zip_code=?,
+        country=?,
+
+        other_location_info=?,
+        length_of_residency=?,
+        residential_type=?,
+
+        emergency_contact_person=?,
+        emergency_contact_number=?,
+
+        valid_id_path=?,
+        proof_of_billing_path=?,
+
+        map_x=?,
+        map_y=?,
+
+        latitude=NULL,
+        longitude=NULL
+
     WHERE id=?
     LIMIT 1
-  ");
+");
 
-  $stmt->bind_param(
-    "sssssssssssssssssssi",
+$stmt->bind_param(
+    "sssssssiissssssssssssssiii",
+
     $first_name,
     $middle_name,
     $last_name,
+
     $contact_number,
     $email,
+
     $phase,
+
     $house_lot_number,
+    $block,
+    $lot,
+    $street,
+
     $barangay,
     $city_municipality,
     $province,
+    $region,
+    $zip_code,
+    $country,
+
     $other_location_info,
     $length_of_residency,
     $residential_type,
+
     $emergency_contact_person,
     $emergency_contact_number,
-    $lat,
-    $lng,
+
     $valid_id_path,
     $proof_path,
+
+    $map_x,
+    $map_y,
+
     $id
-  );
+);
 
-  $ok = $stmt->execute();
-  $stmt->close();
+$ok =
+    $stmt->execute();
 
-  if (!$ok) {
-    json_out(['success' => false, 'message' => 'Failed to update homeowner.']);
-  }
+$stmt->close();
+
+
+if (!$ok) {
+
+    /*
+     * The database update failed,
+     * so remove newly uploaded replacements.
+     */
+    if (
+        $new_valid_id_path !== null
+    ) {
+
+        removeHomeownerDocument(
+            $new_valid_id_path
+        );
+    }
+
+
+    if (
+        $new_proof_path !== null
+    ) {
+
+        removeHomeownerDocument(
+            $new_proof_path
+        );
+    }
+
+
+    json_out([
+        'success' =>
+            false,
+
+        'message' =>
+            'Failed to update homeowner.'
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Remove replaced OLD documents
+|--------------------------------------------------------------------------
+|
+| Only after the database successfully points
+| to the new files.
+|
+*/
+
+if (
+    $new_valid_id_path !== null &&
+    $old_valid_id_path !== ''
+) {
+
+    removeHomeownerDocument(
+        $old_valid_id_path
+    );
+}
+
+
+if (
+    $new_proof_path !== null &&
+    $old_proof_path !== ''
+) {
+
+    removeHomeownerDocument(
+        $old_proof_path
+    );
+}
 
   /* =========================
      Household members save

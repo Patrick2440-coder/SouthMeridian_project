@@ -13,14 +13,51 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-
+if (!function_exists('esc')) {
+    function esc($v): string {
+        return htmlspecialchars(
+            (string)$v,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+    }
+}
 // prevent undefined $view in sidebar
 $view = $_GET['view'] ?? '';
 
 function phase_prefix(string $phase): string {
   $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
   return $n > 0 ? ('P'.$n) : 'P';
+}
+
+function subdivision_block_lot(array $record): array
+{
+    $block = (int)($record['block'] ?? 0);
+    $lot   = (int)($record['lot'] ?? 0);
+
+    /*
+     * Fallback for older records that only stored
+     * "Block 1 Lot 2" or "Blk 1 Lot 2".
+     */
+    if ($block <= 0 || $lot <= 0) {
+
+        $legacy = trim(
+            (string)($record['house_lot_number'] ?? '')
+        );
+
+        if (
+            preg_match(
+                '/(?:block|blk|b)\s*[-:]?\s*(\d+)\D+(?:lot|l)\s*[-:]?\s*(\d+)/i',
+                $legacy,
+                $match
+            )
+        ) {
+            $block = (int)$match[1];
+            $lot   = (int)$match[2];
+        }
+    }
+
+    return [$block, $lot];
 }
 
 function file_ext(string $path): string {
@@ -84,20 +121,23 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
   }
 
   if ($admin_role === 'superadmin') {
-    $stmt = $conn->prepare("
-      SELECT *
-      FROM homeowners
-      WHERE id=?
-      LIMIT 1
-    ");
+$stmt = $conn->prepare("
+    SELECT *
+    FROM homeowners
+    WHERE id=?
+      AND status='approved'
+    LIMIT 1
+");
     $stmt->bind_param("i", $id);
   } else {
-    $stmt = $conn->prepare("
-      SELECT *
-      FROM homeowners
-      WHERE id=? AND phase=?
-      LIMIT 1
-    ");
+$stmt = $conn->prepare("
+    SELECT *
+    FROM homeowners
+    WHERE id=?
+      AND phase=?
+      AND status='approved'
+    LIMIT 1
+");
     $stmt->bind_param("is", $id, $admin_phase);
   }
 
@@ -164,17 +204,88 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
     $displayId = $prefix . (int)$homeowner['id'];
   }
 
-  $fullAddress = trim(implode(', ', array_filter([
-    $homeowner['house_lot_number'] ?? '',
-    $homeowner['other_location_info'] ?? '',
-    $homeowner['barangay'] ?? '',
-    $homeowner['city_municipality'] ?? '',
-    $homeowner['province'] ?? ''
-  ], fn($v) => trim((string)$v) !== '')));
+/*
+|--------------------------------------------------------------------------
+| Structured Property Location
+|--------------------------------------------------------------------------
+*/
 
-  $createdAt = !empty($homeowner['created_at']) ? date('F d, Y h:i A', strtotime($homeowner['created_at'])) : '-';
-  $lat = $homeowner['latitude'] ?? '';
-  $lng = $homeowner['longitude'] ?? '';
+[
+    $homeownerBlock,
+    $homeownerLot
+] = subdivision_block_lot($homeowner);
+
+
+$homeownerStreet = trim(
+    (string)($homeowner['street'] ?? '')
+);
+
+
+$mapX = $homeowner['map_x'] ?? null;
+$mapY = $homeowner['map_y'] ?? null;
+
+
+$hasSubdivisionMap =
+    $homeownerBlock > 0 &&
+    $homeownerLot > 0 &&
+    $mapX !== null &&
+    $mapY !== null &&
+    is_numeric($mapX) &&
+    is_numeric($mapY);
+
+
+/*
+ * Older homeowner records may still only
+ * have latitude / longitude.
+ */
+$lat = $homeowner['latitude'] ?? '';
+$lng = $homeowner['longitude'] ?? '';
+
+
+$hasLegacyGps =
+    $lat !== '' &&
+    $lng !== '' &&
+    is_numeric($lat) &&
+    is_numeric($lng);
+
+
+$propertyAddress =
+    ($homeownerBlock > 0 && $homeownerLot > 0)
+        ? "Block {$homeownerBlock}, Lot {$homeownerLot}"
+        : trim(
+            (string)($homeowner['house_lot_number'] ?? '')
+        );
+
+
+$fullAddress = trim(
+    implode(
+        ', ',
+        array_filter(
+            [
+                $propertyAddress,
+                $homeownerStreet,
+                $homeowner['other_location_info'] ?? '',
+                $homeowner['barangay'] ?? '',
+                $homeowner['city_municipality'] ?? '',
+                $homeowner['province'] ?? '',
+                $homeowner['region'] ?? '',
+                $homeowner['zip_code'] ?? '',
+                $homeowner['country'] ?? ''
+            ],
+            static fn($value) =>
+                trim((string)$value) !== ''
+        )
+    )
+);
+
+
+$createdAt =
+    !empty($homeowner['created_at'])
+        ? date(
+            'F d, Y h:i A',
+            strtotime($homeowner['created_at'])
+        )
+        : '-';
   ?>
   <div class="container-fluid p-4">
     <div class="row g-4">
@@ -192,9 +303,44 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
             <hr>
 
             <div class="text-start small">
-              <div class="mb-2"><strong>Phase:</strong> <?= esc($displayValue($homeowner['phase'] ?? null)) ?></div>
-              <div class="mb-2"><strong>House/Lot:</strong> <?= esc($displayValue($homeowner['house_lot_number'] ?? null)) ?></div>
-              <div class="mb-2"><strong>Residential Type:</strong> <?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div>
+<div class="mb-2">
+    <strong>Phase:</strong>
+    <?= esc($displayValue($homeowner['phase'] ?? null)) ?>
+</div>
+
+<div class="mb-2">
+    <strong>Block:</strong>
+    <?= esc(
+        $homeownerBlock > 0
+            ? $homeownerBlock
+            : 'Not provided'
+    ) ?>
+</div>
+
+<div class="mb-2">
+    <strong>Lot:</strong>
+    <?= esc(
+        $homeownerLot > 0
+            ? $homeownerLot
+            : 'Not provided'
+    ) ?>
+</div>
+
+<div class="mb-2">
+    <strong>Street:</strong>
+    <?= esc(
+        $displayValue($homeownerStreet)
+    ) ?>
+</div>
+
+<div class="mb-2">
+    <strong>Residential Type:</strong>
+    <?= esc(
+        $displayValue(
+            $homeowner['residential_type'] ?? null
+        )
+    ) ?>
+</div>
               <div class="mb-2"><strong>Email:</strong> <?= esc($displayValue($homeowner['email'] ?? null)) ?></div>
               <div class="mb-2"><strong>Contact:</strong> <?= esc($displayValue($homeowner['contact_number'] ?? null)) ?></div>
               <div class="mb-2"><strong>Address:</strong> <?= esc($fullAddress !== '' ? $fullAddress : 'Not provided') ?></div>
@@ -256,10 +402,45 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
                 <div class="fw-semibold"><?= esc($displayValue($homeowner['phase'] ?? null)) ?></div>
               </div>
 
-              <div class="col-md-4">
-                <label class="form-label text-muted small mb-1">House/Lot Number</label>
-                <div class="fw-semibold"><?= esc($displayValue($homeowner['house_lot_number'] ?? null)) ?></div>
-              </div>
+<div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        Block
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $homeownerBlock > 0
+                ? $homeownerBlock
+                : 'Not provided'
+        ) ?>
+    </div>
+</div>
+
+<div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        Lot
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $homeownerLot > 0
+                ? $homeownerLot
+                : 'Not provided'
+        ) ?>
+    </div>
+</div>
+
+<div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        Street
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $displayValue($homeownerStreet)
+        ) ?>
+    </div>
+</div>
 
               <div class="col-md-4">
                 <label class="form-label text-muted small mb-1">Residential Type</label>
@@ -280,6 +461,48 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
                 <label class="form-label text-muted small mb-1">Province</label>
                 <div class="fw-semibold"><?= esc($displayValue($homeowner['province'] ?? null)) ?></div>
               </div>
+
+			  <div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        Region
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $displayValue(
+                $homeowner['region'] ?? null
+            )
+        ) ?>
+    </div>
+</div>
+
+<div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        ZIP Code
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $displayValue(
+                $homeowner['zip_code'] ?? null
+            )
+        ) ?>
+    </div>
+</div>
+
+<div class="col-md-4">
+    <label class="form-label text-muted small mb-1">
+        Country
+    </label>
+
+    <div class="fw-semibold">
+        <?= esc(
+            $displayValue(
+                $homeowner['country'] ?? null
+            )
+        ) ?>
+    </div>
+</div>
 
               <div class="col-md-6">
                 <label class="form-label text-muted small mb-1">Other Location Info</label>
@@ -414,21 +637,93 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
           </div>
         </div>
 
-        <div class="card shadow-sm border-0 mb-4">
-          <div class="card-header bg-white">
-            <h6 class="mb-0 fw-bold">Map Location</h6>
-          </div>
-          <div class="card-body">
-            <?php if ($lat !== '' && $lng !== ''): ?>
-              <div id="coverMap"
-                   data-lat="<?= esc($lat) ?>"
-                   data-lng="<?= esc($lng) ?>"
-                   style="height: 360px; border-radius: 12px; overflow: hidden;"></div>
-            <?php else: ?>
-              <div class="text-muted">No map location available.</div>
-            <?php endif; ?>
-          </div>
-        </div>
+<div class="card shadow-sm border-0 mb-4">
+
+    <div class="card-header bg-white">
+
+        <h6 class="mb-0 fw-bold">
+            Property Map
+        </h6>
+
+        <?php if ($homeownerBlock > 0 && $homeownerLot > 0): ?>
+
+            <small class="text-muted">
+                Block <?= (int)$homeownerBlock ?>,
+                Lot <?= (int)$homeownerLot ?>
+
+                <?php if ($homeownerStreet !== ''): ?>
+                    · <?= esc($homeownerStreet) ?>
+                <?php endif; ?>
+            </small>
+
+        <?php endif; ?>
+
+    </div>
+
+
+    <div class="card-body">
+
+        <?php if ($hasSubdivisionMap): ?>
+
+            <div
+                id="coverMap"
+
+                data-map-type="subdivision"
+
+                data-map-x="<?= esc($mapX) ?>"
+                data-map-y="<?= esc($mapY) ?>"
+
+                data-block="<?= (int)$homeownerBlock ?>"
+                data-lot="<?= (int)$homeownerLot ?>"
+
+                data-street="<?= esc($homeownerStreet) ?>"
+
+                data-map-image="../assets/img/south_meridian_block_lot_map.png"
+
+                style="
+                    height:420px;
+                    border-radius:12px;
+                    overflow:hidden;
+                "
+            ></div>
+
+
+        <?php elseif ($hasLegacyGps): ?>
+
+            <div class="alert alert-warning py-2 small">
+                This is an older homeowner record.
+                The official Block/Lot map location has not
+                been assigned yet, so the previous GPS
+                location is being shown.
+            </div>
+
+            <div
+                id="coverMap"
+
+                data-map-type="gps"
+
+                data-lat="<?= esc($lat) ?>"
+                data-lng="<?= esc($lng) ?>"
+
+                style="
+                    height:360px;
+                    border-radius:12px;
+                    overflow:hidden;
+                "
+            ></div>
+
+
+        <?php else: ?>
+
+            <div class="text-muted">
+                No property map location is available.
+            </div>
+
+        <?php endif; ?>
+
+    </div>
+
+</div>
 
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white">
@@ -520,18 +815,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 
   if ($admin_role === 'superadmin') {
     $stmt = $conn->prepare("
-      SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
-      FROM homeowners
-      WHERE id=?
-      LIMIT 1
+SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
+FROM homeowners
+WHERE id=?
+  AND status='approved'
+LIMIT 1
     ");
     $stmt->bind_param("i", $deleteId);
   } else {
     $stmt = $conn->prepare("
-      SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
-      FROM homeowners
-      WHERE id=? AND phase=?
-      LIMIT 1
+SELECT id, first_name, middle_name, last_name, phase, house_lot_number, valid_id_path, proof_of_billing_path
+FROM homeowners
+WHERE id=?
+  AND phase=?
+  AND status='approved'
+LIMIT 1
     ");
     $stmt->bind_param("is", $deleteId, $admin_phase);
   }
@@ -767,7 +1065,45 @@ $resultApproved = $sqlApproved->get_result();
 										$displayId = $prefix . (int)$row['id'];
 									}
 									$rowName = trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''));
-									$rowAddress = trim(($row['phase'] ?? '').', '.($row['house_lot_number'] ?? ''));
+									[
+    $rowBlock,
+    $rowLot
+] = subdivision_block_lot($row);
+
+
+$rowStreet =
+    trim(
+        (string)(
+            $row['street'] ?? ''
+        )
+    );
+
+
+$rowProperty =
+    ($rowBlock > 0 && $rowLot > 0)
+        ? "Block {$rowBlock}, Lot {$rowLot}"
+        : trim(
+            (string)(
+                $row['house_lot_number'] ?? ''
+            )
+        );
+
+
+$rowAddress =
+    trim(
+        implode(
+            ', ',
+            array_filter(
+                [
+                    $row['phase'] ?? '',
+                    $rowProperty,
+                    $rowStreet
+                ],
+                static fn($value) =>
+                    trim((string)$value) !== ''
+            )
+        )
+    );
 								?>
 								<tr id="homeownerRow<?= (int)$row['id'] ?>">
 									<td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
@@ -929,45 +1265,287 @@ $resultApproved = $sqlApproved->get_result();
 					coverMapInstance = null;
 				}
 			}
+function initCoverMapIfAny() {
 
-			function initCoverMapIfAny() {
-				const mapEl = document.getElementById('coverMap');
-				if (!mapEl || typeof L === 'undefined') return;
+    const mapEl =
+        document.getElementById(
+            'coverMap'
+        );
 
-				const lat = parseFloat(mapEl.getAttribute('data-lat') || '');
-				const lng = parseFloat(mapEl.getAttribute('data-lng') || '');
-				if (!isFinite(lat) || !isFinite(lng)) return;
+    if (
+        !mapEl ||
+        typeof L === 'undefined'
+    ) {
+        return;
+    }
 
-				destroyCoverMap();
 
-				coverMapInstance = L.map(mapEl, {
-					center: [lat, lng],
-					zoom: 18,
-					zoomControl: true,
-					attributionControl: true
-				});
+    const mapType =
+        mapEl.getAttribute(
+            'data-map-type'
+        ) || '';
 
-				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-					maxZoom: 19,
-					subdomains: ['a', 'b', 'c'],
-					attribution: '&copy; OpenStreetMap contributors'
-				}).addTo(coverMapInstance);
 
-				L.marker([lat, lng]).addTo(coverMapInstance);
+    destroyCoverMap();
 
-				setTimeout(function () {
-					if (coverMapInstance) {
-						coverMapInstance.invalidateSize(true);
-						coverMapInstance.setView([lat, lng], 18);
-					}
-				}, 300);
 
-				setTimeout(function () {
-					if (coverMapInstance) {
-						coverMapInstance.invalidateSize(true);
-					}
-				}, 800);
-			}
+    /*
+    |--------------------------------------------------------------------------
+    | Official South Meridian subdivision map
+    |--------------------------------------------------------------------------
+    */
+
+    if (mapType === 'subdivision') {
+
+        const x =
+            parseFloat(
+                mapEl.getAttribute(
+                    'data-map-x'
+                ) || ''
+            );
+
+        const y =
+            parseFloat(
+                mapEl.getAttribute(
+                    'data-map-y'
+                ) || ''
+            );
+
+        const block =
+            mapEl.getAttribute(
+                'data-block'
+            ) || '';
+
+        const lot =
+            mapEl.getAttribute(
+                'data-lot'
+            ) || '';
+
+        const street =
+            mapEl.getAttribute(
+                'data-street'
+            ) || '';
+
+        const imageUrl =
+            mapEl.getAttribute(
+                'data-map-image'
+            ) || '';
+
+
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !imageUrl
+        ) {
+            return;
+        }
+
+
+        const leafletY =
+            3300 - y;
+
+
+        coverMapInstance =
+            L.map(
+                mapEl,
+                {
+                    crs:
+                        L.CRS.Simple,
+
+                    center:
+                        [
+                            leafletY,
+                            x
+                        ],
+
+                    zoom:
+                        -1,
+
+                    minZoom:
+                        -3,
+
+                    maxZoom:
+                        3,
+
+                    zoomSnap:
+                        0.25,
+
+                    zoomControl:
+                        true,
+
+                    attributionControl:
+                        false
+                }
+            );
+
+
+        const mapBounds =
+            [
+                [0, 0],
+                [3300, 2550]
+            ];
+
+
+        L.imageOverlay(
+            imageUrl,
+            mapBounds
+        ).addTo(
+            coverMapInstance
+        );
+
+
+        L.marker(
+            [
+                leafletY,
+                x
+            ]
+        )
+        .addTo(
+            coverMapInstance
+        )
+        .bindPopup(
+            `<strong>Block ${block}, Lot ${lot}</strong>` +
+            (
+                street
+                    ? `<br>${street}`
+                    : ''
+            )
+        )
+        .openPopup();
+
+
+        setTimeout(
+            function () {
+
+                if (coverMapInstance) {
+
+                    coverMapInstance
+                        .invalidateSize(true);
+
+                    coverMapInstance
+                        .setView(
+                            [
+                                leafletY,
+                                x
+                            ],
+                            -1
+                        );
+                }
+
+            },
+            300
+        );
+
+
+        setTimeout(
+            function () {
+
+                if (coverMapInstance) {
+                    coverMapInstance
+                        .invalidateSize(true);
+                }
+
+            },
+            800
+        );
+
+
+        return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Old GPS fallback
+    |--------------------------------------------------------------------------
+    */
+
+    if (mapType === 'gps') {
+
+        const lat =
+            parseFloat(
+                mapEl.getAttribute(
+                    'data-lat'
+                ) || ''
+            );
+
+        const lng =
+            parseFloat(
+                mapEl.getAttribute(
+                    'data-lng'
+                ) || ''
+            );
+
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+        ) {
+            return;
+        }
+
+
+        coverMapInstance =
+            L.map(
+                mapEl,
+                {
+                    center:
+                        [
+                            lat,
+                            lng
+                        ],
+
+                    zoom:
+                        18,
+
+                    zoomControl:
+                        true,
+
+                    attributionControl:
+                        true
+                }
+            );
+
+
+        L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            {
+                maxZoom:
+                    19,
+
+                attribution:
+                    '&copy; OpenStreetMap contributors'
+            }
+        )
+        .addTo(
+            coverMapInstance
+        );
+
+
+        L.marker(
+            [
+                lat,
+                lng
+            ]
+        )
+        .addTo(
+            coverMapInstance
+        );
+
+
+        setTimeout(
+            function () {
+
+                if (coverMapInstance) {
+                    coverMapInstance
+                        .invalidateSize(true);
+                }
+
+            },
+            300
+        );
+    }
+}
 
 			$(document).on('click','.viewHomeownerBtn', function(e){
 				e.preventDefault();
@@ -993,55 +1571,491 @@ $resultApproved = $sqlApproved->get_result();
 			const editContent = document.getElementById('editHomeownerContent');
 			const editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
 
-			let editMapInstance = null;
-			let editMarker = null;
-			let pendingInit = false;
+let editMapInstance = null;
+let editMapMarker = null;
+let pendingInit = false;
 
-			function destroyEditMap(){
-				if (editMapInstance) {
-					editMapInstance.remove();
-					editMapInstance = null;
-					editMarker = null;
-				}
-			}
 
-			function initEditMap(){
-				const mapEl = document.getElementById('editMap');
-				if (!mapEl) return;
+/*
+|--------------------------------------------------------------------------
+| Destroy Edit Property Map
+|--------------------------------------------------------------------------
+*/
+function destroyEditMap() {
 
-				let lat = parseFloat(mapEl.dataset.lat || '');
-				let lng = parseFloat(mapEl.dataset.lng || '');
-				if (!isFinite(lat) || !isFinite(lng)) { lat = 14.5995; lng = 120.9842; }
+    if (editMapInstance) {
 
-				destroyEditMap();
+        editMapInstance.remove();
 
-				editMapInstance = L.map(mapEl, { zoomControl:true }).setView([lat, lng], 18);
-				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-					attribution: '&copy; OpenStreetMap contributors'
-				}).addTo(editMapInstance);
+        editMapInstance = null;
+    }
 
-				editMarker = L.marker([lat, lng], { draggable:true }).addTo(editMapInstance);
+    editMapMarker = null;
+}
 
-				function syncInputs(p){
-					$('#edit_lat').val(p.lat.toFixed(6));
-					$('#edit_lng').val(p.lng.toFixed(6));
-				}
 
-				syncInputs({lat, lng});
-				editMarker.on('dragend', function(){ syncInputs(editMarker.getLatLng()); });
+/*
+|--------------------------------------------------------------------------
+| Initialize Official South Meridian Edit Map
+|--------------------------------------------------------------------------
+*/
+function initEditPropertyMap() {
 
-				$(document).off('click', '#btnCenterMarker').on('click', '#btnCenterMarker', function(){
-					if (!editMapInstance || !editMarker) return;
-					editMapInstance.setView(editMarker.getLatLng(), editMapInstance.getZoom());
-				});
+    const mapEl =
+        document.getElementById('editMap');
 
-				$(document).off('click', '#btnUseCurrentMarker').on('click', '#btnUseCurrentMarker', function(){
-					if (!editMarker) return;
-					syncInputs(editMarker.getLatLng());
-				});
+    const dataEl =
+        document.getElementById('editLocationData');
 
-				setTimeout(() => { if (editMapInstance) editMapInstance.invalidateSize(true); }, 250);
-			}
+    const blockSelect =
+        document.getElementById('editBlock');
+
+    const lotSelect =
+        document.getElementById('editLot');
+
+    const streetInput =
+        document.getElementById('editStreet');
+
+    const propertyInfo =
+        document.getElementById('editPropertyInfo');
+
+
+    if (
+        !mapEl ||
+        !dataEl ||
+        !blockSelect ||
+        !lotSelect ||
+        typeof L === 'undefined'
+    ) {
+        return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Read Block/Lot mapping
+    |--------------------------------------------------------------------------
+    */
+    let locations = [];
+
+    try {
+
+        locations =
+            JSON.parse(
+                dataEl.textContent || '[]'
+            );
+
+    } catch (error) {
+
+        console.error(
+            'Invalid South Meridian location data.',
+            error
+        );
+
+        return;
+    }
+
+
+    destroyEditMap();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Create Leaflet image map
+    |--------------------------------------------------------------------------
+    */
+    editMapInstance =
+        L.map(
+            mapEl,
+            {
+                crs: L.CRS.Simple,
+
+                center: [
+                    1650,
+                    1275
+                ],
+
+                zoom: -1,
+
+                minZoom: -3,
+                maxZoom: 3,
+
+                zoomSnap: 0.25,
+
+                zoomControl: true,
+
+                attributionControl: false
+            }
+        );
+
+
+    const mapBounds = [
+        [0, 0],
+        [3300, 2550]
+    ];
+
+
+    const imageUrl =
+        mapEl.dataset.mapImage ||
+        '../assets/img/south_meridian_block_lot_map.png';
+
+
+    L.imageOverlay(
+        imageUrl,
+        mapBounds
+    ).addTo(editMapInstance);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Find a property
+    |--------------------------------------------------------------------------
+    */
+    function findLocation(block, lot) {
+
+        return locations.find(
+            function (item) {
+
+                return (
+                    Number(item.block) === Number(block) &&
+                    Number(item.lot) === Number(lot)
+                );
+            }
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Update map using selected Block + Lot
+    |--------------------------------------------------------------------------
+    */
+    function showSelectedProperty() {
+
+        const block =
+            Number(blockSelect.value);
+
+        const lot =
+            Number(lotSelect.value);
+
+
+        const location =
+            findLocation(
+                block,
+                lot
+            );
+
+
+        /*
+         * No valid Block/Lot selected
+         */
+        if (!location) {
+
+            if (streetInput) {
+                streetInput.value = '';
+            }
+
+            if (propertyInfo) {
+                propertyInfo.textContent =
+                    'Select a valid Block and Lot.';
+            }
+
+
+            if (editMapMarker) {
+
+                editMapInstance.removeLayer(
+                    editMapMarker
+                );
+
+                editMapMarker = null;
+            }
+
+            return;
+        }
+
+
+        const x =
+            Number(location.map_x);
+
+        const y =
+            Number(location.map_y);
+
+        const street =
+            String(
+                location.street || ''
+            );
+
+
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y)
+        ) {
+            return;
+        }
+
+
+        /*
+         * Convert image Y coordinate
+         * to Leaflet CRS.Simple coordinate
+         */
+        const leafletY =
+            3300 - y;
+
+
+        /*
+         * Remove previous marker
+         */
+        if (editMapMarker) {
+
+            editMapInstance.removeLayer(
+                editMapMarker
+            );
+        }
+
+
+        /*
+         * Official marker — NOT draggable
+         */
+        editMapMarker =
+            L.marker(
+                [
+                    leafletY,
+                    x
+                ]
+            )
+            .addTo(editMapInstance);
+
+
+        /*
+         * Update Street field
+         */
+        if (streetInput) {
+
+            streetInput.value =
+                street;
+        }
+
+
+        /*
+         * Update property description safely
+         */
+        if (propertyInfo) {
+
+            propertyInfo.textContent =
+                'Selected Property: ' +
+                'Block ' +
+                block +
+                ', Lot ' +
+                lot +
+                (
+                    street
+                        ? ' · ' + street
+                        : ''
+                );
+        }
+
+
+        /*
+         * Marker popup
+         */
+        const popupContent =
+            document.createElement('div');
+
+        const popupTitle =
+            document.createElement('strong');
+
+        popupTitle.textContent =
+            'Block ' +
+            block +
+            ', Lot ' +
+            lot;
+
+        popupContent.appendChild(
+            popupTitle
+        );
+
+
+        if (street) {
+
+            popupContent.appendChild(
+                document.createElement('br')
+            );
+
+            popupContent.appendChild(
+                document.createTextNode(
+                    street
+                )
+            );
+        }
+
+
+        editMapMarker
+            .bindPopup(
+                popupContent
+            )
+            .openPopup();
+
+
+        editMapInstance.setView(
+            [
+                leafletY,
+                x
+            ],
+            -1
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | When Block changes
+    |--------------------------------------------------------------------------
+    */
+    blockSelect.addEventListener(
+        'change',
+        function () {
+
+            const block =
+                Number(
+                    blockSelect.value
+                );
+
+
+            /*
+             * Reset Lot dropdown
+             */
+            lotSelect.innerHTML =
+                '<option value="">Select Lot</option>';
+
+
+            if (!block) {
+
+                lotSelect.disabled =
+                    true;
+
+                showSelectedProperty();
+
+                return;
+            }
+
+
+            /*
+             * Get valid Lots for selected Block
+             */
+            const lots =
+                locations
+                    .filter(
+                        function (item) {
+
+                            return (
+                                Number(item.block) ===
+                                block
+                            );
+                        }
+                    )
+                    .sort(
+                        function (a, b) {
+
+                            return (
+                                Number(a.lot) -
+                                Number(b.lot)
+                            );
+                        }
+                    );
+
+
+            lots.forEach(
+                function (location) {
+
+                    const option =
+                        document.createElement(
+                            'option'
+                        );
+
+                    option.value =
+                        String(
+                            location.lot
+                        );
+
+                    option.textContent =
+                        'Lot ' +
+                        location.lot;
+
+                    lotSelect.appendChild(
+                        option
+                    );
+                }
+            );
+
+
+            lotSelect.disabled =
+                false;
+
+
+            /*
+             * No Lot selected yet,
+             * therefore clear map marker.
+             */
+            showSelectedProperty();
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | When Lot changes
+    |--------------------------------------------------------------------------
+    */
+    lotSelect.addEventListener(
+        'change',
+        function () {
+
+            showSelectedProperty();
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Display homeowner's current property
+    |--------------------------------------------------------------------------
+    */
+    showSelectedProperty();
+
+
+    /*
+     * Modal animation can temporarily
+     * give Leaflet the wrong dimensions.
+     */
+    setTimeout(
+        function () {
+
+            if (editMapInstance) {
+
+                editMapInstance.invalidateSize(
+                    true
+                );
+            }
+
+        },
+        250
+    );
+
+
+    setTimeout(
+        function () {
+
+            if (editMapInstance) {
+
+                editMapInstance.invalidateSize(
+                    true
+                );
+            }
+
+        },
+        700
+    );
+}
 
 			$(document).on('click','.editHomeowner', function(e){
 				e.preventDefault();
@@ -1056,7 +2070,7 @@ $resultApproved = $sqlApproved->get_result();
 					.done(function(html){
 						editContent.innerHTML = html;
 						if (editModalEl.classList.contains('show')) {
-							initEditMap();
+							initEditPropertyMap();
 							pendingInit = false;
 						}
 					})
@@ -1068,7 +2082,7 @@ $resultApproved = $sqlApproved->get_result();
 
 			editModalEl.addEventListener('shown.bs.modal', function(){
 				if (pendingInit) {
-					initEditMap();
+					initEditPropertyMap();
 					pendingInit = false;
 				}
 			});

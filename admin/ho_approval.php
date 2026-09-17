@@ -1056,6 +1056,107 @@ $resultHO = $sqlHO->get_result();
 
 </div>
 
+<!-- =====================================================
+     DUPLICATE NOTIFY / DELETE CONFIRMATION MODAL
+     ===================================================== -->
+<div
+    class="modal fade"
+    id="duplicateDeleteConfirmModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div
+            class="modal-content"
+            style="border-radius:14px; overflow:hidden;"
+        >
+
+            <div class="modal-header border-0 pb-0">
+
+                <h5 class="modal-title fw-bold">
+                    Confirm Duplicate Removal
+                </h5>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    id="duplicateDeleteCloseBtn"
+                ></button>
+
+            </div>
+
+
+            <div class="modal-body text-center px-4 py-4">
+
+                <div
+                    class="mx-auto mb-3 d-flex align-items-center justify-content-center"
+                    style="
+                        width:70px;
+                        height:70px;
+                        border-radius:50%;
+                        background:#fff3cd;
+                        color:#dc3545;
+                        font-size:32px;
+                    "
+                >
+                    <i class="dw dw-warning"></i>
+                </div>
+
+
+                <h5 class="fw-bold mb-2">
+                    Notify and remove duplicate?
+                </h5>
+
+
+                <p class="text-muted mb-0">
+                    An email notification will be sent to the imported
+                    resident before the duplicate import record is removed.
+                </p>
+
+
+                <div class="alert alert-warning mt-3 mb-0 text-start">
+
+                    <strong>Important:</strong>
+
+                    The existing registered homeowner will not be deleted.
+
+                    Only the duplicate imported record will be removed.
+
+                </div>
+
+            </div>
+
+
+            <div
+                class="modal-footer border-0 justify-content-center pb-4"
+            >
+
+                <button
+                    type="button"
+                    class="btn btn-light px-4"
+                    id="duplicateDeleteCancelBtn"
+                >
+                    Cancel
+                </button>
+
+
+                <button
+                    type="button"
+                    class="btn btn-danger px-4"
+                    id="duplicateDeleteConfirmBtn"
+                >
+                    Notify &amp; Delete
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="d-flex">
@@ -2691,9 +2792,55 @@ $(document).on(
         }
     }
 );
+/* =========================================================
+   DUPLICATE DELETE CONFIRMATION MODAL
+   ========================================================= */
+
+const duplicateDeleteConfirmModalEl =
+    document.getElementById(
+        'duplicateDeleteConfirmModal'
+    );
+
+const duplicateDeleteConfirmModal =
+    duplicateDeleteConfirmModalEl
+        ? new bootstrap.Modal(
+            duplicateDeleteConfirmModalEl,
+            {
+                backdrop: 'static',
+                keyboard: false
+            }
+        )
+        : null;
+
+
+const duplicateDeleteConfirmBtn =
+    document.getElementById(
+        'duplicateDeleteConfirmBtn'
+    );
+
+const duplicateDeleteCancelBtn =
+    document.getElementById(
+        'duplicateDeleteCancelBtn'
+    );
+
+const duplicateDeleteCloseBtn =
+    document.getElementById(
+        'duplicateDeleteCloseBtn'
+    );
+
+
+let pendingDuplicateDeleteId = 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| Click Notify & Delete from duplicate profile
+|--------------------------------------------------------------------------
+*/
+
 notifyDeleteDuplicateBtn?.addEventListener(
     'click',
-    async function () {
+    function () {
 
         const id =
             Number(
@@ -2705,139 +2852,319 @@ notifyDeleteDuplicateBtn?.addEventListener(
         }
 
 
-        const confirmed =
-            window.confirm(
-                'Send duplicate email notification and remove this duplicate import?'
-            );
+        pendingDuplicateDeleteId =
+            id;
 
 
-        if (!confirmed) {
-            return;
-        }
+        /*
+         * Close the duplicate review first,
+         * then show our custom confirmation modal.
+         */
+        if (duplicateResidentModalEl) {
 
+            duplicateResidentModalEl
+                .addEventListener(
+                    'hidden.bs.modal',
+                    function showDeleteConfirmation() {
 
-        this.disabled = true;
-        this.textContent = "Sending...";
+                        duplicateDeleteConfirmModal
+                            ?.show();
 
-
-        try {
-
-            const body =
-                new URLSearchParams();
-
-            body.set(
-                'id',
-                String(id)
-            );
-
-            body.set(
-                'csrf',
-                homeownerImportCsrf
-            );
-
-
-            const response =
-                await fetch(
-                    'notify_delete_duplicate_homeowner.php',
+                    },
                     {
-                        method:'POST',
-                        headers:{
-                            'Content-Type':
-                            'application/x-www-form-urlencoded;charset=UTF-8'
-                        },
-                        body:body.toString()
+                        once: true
                     }
                 );
 
 
- const responseText =
-    await response.text();
-let data;
+            duplicateResidentModal
+                ?.hide();
 
-try {
-    data = JSON.parse(responseText);
-} catch (e) {
+        } else {
 
-    console.error(
-        'Raw server response:',
-        responseText
-    );
+            duplicateDeleteConfirmModal
+                ?.show();
+        }
+    }
+);
 
-    throw new Error(
-        'Server returned invalid JSON: ' +
-        String(responseText || '')
-            .replace(/<[^>]*>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 300)
-    );
+
+/*
+|--------------------------------------------------------------------------
+| Cancel confirmation
+|--------------------------------------------------------------------------
+*/
+
+function cancelDuplicateDelete() {
+
+    pendingDuplicateDeleteId =
+        0;
+
+
+    if (
+        duplicateDeleteConfirmModalEl
+    ) {
+
+        duplicateDeleteConfirmModalEl
+            .addEventListener(
+                'hidden.bs.modal',
+                function reopenDuplicateReview() {
+
+                    duplicateResidentModal
+                        ?.show();
+
+                },
+                {
+                    once: true
+                }
+            );
+    }
+
+
+    duplicateDeleteConfirmModal
+        ?.hide();
 }
 
 
-if (!response.ok || !data.success) {
-
-    throw new Error(
-        data.message ||
-        'Failed to process duplicate.'
+duplicateDeleteCancelBtn
+    ?.addEventListener(
+        'click',
+        cancelDuplicateDelete
     );
 
-}
+
+duplicateDeleteCloseBtn
+    ?.addEventListener(
+        'click',
+        cancelDuplicateDelete
+    );
 
 
-            if (data.email_sent === false) {
+/*
+|--------------------------------------------------------------------------
+| Confirm Notify & Delete
+|--------------------------------------------------------------------------
+*/
 
-                console.error(
-                    'Email error:',
-                    data.email_error || ''
+duplicateDeleteConfirmBtn
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            const id =
+                Number(
+                    pendingDuplicateDeleteId || 0
                 );
 
+            if (!id) {
+
                 showToast(
-                    data.message +
-                    (
-                        data.email_error
-                            ? ' Error: ' + data.email_error
-                            : ''
-                    ),
+                    'Invalid duplicate record.',
                     'error'
                 );
 
-            } else {
-
-                showToast(
-                    data.message,
-                    'success'
-                );
+                return;
             }
 
 
-            duplicateResidentModal.hide();
+            const button =
+                this;
+
+            const originalText =
+                button.textContent;
 
 
-            setTimeout(
-                function(){
-                    location.reload();
-                },
-                1000
-            );
+            button.disabled =
+                true;
+
+            button.textContent =
+                'Sending notification...';
 
 
-        } catch(error) {
+            try {
+
+                const body =
+                    new URLSearchParams();
 
 
-            showToast(
-                error.message,
-                'error'
-            );
+                body.set(
+                    'id',
+                    String(id)
+                );
 
 
-            this.disabled = false;
-            this.textContent =
-                "Notify & Delete Duplicate";
+                body.set(
+                    'csrf',
+                    homeownerImportCsrf
+                );
 
+
+                const response =
+                    await fetch(
+                        'notify_delete_duplicate_homeowner.php',
+                        {
+                            method:
+                                'POST',
+
+                            headers: {
+                                'Content-Type':
+                                    'application/x-www-form-urlencoded;charset=UTF-8'
+                            },
+
+                            body:
+                                body.toString()
+                        }
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Read response
+                |--------------------------------------------------------------------------
+                */
+
+                const responseText =
+                    await response.text();
+
+
+                let data;
+
+
+                try {
+
+                    data =
+                        JSON.parse(
+                            responseText
+                        );
+
+                } catch (error) {
+
+                    console.error(
+                        'Raw duplicate server response:',
+                        responseText
+                    );
+
+
+                    throw new Error(
+                        'Server returned an invalid response.'
+                    );
+                }
+
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+
+                    throw new Error(
+                        data.message ||
+                        'Failed to process duplicate.'
+                    );
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Success
+                |--------------------------------------------------------------------------
+                */
+
+                pendingDuplicateDeleteId =
+                    0;
+
+
+                duplicateDeleteConfirmModal
+                    ?.hide();
+
+
+                if (
+                    data.email_sent === false
+                ) {
+
+                    console.error(
+                        'Email error:',
+                        data.email_error || ''
+                    );
+
+
+                    showToast(
+                        data.message ||
+                        'Duplicate processed, but the email could not be sent.',
+                        'warning'
+                    );
+
+                } else {
+
+                    showToast(
+                        data.message ||
+                        'Duplicate resident was notified and removed successfully.',
+                        'success'
+                    );
+                }
+
+
+                /*
+                 * Reload page so removed duplicate
+                 * disappears from the table.
+                 */
+                setTimeout(
+                    function () {
+
+                        location.reload();
+
+                    },
+                    1200
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    'Duplicate delete error:',
+                    error
+                );
+
+
+                showToast(
+                    error.message ||
+                    'Unable to process duplicate.',
+                    'error'
+                );
+
+
+                button.disabled =
+                    false;
+
+                button.textContent =
+                    originalText;
+            }
         }
+    );
 
-    }
-);
+
+/*
+|--------------------------------------------------------------------------
+| Reset confirmation button when modal closes
+|--------------------------------------------------------------------------
+*/
+
+duplicateDeleteConfirmModalEl
+    ?.addEventListener(
+        'hidden.bs.modal',
+        function () {
+
+            if (
+                duplicateDeleteConfirmBtn
+            ) {
+
+                duplicateDeleteConfirmBtn.disabled =
+                    false;
+
+                duplicateDeleteConfirmBtn.textContent =
+                    'Notify & Delete';
+            }
+        }
+    );
 
 		</script>
 </body>

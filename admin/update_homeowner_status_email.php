@@ -331,20 +331,60 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
    ========================================================= */
 
 /*
- * Gmail account used by the HOA system.
- */
-$smtpUsername = 'baculpopatrick2440@gmail.com';
+|--------------------------------------------------------------------------
+| Load private SMTP configuration
+|--------------------------------------------------------------------------
+*/
 
-/*
- * Gmail App Password.
- *
- * Use an App Password, NOT your normal Gmail password.
- * Remove spaces automatically in case Google displayed
- * the App Password grouped into four-character sections.
- */
-$smtpPassword = 'vxsx lmtv livx hgtl';
+$secretsFile =
+    __DIR__ .
+    '/private/hoa_secrets.php';
 
-$smtpPassword = str_replace(' ', '', $smtpPassword);
+
+if (!is_file($secretsFile)) {
+
+    respond([
+        'success' => false,
+        'message' =>
+            'SMTP configuration file was not found.'
+    ], 500);
+}
+
+
+$secrets =
+    require $secretsFile;
+
+
+if (!is_array($secrets)) {
+
+    respond([
+        'success' => false,
+        'message' =>
+            'SMTP configuration file is invalid.'
+    ], 500);
+}
+
+
+$smtpUsername =
+    trim(
+        (string)(
+            $secrets['smtp_username']
+            ?? ''
+        )
+    );
+
+
+$smtpPassword =
+    preg_replace(
+        '/\s+/',
+        '',
+        trim(
+            (string)(
+                $secrets['smtp_password']
+                ?? ''
+            )
+        )
+    );
 
 
 /*
@@ -355,8 +395,12 @@ $smtpPassword = str_replace(' ', '', $smtpPassword);
 
 if (
     $smtpUsername === '' ||
-    !filter_var($smtpUsername, FILTER_VALIDATE_EMAIL)
+    !filter_var(
+        $smtpUsername,
+        FILTER_VALIDATE_EMAIL
+    )
 ) {
+
     respond([
         'success' => false,
         'message' =>
@@ -366,6 +410,7 @@ if (
 
 
 if ($smtpPassword === '') {
+
     respond([
         'success' => false,
         'message' =>
@@ -374,47 +419,35 @@ if ($smtpPassword === '') {
 }
 
 /* =========================================================
-   BUILD RESET URL
+   TRUSTED APPLICATION BASE URL
    ========================================================= */
 
-/*
- * This automatically works with:
- *
- * http://localhost/SouthMeridian_project/admin/reset-password.php
- *
- * instead of incorrectly forcing:
- *
- * http://localhost/admin/reset-password.php
- */
-$scheme =
-    (!empty($_SERVER['HTTPS']) &&
-     $_SERVER['HTTPS'] !== 'off')
-        ? 'https'
-        : 'http';
-
-$host =
-    (string)(
-        $_SERVER['HTTP_HOST']
-        ?? 'localhost'
-    );
-
-$scriptDirectory =
-    str_replace(
-        '\\',
-        '/',
-        dirname(
-            (string)(
-                $_SERVER['SCRIPT_NAME']
-                ?? '/admin/update_homeowner_status_email.php'
-            )
-        )
-    );
-
-$scriptDirectory =
+$appBaseUrl =
     rtrim(
-        $scriptDirectory,
+        trim(
+            (string)(
+                $secrets['app_base_url']
+                ?? ''
+            )
+        ),
         '/'
     );
+
+
+if (
+    $appBaseUrl === '' ||
+    !filter_var(
+        $appBaseUrl,
+        FILTER_VALIDATE_URL
+    )
+) {
+
+    respond([
+        'success' => false,
+        'message' =>
+            'Application base URL is not configured correctly.'
+    ], 500);
+}
 
 /* =========================================================
    PREPARE USER NAME
@@ -460,19 +493,35 @@ try {
        ===================================================== */
     if ($status === 'approved') {
 
-        /*
-         * Password setup token valid for 1 hour.
-         */
-        $resetToken =
-            bin2hex(
-                random_bytes(32)
-            );
+/*
+|--------------------------------------------------------------------------
+| Password setup token
+|--------------------------------------------------------------------------
+|
+| $resetToken:
+|     Raw one-time token sent to the homeowner by email.
+|
+| $resetTokenHash:
+|     SHA-256 version stored in the database.
+|
+*/
 
-        $resetExpiry =
-            date(
-                'Y-m-d H:i:s',
-                time() + 3600
-            );
+$resetToken =
+    bin2hex(
+        random_bytes(32)
+    );
+
+$resetTokenHash =
+    hash(
+        'sha256',
+        $resetToken
+    );
+
+$resetExpiry =
+    date(
+        'Y-m-d H:i:s',
+        time() + 3600
+    );
 
         /*
          * Homeowner must create a new password using email link.
@@ -497,13 +546,13 @@ try {
               AND status = 'pending'
         ");
 
-        $stmt->bind_param(
-            'sssi',
-            $temporaryPasswordHash,
-            $resetToken,
-            $resetExpiry,
-            $id
-        );
+$stmt->bind_param(
+    'sssi',
+    $temporaryPasswordHash,
+    $resetTokenHash,
+    $resetExpiry,
+    $id
+);
 
         $stmt->execute();
 
@@ -521,13 +570,10 @@ try {
         /*
          * Correct project-aware reset link.
          */
-        $resetLink =
-            $scheme .
-            '://' .
-            $host .
-            $scriptDirectory .
-            '/reset-password.php?token=' .
-            urlencode($resetToken);
+$resetLink =
+    $appBaseUrl .
+    '/admin/reset-password.php?token=' .
+    urlencode($resetToken);
 
         /* =================================================
            APPROVAL EMAIL
@@ -889,10 +935,9 @@ South Meridian HOA";
      * Once everything works, we will remove the detailed
      * error before deployment.
      */
-    respond([
-        'success' => false,
-        'message' =>
-            'Approval failed: ' .
-            $e->getMessage()
-    ], 500);
+respond([
+    'success' => false,
+    'message' =>
+        'The request could not be completed. Please try again.'
+], 500);
 }
