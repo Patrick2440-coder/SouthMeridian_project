@@ -182,17 +182,79 @@ $stmt->bind_param("iii", $hid, $year, $month);
 $stmt->execute();
 $stmt->close();
 
-// ---- PayMongo keys (SERVER SIDE ONLY) ----
-$PAYMONGO_SECRET = getenv('PAYMONGO_SECRET_KEY') ?: 'sk_test_Rxb7X283U4N6dTvWTP4oE81y';
+/*
+|--------------------------------------------------------------------------
+| PayMongo private configuration
+|--------------------------------------------------------------------------
+*/
 
-// Build absolute URLs
-$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$baseDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
-$base    = $scheme . '://' . $host . $baseDir;
+$secretsFile =
+    dirname(__DIR__) .
+    '/admin/private/hoa_secrets.php';
 
-$successUrl = $base . '/homeowner_pay_dues.php?paid=1&year=' . urlencode((string)$year);
-$cancelUrl  = $base . '/homeowner_pay_dues.php?cancel=1&year=' . urlencode((string)$year);
+if (!is_file($secretsFile)) {
+    back_err(
+        "Payment configuration is unavailable.",
+        $year
+    );
+}
+
+$secrets = require $secretsFile;
+
+$PAYMONGO_SECRET =
+    trim(
+        (string)(
+            $secrets['paymongo_secret_key']
+            ?? ''
+        )
+    );
+
+if ($PAYMONGO_SECRET === '') {
+    back_err(
+        "Payment gateway is not configured.",
+        $year
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| Trusted application base URL
+|--------------------------------------------------------------------------
+*/
+
+$appBaseUrl =
+    rtrim(
+        trim(
+            (string)(
+                $secrets['app_base_url']
+                ?? ''
+            )
+        ),
+        '/'
+    );
+
+if (
+    $appBaseUrl === '' ||
+    !filter_var(
+        $appBaseUrl,
+        FILTER_VALIDATE_URL
+    )
+) {
+    back_err(
+        "Application URL is not configured correctly.",
+        $year
+    );
+}
+
+$successUrl =
+    $appBaseUrl .
+    '/homeowner/homeowner_pay_dues.php?paid=1&year=' .
+    urlencode((string)$year);
+
+$cancelUrl =
+    $appBaseUrl .
+    '/homeowner/homeowner_pay_dues.php?cancel=1&year=' .
+    urlencode((string)$year);
 
 $desc = "South Meridian HOA Monthly Dues - {$phase} - {$houseLot} - {$year}-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT);
 $amountCentavos = (int)round($monthlyDues * 100);

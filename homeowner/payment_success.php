@@ -1,203 +1,496 @@
 <?php
+
 session_start();
 
 require_once '../config/database.php';
 
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-function phase_code(string $phase): string
+
+/*
+|--------------------------------------------------------------------------
+| Security headers
+|--------------------------------------------------------------------------
+*/
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Content-Type-Options: nosniff');
+
+
+function esc($value): string
 {
-    return $phase === 'Phase 1' ? 'P1' : ($phase === 'Phase 2' ? 'P2' : ($phase === 'Phase 3' ? 'P3' : 'PX'));
+    return htmlspecialchars(
+        (string)$value,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
 
-function next_permit_no(mysqli $conn, string $phase): string
-{
-    $prefix = phase_code($phase) . "-";
+
+/*
+|--------------------------------------------------------------------------
+| Get permit ID
+|--------------------------------------------------------------------------
+*/
+
+$permitId = filter_input(
+    INPUT_GET,
+    'permit_id',
+    FILTER_VALIDATE_INT
+);
+
+$permitId = ($permitId !== false && $permitId !== null)
+    ? (int)$permitId
+    : 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| Determine logged-in account
+|--------------------------------------------------------------------------
+*/
+
+$role = (string)($_SESSION['role'] ?? '');
+
+$homeownerId = 0;
+$hasValidSession = false;
+
+
+/*
+|--------------------------------------------------------------------------
+| Homeowner session
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $role === 'homeowner' &&
+    !empty($_SESSION['homeowner_id'])
+) {
+
+    $homeownerId = (int)$_SESSION['homeowner_id'];
 
     $stmt = $conn->prepare("
-        SELECT permit_no
-        FROM parking_permits
-        WHERE phase = ?
-          AND permit_no IS NOT NULL
-          AND permit_no LIKE CONCAT(?, '%')
-        ORDER BY id DESC
+        SELECT id, status
+        FROM homeowners
+        WHERE id = ?
         LIMIT 1
     ");
-    $stmt->bind_param("ss", $phase, $prefix);
+
+    $stmt->bind_param("i", $homeownerId);
     $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
+
+    $homeowner = $stmt
+        ->get_result()
+        ->fetch_assoc();
+
     $stmt->close();
 
-    $n = 0;
-    if ($row && !empty($row['permit_no'])) {
-        $parts = explode("-", (string)$row['permit_no']);
-        $last = end($parts);
-        if (ctype_digit((string)$last)) {
-            $n = (int)$last;
-        }
+    if (
+        $homeowner &&
+        ($homeowner['status'] ?? '') === 'approved'
+    ) {
+        $hasValidSession = true;
     }
-
-    $n++;
-    return $prefix . str_pad((string)$n, 3, "0", STR_PAD_LEFT);
 }
 
-function redirect_parking(string $query = ''): void
-{
-    $url = "https://southmeridianhomes.online/homeowner/homeowner_parking.php";
-    if ($query !== '') {
-        $url .= '?' . ltrim($query, '?');
-    }
-    header("Location: " . $url);
-    exit;
-}
 
-$permitId = (int)($_GET['permit_id'] ?? 0);
+/*
+|--------------------------------------------------------------------------
+| Tenant session
+|--------------------------------------------------------------------------
+*/
 
-if ($permitId <= 0) {
-    die("Invalid permit ID.");
-}
+elseif (
+    $role === 'tenant' &&
+    !empty($_SESSION['tenant_id']) &&
+    !empty($_SESSION['tenant_homeowner_id'])
+) {
 
-$stmt = $conn->prepare("
-    SELECT *
-    FROM parking_permits
-    WHERE id = ?
-      AND payment_method = 'online'
-    LIMIT 1
-");
-$stmt->bind_param("i", $permitId);
-$stmt->execute();
-$permit = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+    $tenantId = (int)$_SESSION['tenant_id'];
+    $homeownerId = (int)$_SESSION['tenant_homeowner_id'];
 
-if (!$permit) {
-    die("Permit not found.");
-}
+    $stmt = $conn->prepare("
+        SELECT
+            id,
+            homeowner_id,
+            status,
+            can_parking
+        FROM tenants
+        WHERE id = ?
+          AND homeowner_id = ?
+        LIMIT 1
+    ");
 
-$hid           = (int)$permit['homeowner_id'];
-$permitStatus  = strtolower(trim((string)($permit['status'] ?? 'pending')));
-$paymentStatus = strtolower(trim((string)($permit['payment_status'] ?? 'unpaid')));
-$phase         = (string)($permit['phase'] ?? 'Phase 1');
-
-// Rejected / revoked / expired checks
-if ($permitStatus === 'rejected') {
-    redirect_parking('rejected=1');
-}
-
-if ($permitStatus === 'revoked') {
-    redirect_parking('revoked=1');
-}
-
-if ($permitStatus === 'expired') {
-    redirect_parking('expired=1');
-}
-
-// If already activated before, just redirect when session is still valid
-$hasValidSession =
-    (
-        isset($_SESSION['role']) &&
-        $_SESSION['role'] === 'homeowner' &&
-        !empty($_SESSION['homeowner_id']) &&
-        (int)$_SESSION['homeowner_id'] === $hid
-    )
-    ||
-    (
-        isset($_SESSION['role']) &&
-        $_SESSION['role'] === 'tenant' &&
-        !empty($_SESSION['tenant_homeowner_id']) &&
-        (int)$_SESSION['tenant_homeowner_id'] === $hid
+    $stmt->bind_param(
+        "ii",
+        $tenantId,
+        $homeownerId
     );
 
-if ($paymentStatus === 'paid' && $permitStatus === 'active') {
-    if ($hasValidSession) {
-        redirect_parking('paid=1&active=1');
-    }
-}
-
-// Must be pending + for payment before activation
-if ($permitStatus === 'pending' && $paymentStatus === 'for payment') {
-    $validFrom  = !empty($permit['valid_from']) ? (string)$permit['valid_from'] : date('Y-m-d');
-    $validUntil = !empty($permit['valid_until']) ? (string)$permit['valid_until'] : date('Y-m-d');
-
-    $permitNo = !empty($permit['permit_no']) ? (string)$permit['permit_no'] : next_permit_no($conn, $phase);
-
-    $stmt = $conn->prepare("
-        UPDATE parking_permits
-        SET payment_status = 'paid',
-            status = 'active',
-            permit_no = ?,
-            valid_from = ?,
-            valid_until = ?,
-            updated_at = NOW()
-        WHERE id = ?
-          AND payment_method = 'online'
-          AND status = 'pending'
-          AND payment_status = 'for payment'
-        LIMIT 1
-    ");
-    $stmt->bind_param("sssi", $permitNo, $validFrom, $validUntil, $permitId);
     $stmt->execute();
+
+    $tenant = $stmt
+        ->get_result()
+        ->fetch_assoc();
+
     $stmt->close();
 
-    // refresh session check after update
-    $hasValidSession =
-        (
-            isset($_SESSION['role']) &&
-            $_SESSION['role'] === 'homeowner' &&
-            !empty($_SESSION['homeowner_id']) &&
-            (int)$_SESSION['homeowner_id'] === $hid
-        )
-        ||
-        (
-            isset($_SESSION['role']) &&
-            $_SESSION['role'] === 'tenant' &&
-            !empty($_SESSION['tenant_homeowner_id']) &&
-            (int)$_SESSION['tenant_homeowner_id'] === $hid
+    if (
+        $tenant &&
+        ($tenant['status'] ?? '') === 'active' &&
+        !empty($tenant['can_parking'])
+    ) {
+
+        $stmt = $conn->prepare("
+            SELECT id, status
+            FROM homeowners
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            "i",
+            $homeownerId
         );
 
-    if ($hasValidSession) {
-        redirect_parking('paid=1&active=1');
+        $stmt->execute();
+
+        $homeowner = $stmt
+            ->get_result()
+            ->fetch_assoc();
+
+        $stmt->close();
+
+        if (
+            $homeowner &&
+            ($homeowner['status'] ?? '') === 'approved'
+        ) {
+            $hasValidSession = true;
+        }
     }
 }
 
-// No valid session? Do NOT send them to homepage automatically.
-// Show success page instead.
+
+/*
+|--------------------------------------------------------------------------
+| Load permit
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+|
+| This page DOES NOT:
+| - mark payments as paid
+| - activate permits
+| - assign permit numbers
+|
+| PayMongo verification/webhook must do that.
+|
+*/
+
+$permit = null;
+
+if (
+    $hasValidSession &&
+    $permitId > 0
+) {
+
+    $stmt = $conn->prepare("
+        SELECT
+            id,
+            permit_no,
+            homeowner_id,
+            phase,
+            status,
+            payment_status,
+            payment_method,
+            permit_duration
+        FROM parking_permits
+        WHERE id = ?
+          AND homeowner_id = ?
+          AND payment_method = 'online'
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $permitId,
+        $homeownerId
+    );
+
+    $stmt->execute();
+
+    $permit = $stmt
+        ->get_result()
+        ->fetch_assoc();
+
+    $stmt->close();
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Current verified database state
+|--------------------------------------------------------------------------
+*/
+
+$permitStatus = strtolower(
+    trim(
+        (string)($permit['status'] ?? '')
+    )
+);
+
+$paymentStatus = strtolower(
+    trim(
+        (string)($permit['payment_status'] ?? '')
+    )
+);
+
+
+$paymentConfirmed =
+    $permit !== null &&
+    $paymentStatus === 'paid' &&
+    $permitStatus === 'active';
+
+$isRejected = $permitStatus === 'rejected';
+$isRevoked  = $permitStatus === 'revoked';
+$isExpired  = $permitStatus === 'expired';
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Successful</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Payment Status</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
 </head>
+
 <body class="bg-light">
-    <div class="container py-5">
-        <div class="mx-auto bg-white shadow rounded-4 p-4 p-md-5" style="max-width: 680px;">
-            <div class="text-center">
-                <h2 class="text-success fw-bold mb-3">Payment Successful</h2>
-                <p class="mb-2">Your parking permit payment has been recorded successfully.</p>
-                <p class="text-muted mb-4">
-                    Your permit is already marked as <strong>paid</strong> and <strong>active</strong>.
+
+<div class="container py-5">
+
+    <div
+        class="mx-auto bg-white shadow rounded-4 p-4 p-md-5"
+        style="max-width:680px;"
+    >
+
+        <div class="text-center">
+
+            <?php if (!$hasValidSession): ?>
+
+                <h2 class="fw-bold text-primary mb-3">
+                    Payment Return Received
+                </h2>
+
+                <p class="mb-3">
+                    You have returned from the payment page.
                 </p>
 
                 <div class="alert alert-info text-start">
-                    <strong>Why am I not redirected automatically to Parking Overview?</strong><br>
-                    Your payment may have returned in a different browser or app, so your login session is not available there.
+                    For security, your payment status cannot
+                    be displayed because your login session
+                    is not available in this browser.
                 </div>
 
-                <div class="d-grid gap-2">
-                    <a href="https://southmeridianhomes.online/homeowner/homeowner_parking.php?paid=1&active=1" class="btn btn-success btn-lg">
-                        Go to Parking Overview
-                    </a>
-                    <a href="https://southmeridianhomes.online/index.php" class="btn btn-outline-secondary">
+                <p class="text-muted">
+                    Please log in again and check your
+                    Parking Overview.
+                </p>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="../index.php"
+                        class="btn btn-success btn-lg"
+                    >
                         Login Again
                     </a>
+
                 </div>
 
-                <div class="mt-4 small text-muted">
-                    After logging in again, open the Parking Overview and your permit should already appear as active and paid.
+
+            <?php elseif ($permitId <= 0 || !$permit): ?>
+
+                <h2 class="fw-bold text-danger mb-3">
+                    Unable to Verify Permit
+                </h2>
+
+                <div class="alert alert-danger">
+                    This payment return could not be matched
+                    to a parking permit belonging to your account.
                 </div>
-            </div>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-success"
+                    >
+                        Go to Parking Overview
+                    </a>
+
+                </div>
+
+
+            <?php elseif ($paymentConfirmed): ?>
+
+                <h2 class="fw-bold text-success mb-3">
+                    Payment Confirmed
+                </h2>
+
+                <p class="mb-3">
+                    Your parking permit payment has been
+                    verified and your permit is active.
+                </p>
+
+                <?php if (!empty($permit['permit_no'])): ?>
+
+                    <div class="alert alert-success">
+
+                        Permit No.:
+
+                        <strong>
+                            <?= esc($permit['permit_no']) ?>
+                        </strong>
+
+                    </div>
+
+                <?php endif; ?>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-success btn-lg"
+                    >
+                        Go to Parking Overview
+                    </a>
+
+                </div>
+
+
+            <?php elseif ($isRejected): ?>
+
+                <h2 class="fw-bold text-danger mb-3">
+                    Permit Rejected
+                </h2>
+
+                <p>
+                    This parking permit request has been rejected.
+                </p>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-outline-secondary"
+                    >
+                        Go to Parking Overview
+                    </a>
+
+                </div>
+
+
+            <?php elseif ($isRevoked): ?>
+
+                <h2 class="fw-bold text-danger mb-3">
+                    Permit Revoked
+                </h2>
+
+                <p>
+                    This parking permit has been revoked.
+                </p>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-outline-secondary"
+                    >
+                        Go to Parking Overview
+                    </a>
+
+                </div>
+
+
+            <?php elseif ($isExpired): ?>
+
+                <h2 class="fw-bold text-warning mb-3">
+                    Permit Expired
+                </h2>
+
+                <p>
+                    This parking permit has already expired.
+                </p>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-outline-secondary"
+                    >
+                        Go to Parking Overview
+                    </a>
+
+                </div>
+
+
+            <?php else: ?>
+
+                <h2 class="fw-bold text-warning mb-3">
+                    Payment Verification Pending
+                </h2>
+
+                <p class="mb-3">
+                    You returned from the payment page,
+                    but the system has not yet received
+                    verified payment confirmation.
+                </p>
+
+                <div class="alert alert-warning text-start">
+
+                    <strong>
+                        Do not submit another payment immediately.
+                    </strong>
+
+                    <br><br>
+
+                    Your permit will only become paid and active
+                    after PayMongo sends verified confirmation.
+
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="btn btn-success"
+                    >
+                        Check Parking Overview
+                    </a>
+
+                </div>
+
+            <?php endif; ?>
+
         </div>
+
     </div>
+
+</div>
+
 </body>
 </html>

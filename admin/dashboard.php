@@ -370,6 +370,24 @@ function complaintPriorityBadge($p){
   <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <link rel="stylesheet" type="text/css" href="./vendors/styles/admin_theme.css">
+<script>
+(function () {
+    try {
+        const savedTheme = localStorage.getItem('hoa-theme');
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+
+        document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+})();
+</script>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -515,24 +533,45 @@ function complaintPriorityBadge($p){
     .kv b { font-weight: 900; }
     /* ACCESS TOAST */
 .access-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-  z-index: 99999;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: all .3s ease;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+
+    background: #ef4444;
+    color: #fff;
+
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    box-shadow:
+        0 6px 18px rgba(0,0,0,0.2);
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+
+    /*
+     * IMPORTANT:
+     * Invisible toast must NEVER block
+     * buttons underneath it.
+     */
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
 }
 
 .access-toast.show {
-  opacity: 1;
-  transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
   
 
@@ -541,24 +580,46 @@ function complaintPriorityBadge($p){
 
 <body>
 
-  <div class="header">
+ <div class="header">
     <div class="header-left">
-      <div class="menu-icon dw dw-menu"></div>
+        <div class="menu-icon dw dw-menu"></div>
     </div>
 
     <div class="header-right">
-      <div class="user-info-dropdown">
-        <div class="dropdown">
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-            <span class="user-icon"><img src="vendors/images/photo1.jpg" alt="" ></span>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-          </div>
+
+        <!-- DARK MODE TOGGLE -->
+        <div class="admin-theme-switch">
+            <button type="button"
+                    id="themeToggle"
+                    class="admin-theme-toggle"
+                    aria-label="Switch theme"
+                    title="Switch theme">
+                <span id="themeIcon">☾</span>
+            </button>
         </div>
-      </div>
+
+        <div class="user-info-dropdown">
+            <div class="dropdown">
+                <a class="dropdown-toggle"
+                   href="#"
+                   role="button"
+                   data-toggle="dropdown">
+
+                    <span class="user-icon">
+                        <img src="vendors/images/photo1.jpg" alt="">
+                    </span>
+                </a>
+
+                <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+                    <a class="dropdown-item" href="logout.php">
+                        <i class="dw dw-logout"></i> Log Out
+                    </a>
+                </div>
+            </div>
+        </div>
+
     </div>
-  </div>
+</div>
 
   <!-- SIDEBAR -->
 <?php include 'sidebar.php'; ?>
@@ -1031,15 +1092,18 @@ function complaintPriorityBadge($p){
     </div>
   </div>
  
-  <script src="vendors/scripts/core.js"></script>
-  <script src="vendors/scripts/script.min.js"></script>
-  <script src="vendors/scripts/process.js"></script>
-  <script src="vendors/scripts/layout-settings.js"></script>
+<script src="vendors/scripts/core.js"></script>
+<script src="vendors/scripts/script.min.js"></script>
+<script src="vendors/scripts/process.js"></script>
+<script src="vendors/scripts/layout-settings.js"></script>
 
-  <script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
-  <script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
-  <script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
-  <script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
+<script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
+<script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
+<script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
+<script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
+
+<!-- ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
 
   <script>
     // DataTables init

@@ -942,26 +942,50 @@ $resultApproved = $sqlApproved->get_result();
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
 		.btn-action-wrap{display:flex;gap:6px;flex-wrap:wrap;}
-		.access-toast {
-		  position: fixed;
-		  top: 20px;
-		  right: 20px;
-		  background: #ef4444;
-		  color: #fff;
-		  padding: 12px 18px;
-		  border-radius: 8px;
-		  font-weight: 600;
-		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-		  z-index: 99999;
-		  opacity: 0;
-		  transform: translateY(-10px);
-		  transition: all .3s ease;
-		}
+.access-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 
-		.access-toast.show {
-		  opacity: 1;
-		  transform: translateY(0);
-		}
+    background: #ef4444;
+    color: #fff;
+
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
+}
+
+.access-toast.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Bootstrap app toast must not block header controls while hidden */
+#appToast {
+    pointer-events: none;
+}
+
+#appToast.show,
+#appToast.showing {
+    pointer-events: auto;
+}
 
 		#viewHomeownerModal .card{
 		  border-radius:14px;
@@ -979,7 +1003,29 @@ $resultApproved = $sqlApproved->get_result();
 		  min-height:360px;
 		  background:#e9eef6;
 		}
-	</style>
+</style>
+
+<!-- ADMIN DARK MODE -->
+<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+<script>
+(function () {
+    try {
+        const savedTheme = localStorage.getItem('hoa-theme');
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+
+        document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+})();
+</script>
+
 </head>
 
 <body>
@@ -989,8 +1035,20 @@ $resultApproved = $sqlApproved->get_result();
 			<div class="menu-icon dw dw-menu"></div>
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
-		<div class="header-right">
-			<div class="user-notification">
+<div class="header-right">
+
+    <!-- DARK MODE TOGGLE -->
+    <div class="admin-theme-switch">
+        <button type="button"
+                id="themeToggle"
+                class="admin-theme-toggle"
+                aria-label="Switch theme"
+                title="Switch theme">
+            <span id="themeIcon">☾</span>
+        </button>
+    </div>
+
+    <div class="user-notification">
 				<div class="dropdown">
 					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
 						<i class="icon-copy dw dw-notification"></i>
@@ -1226,6 +1284,8 @@ $rowAddress =
 	<script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
 
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
 
 	<script>
     const DELETE_CSRF = <?= json_encode($csrfDelete) ?>;

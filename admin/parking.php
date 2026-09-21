@@ -79,7 +79,14 @@ $stmt->close();
 // ===================== KPI COUNTS =====================
 $activePermits = get_count(
     $conn,
-    "SELECT COUNT(*) c FROM parking_permits WHERE phase=? AND status='active'",
+    "SELECT COUNT(*) c
+     FROM parking_permits
+     WHERE phase=?
+       AND status='active'
+       AND LOWER(COALESCE(payment_status,'paid'))='paid'
+       AND valid_from IS NOT NULL
+       AND valid_from <= CURDATE()
+       AND valid_until >= CURDATE()",
     $phase
 );
 
@@ -121,6 +128,8 @@ $stmt = $conn->prepare("
         p.requested_at,
         p.payment_method,
         p.payment_status,
+        p.valid_from,
+        p.valid_until,
         h.first_name,
         h.middle_name,
         h.last_name,
@@ -350,10 +359,20 @@ $stmt->close();
                         $name = trim(($p['first_name'] ?? '') . ' ' . ($p['middle_name'] ?? '') . ' ' . ($p['last_name'] ?? ''));
                         $st = (string)($p['status'] ?? 'pending');
                         $pay = strtolower((string)($p['payment_status'] ?? 'unpaid'));
+                        $validFrom = (string)($p['valid_from'] ?? '');
+                        $isUpcoming =
+                            $st === 'active' &&
+                            $pay === 'paid' &&
+                            $validFrom !== '' &&
+                            $validFrom > date('Y-m-d');
+
+                        $displayStatus = $isUpcoming ? 'upcoming' : $st;
+
                         $badge = 'badge-soft-info';
-                        if ($st === 'pending') $badge = 'badge-soft-warning';
-                        if ($st === 'active') $badge = 'badge-soft-success';
-                        if (in_array($st, ['revoked', 'expired', 'rejected'], true)) $badge = 'badge-soft-danger';
+                        if ($displayStatus === 'pending') $badge = 'badge-soft-warning';
+                        if ($displayStatus === 'active') $badge = 'badge-soft-success';
+                        if ($displayStatus === 'upcoming') $badge = 'badge-soft-info';
+                        if (in_array($displayStatus, ['revoked', 'expired', 'rejected'], true)) $badge = 'badge-soft-danger';
 
                         $payBadge = 'badge-soft-warning';
                         if ($pay === 'paid') $payBadge = 'badge-soft-success';
@@ -371,7 +390,14 @@ $stmt->close();
                                 <span class="badge-soft <?= esc($payBadge) ?>"><?= esc($pay ?: 'unpaid') ?></span>
                                 <div class="text-secondary" style="font-size:12px;"><?= esc($p['payment_method'] ?? '—') ?></div>
                             </td>
-                            <td><span class="badge-soft <?= esc($badge) ?>"><?= esc($st) ?></span></td>
+                            <td>
+                                <span class="badge-soft <?= esc($badge) ?>"><?= esc($displayStatus) ?></span>
+                                <?php if ($isUpcoming): ?>
+                                    <div class="text-secondary" style="font-size:12px;">
+                                        Starts <?= esc($p['valid_from'] ?? '—') ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
                             <td><?= esc($p['requested_at'] ?? '') ?></td>
                         </tr>
                     <?php endforeach; ?>

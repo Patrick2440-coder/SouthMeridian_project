@@ -72,8 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $conn->prepare("
                     SELECT id, homeowner_id
                     FROM parking_permits
-                    WHERE phase=? AND status='active' AND plate_no=?
-                    ORDER BY id DESC
+                    WHERE phase=?
+                      AND status='active'
+                      AND LOWER(COALESCE(payment_status,'paid'))='paid'
+                      AND plate_no=?
+                      AND valid_from IS NOT NULL
+                      AND valid_from <= CURDATE()
+                      AND valid_until >= CURDATE()
+                    ORDER BY valid_from DESC, id DESC
                     LIMIT 1
                 ");
                 $stmt->bind_param("ss", $phase, $plate);
@@ -96,7 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute();
                 $stmt->close();
 
-                $flash = "Violation recorded. " . ($permit_id ? "Matched to active permit." : "No active permit match.");
+                $flash = "Violation recorded. " . ($permit_id
+                    ? "Matched to the currently valid permit."
+                    : "No currently valid permit matched this plate.");
                 $flashType = "success";
             }
         }
@@ -404,7 +412,7 @@ $stmt->close();
                     <textarea name="notes" class="form-control" rows="3" placeholder="Extra details..."></textarea>
                 </div>
                 <div class="alert alert-info mb-0">
-                    The system will auto-match the plate to an <b>active permit</b> in this phase (if found).
+                    The system will auto-match the plate only to a <b>currently valid, paid permit</b> in this phase.
                 </div>
             </div>
             <div class="modal-footer">

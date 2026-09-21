@@ -1,0 +1,954 @@
+/* ============================================================
+   SOUTH MERIDIAN HOMES - SHARED ADMIN LIGHT / DARK THEME
+   File: vendors/styles/admin_theme.css
+   Preference key shared with homeowner side: hoa-theme
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+  --admin-bg: #f4f6f9;
+  --admin-surface: #ffffff;
+  --admin-surface-2: #f8fafc;
+  --admin-surface-3: #eef2f7;
+  --admin-border: #e5e7eb;
+  --admin-text: #0f172a;
+  --admin-muted: #64748b;
+  --admin-header: #ffffff;
+  --admin-sidebar: #ffffff;
+  --admin-input: #ffffff;
+  --admin-hover: #f1f5f9;
+  --admin-grid: rgba(100, 116, 139, .16);
+}
+
+html.dark {
+  color-scheme: dark;
+  --admin-bg: #0b1120;
+  --admin-surface: #111827;
+  --admin-surface-2: #172033;
+  --admin-surface-3: #1e293b;
+  --admin-border: #2b3648;
+  --admin-text: #e5e7eb;
+  --admin-muted: #94a3b8;
+  --admin-header: #111827;
+  --admin-sidebar: #111827;
+  --admin-input: #0f172a;
+  --admin-hover: #1e293b;
+  --admin-grid: rgba(148, 163, 184, .16);
+}
+
+/* Smooth theme switching without changing layout. */
+body,
+.header,
+.left-side-bar,
+.brand-logo,
+.menu-block,
+.main-container,
+.page-header,
+.card-box,
+.footer-wrap,
+.dropdown-menu,
+.modal-content,
+.table,
+.form-control,
+.custom-select,
+select,
+input,
+textarea,
+.page-link,
+.ann-tab,
+.ann-item,
+#annCalendar {
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+/* ============================================================
+   ADMIN HEADER DARK MODE BUTTON
+   ============================================================ */
+
+.header .header-right {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+}
+
+/* Wrapper around actual button */
+.admin-theme-switch {
+    height: 70px;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    flex: 0 0 auto;
+
+    margin-right: 12px;
+
+    position: relative !important;
+    z-index: 99999 !important;
+
+    pointer-events: auto !important;
+}
+
+/* Actual clickable button */
+.admin-theme-toggle {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+
+    padding: 0 !important;
+    margin: 0 !important;
+
+    border-radius: 50% !important;
+
+    border: 1px solid #d7dee8 !important;
+
+    background: #ffffff !important;
+    color: #334155 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    cursor: pointer !important;
+
+    pointer-events: auto !important;
+
+    position: relative !important;
+    z-index: 100000 !important;
+
+    font-size: 21px !important;
+    line-height: 1 !important;
+
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.12) !important;
+
+    transition:
+        background-color .2s ease,
+        color .2s ease,
+        border-color .2s ease,
+        transform .2s ease !important;
+}
+
+.admin-theme-toggle:hover {
+    background: #f1f5f9 !important;
+    transform: translateY(-1px);
+}
+
+.admin-theme-toggle:active {
+    transform: scale(.94);
+}
+
+.admin-theme-toggle:focus {
+    outline: none !important;
+}
+
+.admin-theme-toggle:focus-visible {
+    box-shadow:
+        0 0 0 3px rgba(59, 130, 246, .25) !important;
+}
+
+/* Icon */
+#themeIcon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    width: 100%;
+    height: 100%;
+
+    pointer-events: none !important;
+
+    font-size: 21px;
+    line-height: 1;
+}
+
+/* Profile section */
+.header .user-info-dropdown {
+    position: relative !important;
+    z-index: 10 !important;
+    flex: 0 0 auto;
+}
+
+
+/* ===============================
+   DARK MODE BUTTON
+   =============================== */
+
+html.dark .admin-theme-toggle {
+    background: #1e293b !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, .25) !important;
+}
+
+html.dark .admin-theme-toggle:hover {
+    background: #334155 !important;
+    border-color: #64748b !important;
+}
+
+
+/* ===============================
+   MOBILE
+   =============================== */
+
+@media (max-width: 767.98px) {
+
+    .admin-theme-switch {
+        height: 70px;
+        margin-right: 5px;
+    }
+
+    .admin-theme-toggle {
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+    }
+
+    #themeIcon {
+        font-size: 19px;
+    }
+}
+
+/* ------------------------------------------------------------
+   GLOBAL DARK MODE
+   ------------------------------------------------------------ */
+html.dark body,
+html.dark .main-container,
+html.dark .pd-ltr-20 {
+  background: var(--admin-bg) !important;
+  color: var(--admin-text) !important;
+}
+
+html.dark .header,
+html.dark .header-left,
+html.dark .header-right {
+  background: var(--admin-header) !important;
+  border-color: var(--admin-border) !important;
+  box-shadow: 0 1px 0 rgba(148, 163, 184, .08) !important;
+}
+
+html.dark .header .menu-icon,
+html.dark .header .dropdown-toggle,
+html.dark .header .user-info-dropdown,
+html.dark .header i {
+  color: var(--admin-text) !important;
+}
+
+/* DeskApp sidebar */
+html.dark .left-side-bar,
+html.dark .brand-logo,
+html.dark .menu-block {
+  background: var(--admin-sidebar) !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .sidebar-menu .dropdown-toggle,
+html.dark .sidebar-menu .submenu li a,
+html.dark .sidebar-menu ul li a,
+html.dark .sidebar-menu .dropdown-toggle .micon,
+html.dark .sidebar-menu .dropdown-toggle .mtext,
+html.dark .sidebar-menu .submenu li a i {
+  color: #cbd5e1 !important;
+}
+
+html.dark .sidebar-menu .dropdown-toggle:hover,
+html.dark .sidebar-menu .submenu li a:hover,
+html.dark .sidebar-menu ul li a:hover,
+html.dark .sidebar-menu .dropdown-toggle.active,
+html.dark .sidebar-menu ul li.active > a {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+html.dark .sidebar-menu .dropdown-toggle.active,
+html.dark .sidebar-menu ul li.active > a {
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+
+html.dark .mobile-menu-overlay {
+  background: rgba(2, 6, 23, .72) !important;
+}
+
+/* Surfaces */
+html.dark .page-header,
+html.dark .card-box,
+html.dark .footer-wrap,
+html.dark .dropdown-menu,
+html.dark .modal-content,
+html.dark .modalx .box,
+html.dark .list-group-item {
+  background: var(--admin-surface) !important;
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .card-box,
+html.dark .page-header,
+html.dark .modal-content,
+html.dark .modalx .box {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .16) !important;
+}
+
+/* Typography */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6,
+html.dark .title,
+html.dark .kpi-value,
+html.dark .font-weight-bold,
+html.dark .weight-500,
+html.dark .weight-600,
+html.dark .weight-700,
+html.dark b,
+html.dark strong,
+html.dark p,
+html.dark td,
+html.dark th,
+html.dark label,
+html.dark .dropdown-item {
+  color: var(--admin-text);
+}
+
+html.dark .text-secondary,
+html.dark .text-muted,
+html.dark .mini-muted,
+html.dark .ann-meta,
+html.dark .kpi-label,
+html.dark small {
+  color: var(--admin-muted) !important;
+}
+
+html.dark .text-blue {
+  color: #60a5fa !important;
+}
+
+html.dark hr {
+  border-color: var(--admin-border) !important;
+}
+
+/* Dropdowns */
+html.dark .dropdown-menu {
+  background: var(--admin-surface) !important;
+  border: 1px solid var(--admin-border) !important;
+}
+
+html.dark .dropdown-item:hover,
+html.dark .dropdown-item:focus {
+  background: var(--admin-hover) !important;
+  color: #ffffff !important;
+}
+
+/* Forms */
+html.dark .form-control,
+html.dark .custom-select,
+html.dark select,
+html.dark input[type="text"],
+html.dark input[type="email"],
+html.dark input[type="number"],
+html.dark input[type="date"],
+html.dark input[type="datetime-local"],
+html.dark input[type="password"],
+html.dark input[type="search"],
+html.dark input[type="tel"],
+html.dark textarea {
+  background: var(--admin-input) !important;
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .form-control:focus,
+html.dark .custom-select:focus,
+html.dark select:focus,
+html.dark input:focus,
+html.dark textarea:focus {
+  background: var(--admin-input) !important;
+  color: var(--admin-text) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 .2rem rgba(59, 130, 246, .15) !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark select option {
+  background: var(--admin-surface) !important;
+  color: var(--admin-text) !important;
+}
+
+/* Tables */
+html.dark .table,
+html.dark table.dataTable {
+  color: var(--admin-text) !important;
+  background: transparent !important;
+}
+
+html.dark .table thead th,
+html.dark .table-light th,
+html.dark thead.table-light th,
+html.dark table.dataTable thead th {
+  background: var(--admin-surface-2) !important;
+  color: #e2e8f0 !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .table td,
+html.dark .table th,
+html.dark table.dataTable td,
+html.dark table.dataTable th {
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .table-striped tbody tr:nth-of-type(odd),
+html.dark table.dataTable.stripe tbody tr.odd,
+html.dark table.dataTable.display tbody tr.odd {
+  background: rgba(148, 163, 184, .035) !important;
+}
+
+html.dark .table-hover tbody tr:hover,
+html.dark table.dataTable.hover tbody tr:hover,
+html.dark table.dataTable.display tbody tr:hover {
+  background: var(--admin-hover) !important;
+  color: #ffffff !important;
+}
+
+/* DataTables */
+html.dark .dataTables_wrapper,
+html.dark .dataTables_wrapper .dataTables_info,
+html.dark .dataTables_wrapper .dataTables_length,
+html.dark .dataTables_wrapper .dataTables_filter,
+html.dark .dataTables_wrapper label {
+  color: var(--admin-muted) !important;
+}
+
+html.dark .dataTables_wrapper .dataTables_filter input,
+html.dark .dataTables_wrapper .dataTables_length select {
+  background: var(--admin-input) !important;
+  color: var(--admin-text) !important;
+  border: 1px solid var(--admin-border) !important;
+}
+
+html.dark .page-item .page-link,
+html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+  background: var(--admin-surface-2) !important;
+  color: #cbd5e1 !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .page-item.active .page-link,
+html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html.dark .page-item.disabled .page-link {
+  background: #111827 !important;
+  color: #64748b !important;
+}
+
+/* Custom dashboard modals */
+html.dark .modalx {
+  background: rgba(2, 6, 23, .72) !important;
+}
+
+html.dark .modalx .boxhead,
+html.dark .modal-header,
+html.dark .modal-footer {
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .modalx .closebtn,
+html.dark .modal .close {
+  color: var(--admin-text) !important;
+  text-shadow: none !important;
+}
+
+/* Dashboard announcement UI */
+html.dark .ann-tab,
+html.dark .ann-item,
+html.dark #annCalendar {
+  background: var(--admin-surface-2) !important;
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .ann-tab:hover {
+  background: var(--admin-hover) !important;
+}
+
+html.dark .ann-tab.active {
+  background: #077f46 !important;
+  border-color: #077f46 !important;
+  color: #ffffff !important;
+}
+
+html.dark .ann-title,
+html.dark .ann-msg {
+  color: var(--admin-text) !important;
+}
+
+html.dark .ann-badge:not(.urgent):not(.important):not(.normal):not(.ended):not(.phase) {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+/* FullCalendar */
+html.dark .fc {
+  color: var(--admin-text) !important;
+}
+
+html.dark .fc-theme-standard td,
+html.dark .fc-theme-standard th,
+html.dark .fc-theme-standard .fc-scrollgrid,
+html.dark .fc .fc-scrollgrid,
+html.dark .fc .fc-daygrid-day,
+html.dark .fc .fc-col-header-cell {
+  border-color: var(--admin-border) !important;
+}
+
+html.dark .fc .fc-col-header-cell,
+html.dark .fc .fc-daygrid-day-frame,
+html.dark .fc .fc-list,
+html.dark .fc .fc-list-table td {
+  background: var(--admin-surface) !important;
+}
+
+html.dark .fc .fc-day-today {
+  background: rgba(37, 99, 235, .12) !important;
+}
+
+html.dark .fc .fc-toolbar-title,
+html.dark .fc .fc-col-header-cell-cushion,
+html.dark .fc .fc-daygrid-day-number,
+html.dark .fc .fc-list-day-text,
+html.dark .fc .fc-list-day-side-text {
+  color: var(--admin-text) !important;
+}
+
+html.dark .fc .fc-button-primary {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+html.dark .fc .fc-button-primary:hover,
+html.dark .fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: #334155 !important;
+  border-color: #475569 !important;
+}
+
+html.dark .fc .fc-list-event:hover td {
+  background: var(--admin-hover) !important;
+}
+
+/* Keep semantic badges readable in both themes. */
+html.dark .badge-soft-warning { background:#422006 !important; border-color:#78350f !important; color:#fdba74 !important; }
+html.dark .badge-soft-success { background:#052e20 !important; border-color:#166534 !important; color:#86efac !important; }
+html.dark .badge-soft-info    { background:#172554 !important; border-color:#1d4ed8 !important; color:#93c5fd !important; }
+html.dark .badge-soft-secondary { background:#1e293b !important; border-color:#475569 !important; color:#cbd5e1 !important; }
+
+html.dark .ann-badge.urgent { background:#450a0a !important; border-color:#991b1b !important; color:#fecaca !important; }
+html.dark .ann-badge.important { background:#422006 !important; border-color:#9a3412 !important; color:#fed7aa !important; }
+html.dark .ann-badge.normal { background:#172554 !important; border-color:#1d4ed8 !important; color:#bfdbfe !important; }
+html.dark .ann-badge.ended { background:#1e293b !important; border-color:#475569 !important; color:#cbd5e1 !important; }
+html.dark .ann-badge.phase { background:#083344 !important; border-color:#155e75 !important; color:#a5f3fc !important; }
+
+/* Common Bootstrap backgrounds that otherwise remain bright. */
+html.dark .bg-white,
+html.dark .bg-light {
+  background: var(--admin-surface-2) !important;
+}
+
+html.dark .border,
+html.dark .border-top,
+html.dark .border-right,
+html.dark .border-bottom,
+html.dark .border-left {
+  border-color: var(--admin-border) !important;
+}
+/* ============================================================
+   COMPLAINTS MODULE DARK MODE
+   ============================================================ */
+
+html.dark .complaint-list-card,
+html.dark .complaint-chat-card,
+html.dark .complaint-info-card {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18) !important;
+}
+
+html.dark .complaint-item {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .complaint-item:hover {
+    background: var(--admin-hover) !important;
+    color: #ffffff !important;
+}
+
+html.dark .complaint-item.active {
+    background: rgba(7,127,70,.18) !important;
+    border-color: #22c55e !important;
+}
+
+html.dark .msg-area {
+    background: #0f172a !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .msg-row.theirs .msg-bubble {
+    background: var(--admin-surface-2) !important;
+    border-color: var(--admin-border) !important;
+    color: var(--admin-text) !important;
+}
+
+html.dark .msg-row.mine .msg-bubble {
+    background: #077f46 !important;
+    color: #ffffff !important;
+}
+
+html.dark .filter-pill {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .filter-pill:hover {
+    background: var(--admin-hover) !important;
+    color: #ffffff !important;
+}
+
+html.dark .filter-pill.active {
+    background: #077f46 !important;
+    border-color: #077f46 !important;
+    color: #ffffff !important;
+}
+
+html.dark .mini-label {
+    color: var(--admin-muted) !important;
+}
+/* ============================================================
+   DESKAPP RIGHT SETTINGS SIDEBAR - DARK MODE
+   ============================================================ */
+
+html.dark .right-sidebar {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-left: 1px solid var(--admin-border) !important;
+}
+
+html.dark .right-sidebar .sidebar-title {
+    background: var(--admin-surface) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .right-sidebar .right-sidebar-body,
+html.dark .right-sidebar .right-sidebar-body-content {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+}
+
+html.dark .right-sidebar h3,
+html.dark .right-sidebar h4,
+html.dark .right-sidebar .font-weight-400 {
+    color: var(--admin-text) !important;
+}
+
+html.dark .right-sidebar .close-sidebar {
+    color: var(--admin-muted) !important;
+}
+
+/* Finance page dark outline button */
+html.dark .btn-outline-dark {
+    color: #e2e8f0 !important;
+    border-color: #64748b !important;
+}
+
+html.dark .btn-outline-dark:hover {
+    background: #334155 !important;
+    border-color: #64748b !important;
+    color: #ffffff !important;
+}
+/* ============================================================
+   HOMEOWNER APPROVAL / IMPORT MODULE
+   ============================================================ */
+
+/* Bootstrap 5 cards inside homeowner/duplicate modals */
+html.dark #viewHomeownerModal .card,
+html.dark #duplicateResidentModal .card,
+html.dark #duplicateDeleteConfirmModal .card {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/* Homeowner profile modal body has an inline light background */
+html.dark #viewHomeownerModal .modal-body {
+    background: var(--admin-bg) !important;
+    color: var(--admin-text) !important;
+}
+
+/* Bootstrap modal sections */
+html.dark #viewHomeownerModal .modal-header,
+html.dark #duplicateResidentModal .modal-header,
+html.dark #duplicateResidentModal .modal-footer,
+html.dark #duplicateDeleteConfirmModal .modal-header,
+html.dark #duplicateDeleteConfirmModal .modal-footer,
+html.dark #actionConfirmModal .modal-header,
+html.dark #actionConfirmModal .modal-footer {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .modal-body,
+html.dark #duplicateResidentModal .modal-body,
+html.dark #duplicateDeleteConfirmModal .modal-body,
+html.dark #actionConfirmModal .modal-body {
+    color: var(--admin-text) !important;
+}
+
+/*
+ * Page CSS currently forces #263238.
+ * Override it in dark mode.
+ */
+html.dark #viewHomeownerModal .fw-semibold,
+html.dark #duplicateResidentModal .fw-semibold,
+html.dark #duplicateDeleteConfirmModal .fw-semibold {
+    color: var(--admin-text) !important;
+}
+
+/* Bootstrap generic cards used in AJAX-loaded profiles */
+html.dark #viewHomeownerModal .card-header,
+html.dark #duplicateResidentModal .card-header {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .card-body,
+html.dark #duplicateResidentModal .card-body {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+}
+
+/* Imported resident empty-state */
+html.dark .alert-light {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/* Bootstrap light buttons */
+html.dark .btn-light {
+    background: var(--admin-surface-3) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .btn-light:hover {
+    background: var(--admin-hover) !important;
+    color: #ffffff !important;
+}
+
+/* Bootstrap 5 close X needs to stay visible in dark modals */
+html.dark .modal .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Leaflet/profile map container before the map image loads */
+html.dark #viewHomeownerModal #coverMap {
+    background: #0f172a !important;
+}
+/* ============================================================
+   HOMEOWNER REGISTER MODULE
+   ============================================================ */
+
+html.dark .step-pill {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .register-map-preview {
+    background: #0f172a !important;
+    border-color: #22c55e !important;
+}
+
+html.dark #selectedPropertyInfo {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .member {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .form-select {
+    background-color: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark .form-select:disabled,
+html.dark .form-control:disabled,
+html.dark .form-control[readonly] {
+    background: var(--admin-surface-3) !important;
+    color: var(--admin-muted) !important;
+}
+
+html.dark .alert .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+/* ============================================================
+   APPROVED HOUSEHOLDS MODULE
+   ============================================================ */
+
+/* View / Edit / Delete modal surfaces */
+html.dark #viewHomeownerModal .modal-content,
+html.dark #editHomeownerModal .modal-content,
+html.dark #deleteHomeownerModal .modal-content {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .modal-body,
+html.dark #editHomeownerModal .modal-body,
+html.dark #deleteHomeownerModal .modal-body {
+    background: var(--admin-bg) !important;
+    color: var(--admin-text) !important;
+}
+
+/* Preserve red Delete header */
+html.dark #deleteHomeownerModal .modal-header.bg-danger {
+    background: #dc3545 !important;
+    color: #ffffff !important;
+}
+
+/* AJAX homeowner profile cards */
+html.dark #viewHomeownerModal .card {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .card-header,
+html.dark #viewHomeownerModal .card-header.bg-white {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .card-body {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+}
+
+/* AJAX profile bold values */
+html.dark #viewHomeownerModal .fw-semibold {
+    color: var(--admin-text) !important;
+}
+
+/* Modal text */
+html.dark #viewHomeownerModal .text-muted,
+html.dark #editHomeownerModal .text-muted,
+html.dark #deleteHomeownerModal .text-muted {
+    color: var(--admin-muted) !important;
+}
+
+/* Edit modal content loaded through AJAX */
+html.dark #editHomeownerContent,
+html.dark #editHomeownerContent .card,
+html.dark #editHomeownerContent .card-body {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/* Bootstrap 5 selects that may appear in edit form */
+html.dark #editHomeownerModal .form-select {
+    background-color: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #editHomeownerModal .form-select:disabled,
+html.dark #editHomeownerModal .form-control:disabled,
+html.dark #editHomeownerModal .form-control[readonly] {
+    background: var(--admin-surface-3) !important;
+    color: var(--admin-muted) !important;
+}
+
+/* Document preview outer boxes */
+html.dark #viewHomeownerModal .bg-light {
+    background: var(--admin-surface-2) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/*
+ * Document preview contains inline white/light backgrounds.
+ * Override them inside the modal.
+ */
+html.dark #viewHomeownerModal .border.rounded-3 > .p-2 {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+}
+
+html.dark #viewHomeownerModal .border-top.bg-white {
+    background: var(--admin-surface) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/* Tables loaded inside homeowner profile */
+html.dark #viewHomeownerModal .table {
+    color: var(--admin-text) !important;
+}
+
+html.dark #viewHomeownerModal .table-light th {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+/* Property map loading background */
+html.dark #viewHomeownerModal #coverMap,
+html.dark #editHomeownerModal #editMap {
+    background: #0f172a !important;
+}
+
+/* Light modal buttons */
+html.dark #viewHomeownerModal .btn-light,
+html.dark #editHomeownerModal .btn-light,
+html.dark #deleteHomeownerModal .btn-light {
+    background: var(--admin-surface-3) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .btn-light:hover,
+html.dark #editHomeownerModal .btn-light:hover,
+html.dark #deleteHomeownerModal .btn-light:hover {
+    background: var(--admin-hover) !important;
+    color: #ffffff !important;
+}
+
+/* Bootstrap 5 close buttons */
+html.dark #viewHomeownerModal .btn-close,
+html.dark #editHomeownerModal .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}

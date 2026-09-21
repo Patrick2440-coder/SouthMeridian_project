@@ -108,6 +108,21 @@ $showAnnouncements        = canAccess('announcements', $allowedModules);
 $showComplaints           = canAccess('complaints', $allowedModules);
 $showFinance              = canAccess('finance', $allowedModules);
 $showParking              = canAccess('parking', $allowedModules);
+
+/*
+|--------------------------------------------------------------------------
+| CCTV MONITORING
+|--------------------------------------------------------------------------
+|
+| CCTV is currently a prototype admin module and does not yet have its own
+| access_modules/access_permissions row. Show it to normal phase admins for
+| now. When a dedicated "cctv" permission is added later, change this to:
+|
+| $showCctv = canAccess('cctv', $allowedModules);
+|
+*/
+$showCctv                 = ($adminRole === 'admin');
+
 $showCommunity            = canAccess('community', $allowedModules);
 $showActivityLog          = canAccess('activity_log', $allowedModules);
 $showSettings             = canAccess('settings', $allowedModules);
@@ -343,6 +358,16 @@ $showSettings             = canAccess('settings', $allowedModules);
                 </a>
               </li>
             </ul>
+          </li>
+        <?php endif; ?>
+
+        <?php if ($showCctv): ?>
+          <li>
+            <a href="cctv_monitoring.php"
+               class="dropdown-toggle no-arrow <?= $currentPage === 'cctv_monitoring.php' ? 'active' : '' ?>">
+              <span class="micon dw dw-video-camera"></span>
+              <span class="mtext">CCTV Monitoring</span>
+            </a>
           </li>
         <?php endif; ?>
 

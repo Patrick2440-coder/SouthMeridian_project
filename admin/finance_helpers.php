@@ -3,7 +3,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 function db_conn(): mysqli {
-  $conn = new mysqli("localhost", "root", "", "u972459197_south_meridian.sql");
+  $conn = new mysqli("localhost", "root", "", "u972459197_south_meridian");
   if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
   $conn->set_charset("utf8mb4");
   return $conn;

@@ -1,5 +1,18 @@
 <?php
 session_start();
+/*
+|--------------------------------------------------------------------------
+| CSRF protection
+|--------------------------------------------------------------------------
+*/
+
+if (empty($_SESSION['csrf_homeowner_dashboard'])) {
+    $_SESSION['csrf_homeowner_dashboard'] =
+        bin2hex(random_bytes(32));
+}
+
+$csrfToken =
+    (string)$_SESSION['csrf_homeowner_dashboard'];
 require_once '../config/database.php';
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['homeowner', 'tenant'], true)) {
   header("Location: ../index.php");
@@ -62,10 +75,29 @@ if ($isTenant) {
   }
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude, created_at
-    FROM homeowners
-    WHERE id = ?
-    LIMIT 1
+SELECT
+    id,
+    status,
+    must_change_password,
+    first_name,
+    last_name,
+    phase,
+    house_lot_number,
+
+    block,
+    lot,
+    street,
+    map_x,
+    map_y,
+
+    latitude,
+    longitude,
+
+    created_at,
+    profile_picture_path
+FROM homeowners
+WHERE id = ?
+LIMIT 1
   ");
   $stmt->bind_param("i", $hid);
   $stmt->execute();
@@ -86,10 +118,29 @@ if ($isTenant) {
   $hid = (int)$_SESSION['homeowner_id'];
 
   $stmt = $conn->prepare("
-    SELECT id, status, must_change_password, first_name, last_name, phase, house_lot_number, latitude, longitude, created_at
-    FROM homeowners
-    WHERE id = ?
-    LIMIT 1
+SELECT
+    id,
+    status,
+    must_change_password,
+    first_name,
+    last_name,
+    phase,
+    house_lot_number,
+
+    block,
+    lot,
+    street,
+    map_x,
+    map_y,
+
+    latitude,
+    longitude,
+
+    created_at,
+    profile_picture_path
+FROM homeowners
+WHERE id = ?
+LIMIT 1
   ");
   $stmt->bind_param("i", $hid);
   $stmt->execute();
@@ -106,20 +157,90 @@ if ($isTenant) {
 $phase = (string)$user['phase'];
 
 if ($isTenant) {
-  $fullName = trim(($tenant['first_name'] ?? '') . ' ' . ($tenant['last_name'] ?? ''));
-  $mustChange = false;
-  $initials = strtoupper(substr($tenant['first_name'] ?? 'T', 0, 1) . substr($tenant['last_name'] ?? 'N', 0, 1));
-  $accountStartRaw = (string)($tenant['registered_at'] ?? '');
+
+    $fullName =
+        trim(
+            ($tenant['first_name'] ?? '') .
+            ' ' .
+            ($tenant['last_name'] ?? '')
+        );
+
+    $initials =
+        strtoupper(
+            substr(
+                $tenant['first_name'] ?? 'T',
+                0,
+                1
+            ) .
+            substr(
+                $tenant['last_name'] ?? 'N',
+                0,
+                1
+            )
+        );
+
+    $accountStartRaw =
+        (string)(
+            $tenant['registered_at']
+            ?? ''
+        );
+
 } else {
-  $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
-  $mustChange = ((int)$user['must_change_password'] === 1);
-  $initials = strtoupper(substr($user['first_name'] ?? 'H', 0, 1) . substr($user['last_name'] ?? 'O', 0, 1));
-  $accountStartRaw = (string)($user['created_at'] ?? '');
+
+    $fullName =
+        trim(
+            ($user['first_name'] ?? '') .
+            ' ' .
+            ($user['last_name'] ?? '')
+        );
+
+    $initials =
+        strtoupper(
+            substr(
+                $user['first_name'] ?? 'H',
+                0,
+                1
+            ) .
+            substr(
+                $user['last_name'] ?? 'O',
+                0,
+                1
+            )
+        );
+
+    $accountStartRaw =
+        (string)(
+            $user['created_at']
+            ?? ''
+        );
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| Homeowner Profile Picture
+|--------------------------------------------------------------------------
+*/
+
+$profilePicturePath =
+    trim(
+        (string)(
+            $user['profile_picture_path']
+            ?? ''
+        )
+    );
+
+$profilePictureUrl =
+    $profilePicturePath !== ''
+        ? '../' . ltrim(
+            $profilePicturePath,
+            '/'
+        )
+        : '';
 $accountStartTs = strtotime($accountStartRaw);
+
 if (!$accountStartTs) {
-  $accountStartTs = time();
+    $accountStartTs = time();
 }
 
 $accountStartYear  = (int)date('Y', $accountStartTs);
@@ -144,38 +265,305 @@ $complaintPages = [
 $parkingOpen    = in_array($activePage, $parkingPages, true);
 $complaintsOpen = in_array($activePage, $complaintPages, true);
 
-$err = "";
-if (!$isTenant && $mustChange && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password_submit'])) {
-  $p1 = $_POST['password'] ?? '';
-  $p2 = $_POST['password2'] ?? '';
 
-  if (strlen($p1) < 8) $err = "Password must be at least 8 characters.";
-  else if ($p1 !== $p2) $err = "Passwords do not match.";
-  else {
-    $hash = password_hash($p1, PASSWORD_BCRYPT);
-    $stmt = $conn->prepare("UPDATE homeowners SET password=?, must_change_password=0 WHERE id=?");
-    $stmt->bind_param("si", $hash, $hid);
-    $stmt->execute();
-    $stmt->close();
-    header("Location: homeowner_dashboard.php");
-    exit;
-  }
-}
 
 $stmt = $conn->prepare("INSERT IGNORE INTO homeowner_feed_state (homeowner_id) VALUES (?)");
 $stmt->bind_param("i", $hid);
 $stmt->execute();
 $stmt->close();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-  header('Content-Type: application/json; charset=utf-8');
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['action'])
+) {
 
-  if ($mustChange) {
-    echo json_encode(['success'=>false,'message'=>'Please change your password first.']);
-    exit;
-  }
+    header(
+        'Content-Type: application/json; charset=utf-8'
+    );
 
-  $action = (string)$_POST['action'];
+    /*
+    |--------------------------------------------------------------------------
+    | Verify CSRF token
+    |--------------------------------------------------------------------------
+    */
+
+    $submittedCsrf =
+        (string)(
+            $_POST['csrf_token']
+            ?? ''
+        );
+
+    if (
+        $submittedCsrf === '' ||
+        !hash_equals(
+            $csrfToken,
+            $submittedCsrf
+        )
+    ) {
+
+        http_response_code(403);
+
+        echo json_encode([
+            'success' => false,
+            'message' =>
+                'Invalid or expired security token. Please refresh the page.'
+        ]);
+
+        exit;
+    }
+
+    $action =
+        (string)$_POST['action'];
+
+        /*
+|--------------------------------------------------------------------------
+| Update Homeowner Profile Picture
+|--------------------------------------------------------------------------
+*/
+
+if ($action === 'update_profile_picture') {
+
+if ($isTenant) {    
+        http_response_code(403);
+
+        echo json_encode([
+            'success' => false,
+            'message' => 'Tenant accounts cannot change the homeowner profile picture.'
+        ]);
+
+        exit;
+    }
+
+    if (
+        !isset($_FILES['profile_picture']) ||
+        !is_array($_FILES['profile_picture'])
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Please select an image.'
+        ]);
+
+        exit;
+    }
+
+    $file = $_FILES['profile_picture'];
+
+    if (
+        !isset($file['error']) ||
+        $file['error'] !== UPLOAD_ERR_OK
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Profile picture upload failed.'
+        ]);
+
+        exit;
+    }
+
+    /*
+     * Maximum: 5 MB
+     */
+    $maxSize = 5 * 1024 * 1024;
+
+    if (
+        (int)($file['size'] ?? 0) <= 0 ||
+        (int)$file['size'] > $maxSize
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Profile picture must be 5 MB or smaller.'
+        ]);
+
+        exit;
+    }
+
+    $tmpName =
+        (string)($file['tmp_name'] ?? '');
+
+    if (
+        $tmpName === '' ||
+        !is_uploaded_file($tmpName)
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid uploaded image.'
+        ]);
+
+        exit;
+    }
+
+    /*
+     * Detect actual MIME type.
+     */
+    $finfo =
+        new finfo(
+            FILEINFO_MIME_TYPE
+        );
+
+    $mimeType =
+        $finfo->file(
+            $tmpName
+        );
+
+    $allowedTypes = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp'
+    ];
+
+    if (
+        !isset(
+            $allowedTypes[$mimeType]
+        )
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Only JPG, PNG, and WEBP images are allowed.'
+        ]);
+
+        exit;
+    }
+
+    $extension =
+        $allowedTypes[$mimeType];
+
+    /*
+     * /SouthMeridian_project/uploads/profile_pictures/
+     */
+    $uploadDir =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        'uploads' .
+        DIRECTORY_SEPARATOR .
+        'profile_pictures' .
+        DIRECTORY_SEPARATOR;
+
+    if (
+        !is_dir($uploadDir) &&
+        !mkdir(
+            $uploadDir,
+            0755,
+            true
+        )
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Unable to create profile picture directory.'
+        ]);
+
+        exit;
+    }
+
+    $fileName =
+        bin2hex(
+            random_bytes(16)
+        ) .
+        '.' .
+        $extension;
+
+    $destination =
+        $uploadDir .
+        $fileName;
+
+    if (
+        !move_uploaded_file(
+            $tmpName,
+            $destination
+        )
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Unable to save profile picture.'
+        ]);
+
+        exit;
+    }
+
+    $dbPath =
+        'uploads/profile_pictures/' .
+        $fileName;
+
+    /*
+     * Keep old picture so we can remove it after
+     * database update succeeds.
+     */
+    $oldPicture =
+        trim(
+            (string)(
+                $user['profile_picture_path']
+                ?? ''
+            )
+        );
+
+    try {
+
+        $stmt =
+            $conn->prepare("
+                UPDATE homeowners
+                SET profile_picture_path = ?
+                WHERE id = ?
+                LIMIT 1
+            ");
+
+        $stmt->bind_param(
+            'si',
+            $dbPath,
+            $hid
+        );
+
+        $stmt->execute();
+        $stmt->close();
+
+        /*
+         * Delete previous custom profile picture.
+         */
+        if (
+            $oldPicture !== '' &&
+            str_starts_with(
+                $oldPicture,
+                'uploads/profile_pictures/'
+            )
+        ) {
+
+            $oldFullPath =
+                dirname(__DIR__) .
+                DIRECTORY_SEPARATOR .
+                str_replace(
+                    '/',
+                    DIRECTORY_SEPARATOR,
+                    $oldPicture
+                );
+
+            if (is_file($oldFullPath)) {
+                @unlink($oldFullPath);
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Profile picture updated successfully.',
+            'image_url' => '../' . $dbPath
+        ]);
+
+        exit;
+
+    } catch (Throwable $e) {
+
+        if (is_file($destination)) {
+            @unlink($destination);
+        }
+
+        http_response_code(500);
+
+        echo json_encode([
+            'success' => false,
+            'message' => 'Unable to update profile picture.'
+        ]);
+
+        exit;
+    }
+}
+
 
   if ($isTenant && in_array($action, ['toggle_like_ann', 'add_comment_ann'], true)) {
     echo json_encode(['success'=>false,'message'=>'You do not have access to that action.']);
@@ -224,10 +612,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       exit;
     }
 
-    $stmt = $conn->prepare("INSERT INTO announcement_comments (announcement_id, homeowner_id, comment) VALUES (?,?,?)");
-    $stmt->bind_param("iis", $ann_id, $hid, $comment);
-    $ok = $stmt->execute();
-    $stmt->close();
+$stmt = $conn->prepare("
+    INSERT INTO announcement_comments
+        (announcement_id, homeowner_id, comment)
+    VALUES (?, ?, ?)
+");
+
+$stmt->bind_param(
+    "iis",
+    $ann_id,
+    $hid,
+    $comment
+);
+
+$ok = $stmt->execute();
+
+$newCommentId =
+    $ok
+        ? (int)$conn->insert_id
+        : 0;
+
+$stmt->close();
 
     $stmt = $conn->prepare("SELECT COUNT(*) c FROM announcement_comments WHERE announcement_id=?");
     $stmt->bind_param("i", $ann_id);
@@ -237,22 +642,429 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     $avatarInitial = strtoupper(substr($user['first_name'] ?? 'H', 0, 1));
 
+if ($profilePictureUrl !== '') {
+
+    $newCommentAvatar =
+        '<img
+            src="' . esc($profilePictureUrl) . '"
+            alt="' . esc($fullName) . '"
+            class="h-full w-full object-cover"
+        >';
+
+} else {
+
+    $newCommentAvatar =
+        esc($avatarInitial);
+}
+
     echo json_encode([
       'success'=>$ok,
       'message'=>$ok?'Comment added.':'Failed to comment.',
       'comment_count'=>$cc,
-      'comment_html'=>$ok ? '
-        <div class="fb-comment">
-          <div class="fb-comment-avatar">'.esc($avatarInitial).'</div>
-          <div class="fb-comment-bubble">
-            <div class="fb-comment-name">'.esc($fullName).'</div>
-            <div class="fb-comment-text">'.esc($comment).'</div>
-          </div>
-        </div>' : ''
+'comment_html'=>$ok ? '
+<div
+    class="comment-item mt-3 flex items-start gap-2.5"
+    data-comment-id="'.$newCommentId.'"
+>
+
+<div class="
+    flex h-9 w-9
+    shrink-0
+    items-center justify-center
+    overflow-hidden
+    rounded-full
+    bg-emerald-100
+    text-xs
+    font-bold
+    text-emerald-700
+    dark:bg-emerald-950
+    dark:text-emerald-300
+">
+    '.$newCommentAvatar.'
+</div>
+    <div class="min-w-0">
+
+        <div class="flex items-center gap-2">
+
+            <div class="
+                text-sm
+                font-semibold
+                leading-5
+                text-slate-800
+                dark:text-slate-100
+            ">
+                '.esc($fullName).'
+            </div>
+
+            <div class="relative">
+
+                <button
+                    type="button"
+                    class="
+                        btn-comment-options
+                        flex h-7 w-7
+                        items-center justify-center
+                        rounded-lg
+                        text-sm
+                        text-slate-400
+                        hover:bg-slate-100
+                        dark:hover:bg-slate-700
+                    "
+                >
+                    <i class="bi bi-three-dots"></i>
+                </button>
+
+                <div class="
+                    comment-options-menu
+                    absolute left-0 top-8 z-30
+                    hidden min-w-[120px]
+                    rounded-xl
+                    border border-slate-200
+                    bg-white p-1
+                    shadow-xl
+                    dark:border-slate-700
+                    dark:bg-slate-800
+                ">
+
+                    <button
+                        type="button"
+                        class="
+                            btn-edit-comment
+                            flex w-full items-center gap-2
+                            rounded-lg px-3 py-2
+                            text-left text-sm font-medium
+                            text-slate-700
+                            hover:bg-slate-100
+                            dark:text-slate-200
+                            dark:hover:bg-slate-700
+                        "
+                    >
+                        <i class="bi bi-pencil"></i>
+                        Edit
+                    </button>
+
+                    <button
+                        type="button"
+                        class="
+                            btn-delete-comment
+                            flex w-full items-center gap-2
+                            rounded-lg px-3 py-2
+                            text-left text-sm font-medium
+                            text-red-600
+                            hover:bg-red-50
+                            dark:text-red-400
+                            dark:hover:bg-red-950/40
+                        "
+                    >
+                        <i class="bi bi-trash3"></i>
+                        Delete
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="
+            comment-message
+            mt-1
+            w-fit
+            max-w-[min(80vw,520px)]
+            rounded-xl
+            rounded-tl-sm
+            bg-slate-100
+            px-3 py-1.5
+            text-left
+            text-[14px]
+            leading-5
+            text-slate-700
+            dark:bg-slate-800
+            dark:text-slate-200
+        ">
+            '.esc($comment).'
+        </div>
+
+        <div class="comment-edit-area mt-2 hidden">
+
+            <input
+                type="text"
+                maxlength="500"
+                value="'.esc($comment).'"
+                class="
+                    comment-edit-input
+                    min-h-10
+                    w-full
+                    max-w-md
+                    rounded-xl
+                    border border-slate-300
+                    bg-white
+                    px-3
+                    text-sm
+                    text-slate-800
+                    outline-none
+                    focus:border-emerald-500
+                    focus:ring-4
+                    focus:ring-emerald-100
+                    dark:border-slate-700
+                    dark:bg-slate-800
+                    dark:text-slate-100
+                    dark:focus:ring-emerald-950
+                "
+            >
+
+            <div class="mt-2 flex gap-2">
+
+                <button
+                    type="button"
+                    class="
+                        btn-save-comment
+                        rounded-lg
+                        bg-emerald-700
+                        px-3 py-1.5
+                        text-xs font-semibold
+                        text-white
+                    "
+                >
+                    Save
+                </button>
+
+                <button
+                    type="button"
+                    class="
+                        btn-cancel-edit
+                        rounded-lg
+                        bg-slate-100
+                        px-3 py-1.5
+                        text-xs font-semibold
+                        text-slate-700
+                        dark:bg-slate-700
+                        dark:text-slate-200
+                    "
+                >
+                    Cancel
+                </button>
+
+            </div>
+
+        </div>
+
+        <div class="
+            mt-1
+            text-[10px]
+            font-medium
+            text-slate-400
+            dark:text-slate-500
+        ">
+            Just now
+        </div>
+
+    </div>
+
+</div>' : ''
     ]);
     exit;
   }
+/*
+|--------------------------------------------------------------------------
+| Edit own comment
+|--------------------------------------------------------------------------
+*/
 
+if ($action === 'edit_comment_ann') {
+
+    if ($isTenant) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'You do not have access to this action.'
+        ]);
+        exit;
+    }
+
+    $commentId =
+        (int)($_POST['comment_id'] ?? 0);
+
+    $comment =
+        trim((string)($_POST['comment'] ?? ''));
+
+    if (
+        $commentId <= 0 ||
+        $comment === ''
+    ) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid comment.'
+        ]);
+        exit;
+    }
+
+    if (mb_strlen($comment) > 500) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Comment must not exceed 500 characters.'
+        ]);
+        exit;
+    }
+
+
+    $stmt = $conn->prepare("
+        UPDATE announcement_comments
+        SET comment = ?
+        WHERE id = ?
+          AND homeowner_id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "sii",
+        $comment,
+        $commentId,
+        $hid
+    );
+
+    $ok = $stmt->execute();
+
+    $changed =
+        $stmt->affected_rows > 0;
+
+    $stmt->close();
+
+
+    echo json_encode([
+        'success' => $ok,
+        'changed' => $changed,
+        'comment' => $comment,
+        'message' =>
+            $ok
+                ? 'Comment updated.'
+                : 'Unable to update comment.'
+    ]);
+
+    exit;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Delete own comment
+|--------------------------------------------------------------------------
+*/
+
+if ($action === 'delete_comment_ann') {
+
+    if ($isTenant) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'You do not have access to this action.'
+        ]);
+        exit;
+    }
+
+
+    $commentId =
+        (int)($_POST['comment_id'] ?? 0);
+
+    if ($commentId <= 0) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid comment.'
+        ]);
+        exit;
+    }
+
+
+    /*
+    | Get announcement first so we can return the new count
+    */
+
+    $stmt = $conn->prepare("
+        SELECT announcement_id
+        FROM announcement_comments
+        WHERE id = ?
+          AND homeowner_id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $commentId,
+        $hid
+    );
+
+    $stmt->execute();
+
+    $row =
+        $stmt->get_result()->fetch_assoc();
+
+    $stmt->close();
+
+
+    if (!$row) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Comment not found or you cannot delete it.'
+        ]);
+        exit;
+    }
+
+
+    $announcementId =
+        (int)$row['announcement_id'];
+
+
+    $stmt = $conn->prepare("
+        DELETE FROM announcement_comments
+        WHERE id = ?
+          AND homeowner_id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $commentId,
+        $hid
+    );
+
+    $ok = $stmt->execute();
+
+    $stmt->close();
+
+
+    $countStmt = $conn->prepare("
+        SELECT COUNT(*) AS total
+        FROM announcement_comments
+        WHERE announcement_id = ?
+    ");
+
+    $countStmt->bind_param(
+        "i",
+        $announcementId
+    );
+
+    $countStmt->execute();
+
+    $commentCount =
+        (int)(
+            $countStmt
+                ->get_result()
+                ->fetch_assoc()['total']
+            ?? 0
+        );
+
+    $countStmt->close();
+
+
+    echo json_encode([
+        'success' => $ok,
+        'comment_count' => $commentCount,
+        'message' =>
+            $ok
+                ? 'Comment deleted.'
+                : 'Unable to delete comment.'
+    ]);
+
+    exit;
+}
   if ($action === 'mark_seen') {
     $target = (string)($_POST['target'] ?? 'all');
 
@@ -499,14 +1311,22 @@ if (!empty($annFeed)) {
   $in  = implode(',', array_fill(0, count($ids), '?'));
   $types = str_repeat('i', count($ids));
 
-  $sql = "
-    SELECT ac.id, ac.announcement_id, ac.homeowner_id, ac.comment, ac.created_at,
-           h.first_name, h.last_name
+$sql = "
+    SELECT
+        ac.id,
+        ac.announcement_id,
+        ac.homeowner_id,
+        ac.comment,
+        ac.created_at,
+        h.first_name,
+        h.last_name,
+        h.profile_picture_path
     FROM announcement_comments ac
-    JOIN homeowners h ON h.id=ac.homeowner_id
+    JOIN homeowners h
+        ON h.id = ac.homeowner_id
     WHERE ac.announcement_id IN ($in)
     ORDER BY ac.created_at ASC
-  ";
+";
   $stmt = $conn->prepare($sql);
   $stmt->bind_param($types, ...$ids);
   $stmt->execute();
@@ -519,8 +1339,277 @@ if (!empty($annFeed)) {
   $stmt->close();
 }
 
-$lat = $user['latitude'];
-$lng = $user['longitude'];
+/*
+|--------------------------------------------------------------------------
+| Home Location
+|--------------------------------------------------------------------------
+*/
+
+/*
+ * Start with the newer dedicated database columns.
+ */
+$homeBlock =
+    (int)(
+        $user['block']
+        ?? 0
+    );
+
+$homeLot =
+    (int)(
+        $user['lot']
+        ?? 0
+    );
+
+$homeStreet =
+    trim(
+        (string)(
+            $user['street']
+            ?? ''
+        )
+    );
+
+$homeMapX =
+    (float)(
+        $user['map_x']
+        ?? 0
+    );
+
+$homeMapY =
+    (float)(
+        $user['map_y']
+        ?? 0
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Legacy Block / Lot fallback
+|--------------------------------------------------------------------------
+|
+| Older homeowner records may only have:
+|
+|   house_lot_number = "Block 2 Lot 3"
+|
+| and may not yet have values in the newer
+| block, lot, map_x and map_y columns.
+|
+*/
+
+if (
+    $homeBlock <= 0 ||
+    $homeLot <= 0
+) {
+
+    $legacyHouseLot =
+        trim(
+            (string)(
+                $user['house_lot_number']
+                ?? ''
+            )
+        );
+
+
+    if (
+        preg_match(
+            '/(?:block|b)\s*[-:]?\s*(\d+)\D+(?:lot|l)\s*[-:]?\s*(\d+)/i',
+            $legacyHouseLot,
+            $matches
+        )
+    ) {
+
+        $homeBlock =
+            (int)$matches[1];
+
+        $homeLot =
+            (int)$matches[2];
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Resolve location from official South Meridian map
+|--------------------------------------------------------------------------
+|
+| If map_x/map_y are missing, locate the property
+| using the official Block/Lot mapping JSON.
+|
+*/
+
+if (
+    $homeBlock > 0 &&
+    $homeLot > 0 &&
+    (
+        $homeMapX <= 0 ||
+        $homeMapY <= 0
+    )
+) {
+
+    /*
+     * homeowner_dashboard.php is inside /homeowner/
+     *
+     * Mapping JSON is inside /admin/
+     */
+    $mappingPath =
+        dirname(__DIR__) .
+        DIRECTORY_SEPARATOR .
+        'admin' .
+        DIRECTORY_SEPARATOR .
+        'southmeri_block_lot_mapping.json';
+
+
+    if (is_readable($mappingPath)) {
+
+        $mappingData =
+            json_decode(
+                (string)file_get_contents(
+                    $mappingPath
+                ),
+                true
+            );
+
+
+        if (is_array($mappingData)) {
+
+            /*
+             * Same conversion used by your
+             * official admin Block/Lot map.
+             */
+            $pageWidthEmu =
+                8.5 * 914400;
+
+            $pageHeightEmu =
+                11 * 914400;
+
+            $pageMarginEmu =
+                914400;
+
+            $markerCenterOffsetEmu =
+                90000;
+
+
+            foreach ($mappingData as $location) {
+
+                $locationBlock =
+                    (int)(
+                        $location['block']
+                        ?? 0
+                    );
+
+                $locationLot =
+                    (int)(
+                        $location['lot']
+                        ?? 0
+                    );
+
+
+                if (
+                    $locationBlock !== $homeBlock ||
+                    $locationLot !== $homeLot
+                ) {
+                    continue;
+                }
+
+
+                $xEmu =
+                    (float)(
+                        $location['x_emu']
+                        ?? 0
+                    );
+
+                $yEmu =
+                    (float)(
+                        $location['y_emu']
+                        ?? 0
+                    );
+
+
+                $homeMapX =
+                    (float)round(
+                        (
+                            (
+                                $pageMarginEmu +
+                                $xEmu +
+                                $markerCenterOffsetEmu
+                            )
+                            /
+                            $pageWidthEmu
+                        )
+                        * 2550,
+                        2
+                    );
+
+
+                $homeMapY =
+                    (float)round(
+                        (
+                            (
+                                $pageMarginEmu +
+                                $yEmu +
+                                $markerCenterOffsetEmu
+                            )
+                            /
+                            $pageHeightEmu
+                        )
+                        * 3300,
+                        2
+                    );
+
+
+                /*
+                 * Get official street name too.
+                 */
+                if ($homeStreet === '') {
+
+                    $homeStreet =
+                        trim(
+                            (string)(
+                                $location['street']
+                                ?? ''
+                            )
+                        );
+                }
+
+
+                break;
+            }
+        }
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Determine available map
+|--------------------------------------------------------------------------
+*/
+
+$hasSubdivisionMap =
+    $homeBlock > 0 &&
+    $homeLot > 0 &&
+    $homeMapX > 0 &&
+    $homeMapY > 0;
+
+
+/*
+ * Older GPS coordinates remain available
+ * as the last fallback.
+ */
+$lat =
+    $user['latitude']
+    ?? null;
+
+$lng =
+    $user['longitude']
+    ?? null;
+
+
+$hasLegacyGps =
+    !$hasSubdivisionMap &&
+    is_numeric($lat) &&
+    is_numeric($lng) &&
+    (float)$lat != 0 &&
+    (float)$lng != 0;
 $chatPages = ['homeowner_public_chat.php'];
 $chatOpen = in_array($activePage, $chatPages, true);
 
@@ -533,530 +1622,5318 @@ unset($_SESSION['access_denied']);
 <meta charset="UTF-8">
 <title><?= esc($pageTitle) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
-<style>
-  html, body { max-width: 100%; overflow-x: hidden; }
-  .app-shell{ position: relative; }
-  .sidebar-overlay{ position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 1040; opacity: 0; visibility: hidden; transition: .25s ease; }
-  .sidebar-overlay.show{ opacity: 1; visibility: visible; }
-  .sb-dd { display:flex; flex-direction:column; gap:6px; }
-  .sb-dd-toggle{ display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
-  .sb-dd-menu{ display:none; padding-left:12px; margin-top:2px; border-left:2px solid rgba(255,255,255,.08); }
-  .sb-dd.open .sb-dd-menu{ display:block; }
-  .sb-dd-caret{ transition: transform .15s ease; }
-  .sb-dd.open .sb-dd-caret{ transform: rotate(180deg); }
-  .pillx{ display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#f1f5f9; font-weight:700; flex-wrap: wrap; }
-  .req-list li{ margin-bottom: 6px; }
-  .topbar-mobile-btn{ border: 1px solid #dbe3ea; background: #fff; color: #0f5132; border-radius: 10px; width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; }
-  .notif-btn{ position: relative; }
-  .notif-badge{ position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; border-radius:999px; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; background:#dc3545; color:#fff; padding:0 5px; line-height:1; }
-  .notif-menu{ width:min(360px, 95vw); border-radius:14px; overflow:hidden; }
-  #coverMap{ width:100%; min-height:260px; }
-  .fb-cover{ overflow:hidden; }
-  .fb-profile-card, .fb-actions, .post-h, .post-stats, .comment-form{ min-width:0; }
-  .comment-form{ display:flex; gap:8px; align-items:center; }
-  .comment-input{ flex:1; min-width:0; }
-  .post-content, .fb-comment-text, .fb-sub, .sb-name, .sb-meta{ word-wrap: break-word; overflow-wrap: anywhere; }
-  .mobile-user-strip{ display:none; }
-  @media (max-width: 991.98px){
-    .sidebar{ position: fixed !important; top: 0; left: -290px; width: 280px !important; max-width: 85vw; height: 100vh; z-index: 1050; transition: left .25s ease; overflow-y: auto; }
-    .sidebar.show{ left: 0; }
-    .main-area{ width: 100% !important; margin-left: 0 !important; }
-    .container-xl{ padding-left: 14px; padding-right: 14px; }
-    .fb-profile-card{ flex-direction: column; align-items: flex-start !important; gap: 14px; }
-    .fb-actions{ width: 100%; display:flex; flex-wrap: wrap; gap:10px; }
-    .post-h, .post-stats{ flex-wrap: wrap; gap: 10px; }
-    .pill, .pillx{ max-width: 100%; }
-    .mobile-user-strip{ display:block; margin-bottom: 14px; }
-    .desktop-user-text{ display:none !important; }
-    #coverMap{ min-height:190px; }
-  }
-  @media (max-width: 767.98px){
-    body{ font-size: 14px; }
-    .navbar .container-xl{ gap: 10px; }
-    .navbar-brand{ font-size: 1rem; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fb-name{ font-size: 1.4rem; }
-    .fb-avatar{ width: 64px !important; height: 64px !important; font-size: 1.1rem !important; }
-    .post-avatar, .fb-comment-avatar{ flex: 0 0 auto; }
-    .comment-form{ align-items: stretch; }
-    .btn-comment-send{ flex: 0 0 auto; }
-    .notif-menu{ width:min(340px, 94vw); }
-    .fb-card-h, .fb-card-b{ padding-left: 14px !important; padding-right: 14px !important; }
-    .alert, .pill, .pillx{ font-size: 13px; }
-    .lock-modal{ width: calc(100% - 20px) !important; margin: 10px auto; }
-  }
+<!-- Dark mode initialization -->
+<script>
+(function () {
+    const savedTheme =
+        localStorage.getItem('hoa-theme');
 
-  /* Desktop fixed sidebar */
-@media (min-width: 992px){
-  .sidebar{
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 280px;
-    height: 100vh;
-    overflow-y: auto;
-    z-index: 1030;
-  }
+    const systemDark =
+        window.matchMedia(
+            '(prefers-color-scheme: dark)'
+        ).matches;
 
-  .main-area{
-    margin-left: 280px;
-    width: calc(100% - 280px);
-  }
-}
-.sidebar{
-  overflow-y: auto;
-  overflow-x: hidden;
-}
+    const useDark =
+        savedTheme === 'dark' ||
+        (!savedTheme && systemDark);
+
+    document.documentElement.classList.toggle(
+        'dark',
+        useDark
+    );
+})();
+</script>
+
+<!-- Tailwind manual dark mode -->
+<style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
 </style>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+<!-- Bootstrap Icons only -->
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+>
+
+<!-- Leaflet -->
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
-<body>
+
+<body
+    class="
+        bg-slate-50
+        text-slate-900
+        antialiased
+        transition-colors
+        duration-200
+
+        dark:bg-slate-950
+        dark:text-slate-100
+    "
+>
+
+
 <?php if ($accessDeniedMsg !== ''): ?>
-<div class="position-fixed top-0 end-0 p-3" style="z-index:9999">
-  <div id="accessDeniedToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
-    <div class="toast-header bg-danger text-white border-0">
-      <strong class="me-auto">
-        <i class="bi bi-shield-lock-fill me-2"></i>Access Denied
-      </strong>
-      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+
+<div
+    id="accessDeniedToast"
+    class="
+        fixed right-4 top-4 z-[100]
+        w-[calc(100%-2rem)]
+        max-w-md
+        rounded-2xl
+        border border-red-200
+        bg-white
+        shadow-xl
+        
+        dark:bg-slate-900 dark:border-red-900
+"
+>
+
+    <div class="flex items-start gap-3 p-4">
+
+        <div class="
+            flex h-11 w-11 shrink-0
+            items-center justify-center
+            rounded-xl
+            bg-red-100
+            text-xl
+            text-red-700
+            
+            dark:bg-red-950/60 dark:text-red-300
+">
+            <i class="bi bi-shield-exclamation"></i>
+        </div>
+
+        <div class="min-w-0 flex-1">
+
+            <p class="font-bold text-slate-900 dark:text-slate-100">
+                Access Denied
+            </p>
+
+            <p class="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                <?= esc($accessDeniedMsg) ?>
+            </p>
+
+        </div>
+
+        <button
+            type="button"
+            id="accessDeniedClose"
+            class="
+                flex h-10 w-10 shrink-0
+                items-center justify-center
+                rounded-xl
+                text-slate-500
+                transition
+                hover:bg-slate-100
+                hover:text-slate-800
+                
+                dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100
+"
+            aria-label="Close notification"
+        >
+            <i class="bi bi-x-lg"></i>
+        </button>
+
     </div>
-    <div class="toast-body bg-white text-dark">
-      <?= esc($accessDeniedMsg) ?>
-    </div>
-  </div>
+
 </div>
+
 <?php endif; ?>
 
-<div class="app-shell">
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-  <?php include 'homeowner_sidebar.php'; ?>
-  <div class="main-area">
-    <div class="<?= $mustChange ? 'blur-wrap' : '' ?>">
-      <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-        <div class="container-xl">
-          <div class="d-flex align-items-center gap-2">
-            <button type="button" class="topbar-mobile-btn d-inline-flex d-lg-none" id="sidebarToggle" aria-label="Open menu">
-              <i class="bi bi-list fs-4"></i>
+
+<!-- Mobile sidebar overlay -->
+
+<div
+    id="sidebarOverlay"
+    class="
+        fixed inset-0 z-50
+        hidden
+        bg-slate-950/50
+        backdrop-blur-[1px]
+        lg:hidden
+    "
+></div>
+
+
+<?php include 'homeowner_sidebar.php'; ?>
+
+
+<!-- =========================================================
+     MAIN AREA
+     ========================================================= -->
+
+<div class="min-h-screen lg:ml-[280px]">
+
+
+    <!-- =====================================================
+         TOP BAR
+         ===================================================== -->
+
+<header
+    class="
+        sticky top-0 z-40
+        border-b border-slate-200
+        bg-white/95
+        backdrop-blur
+        transition-colors
+
+        dark:border-slate-800
+        dark:bg-slate-900/95
+    "
+>
+
+        <div
+            class="
+                mx-auto
+                flex min-h-[72px]
+                max-w-7xl
+                items-center
+                gap-3
+                px-4
+                sm:px-6
+            "
+        >
+
+            <!-- Mobile menu -->
+
+            <button
+                type="button"
+                id="sidebarToggle"
+                class="
+                    flex h-12 w-12
+                    shrink-0
+                    items-center justify-center
+                    rounded-xl
+                    border border-slate-200
+                    bg-white
+                    text-2xl
+                    text-slate-700
+                    shadow-sm
+                    transition
+                    hover:bg-slate-50
+dark:bg-slate-800/70
+                    focus:outline-none
+                    focus:ring-4
+                    focus:ring-emerald-100
+
+                    lg:hidden
+                    
+                    dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800 dark:focus:ring-emerald-950
+"
+                aria-label="Open menu"
+            >
+                <i class="bi bi-list"></i>
             </button>
-            <a class="navbar-brand fw-bold text-success m-0" href="homeowner_dashboard.php">HOA Community</a>
-          </div>
-          <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
-            <div class="dropdown position-relative">
-              <button class="notif-btn topbar-mobile-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
-                <i class="bi bi-bell fs-5"></i>
-              </button>
-              <?php if ($notifCount > 0): ?>
-                <span class="notif-badge"><?= (int)$notifCount ?></span>
-              <?php endif; ?>
-              <div class="dropdown-menu dropdown-menu-end p-0 notif-menu">
-                <div class="p-3 border-bottom d-flex align-items-center justify-content-between gap-2">
-                  <div class="fw-bold">Notifications</div>
-                  <button class="btn btn-sm btn-outline-success" id="btnMarkAllSeen">Mark all as seen</button>
+
+
+            <!-- Brand -->
+
+            <a
+                href="homeowner_dashboard.php"
+                class="min-w-0"
+            >
+
+                <div
+                    class="
+                        truncate
+                        text-base
+                        font-bold
+                        text-emerald-800
+
+                        sm:text-lg
+                        
+                        dark:text-emerald-300
+"
+                >
+                    HOA Community
                 </div>
-                <div class="p-2" style="max-height:360px; overflow:auto;">
-                  <?php if (empty($notifItems)): ?>
-                    <div class="p-3 text-muted fw-semibold">No new notifications.</div>
-                  <?php else: ?>
-                    <?php foreach($notifItems as $n): ?>
-                      <?php if ($n['kind'] === 'announcement'): ?>
-                        <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
-                          <div class="fw-bold"><i class="bi bi-megaphone-fill text-success me-1"></i> New announcement</div>
-                          <div class="fw-semibold"><?= esc($n['title']) ?></div>
-                          <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+
+                <div
+                    class="
+                        hidden
+                        text-xs
+                        font-medium
+                        text-slate-500
+
+                        sm:block
+                        
+                        dark:text-slate-400
+"
+                >
+                    South Meridian Homes Salitran
+                </div>
+
+            </a>
+
+
+            <div
+                class="
+                    ml-auto
+                    flex items-center
+                    gap-2
+
+                    sm:gap-3
+                "
+            >
+
+<!-- Theme Toggle -->
+<button
+    type="button"
+    id="themeToggle"
+    class="
+        flex h-12 w-12
+        shrink-0
+        items-center justify-center
+        rounded-xl
+        border border-slate-200
+        bg-white
+        text-xl
+        text-slate-700
+        shadow-sm
+        transition
+
+        hover:border-emerald-200
+        hover:bg-emerald-50
+        hover:text-emerald-800
+
+        focus:outline-none
+        focus:ring-4
+        focus:ring-emerald-100
+
+        dark:border-slate-700
+        dark:bg-slate-900
+        dark:text-slate-200
+        dark:hover:border-slate-600
+        dark:hover:bg-slate-800
+        dark:hover:text-emerald-300
+        dark:focus:ring-emerald-950
+    "
+    aria-label="Switch to dark mode"
+    title="Switch to dark mode"
+>
+    <i
+        id="themeIcon"
+        class="bi bi-moon-stars-fill"
+    ></i>
+</button>
+                <!-- =================================================
+                     NOTIFICATIONS
+                     ================================================= -->
+
+                <div class="relative">
+
+                    <button
+                        type="button"
+                        id="notificationToggle"
+                        class="
+                            relative
+                            flex h-12 w-12
+                            items-center justify-center
+                            rounded-xl
+                            border border-slate-200
+                            bg-white
+                            text-xl
+                            text-slate-700
+                            shadow-sm
+                            transition
+                            hover:border-emerald-200
+                            hover:bg-emerald-50
+                            hover:text-emerald-800
+                            focus:outline-none
+                            focus:ring-4
+                            focus:ring-emerald-100
+                            
+                            dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 dark:hover:border-emerald-800 dark:focus:ring-emerald-950
+"
+                        aria-label="Open notifications"
+                        aria-expanded="false"
+                    >
+
+                        <i class="bi bi-bell-fill"></i>
+
+
+                        <?php if ($notifCount > 0): ?>
+
+                            <span
+                                class="
+                                    absolute
+                                    -right-1.5
+                                    -top-1.5
+                                    flex min-h-5
+                                    min-w-5
+                                    items-center justify-center
+                                    rounded-full
+                                    border-2 border-white
+                                    bg-red-600
+                                    px-1.5
+                                    text-[10px]
+                                    font-bold
+                                    text-white
+                                "
+                            >
+                                <?= (int)$notifCount ?>
+                            </span>
+
+                        <?php endif; ?>
+
+                    </button>
+
+
+                    <!-- Notification panel -->
+
+                    <div
+                        id="notificationMenu"
+class="
+    absolute right-0
+    mt-3
+    hidden
+    w-[min(92vw,390px)]
+    overflow-hidden
+    rounded-2xl
+    border border-slate-200
+    bg-white
+    shadow-2xl
+
+    dark:border-slate-700
+    dark:bg-slate-900
+"
+                    >
+
+                        <div
+                            class="
+                                flex items-center
+                                justify-between
+                                gap-3
+                                border-b
+                                border-slate-200
+                                p-4
+                                
+                                dark:border-slate-800
+"
+                        >
+
+                            <div>
+
+                                <h2
+                                    class="
+                                        text-base
+                                        font-bold
+                                        text-slate-900
+                                        
+                                        dark:text-slate-100
+"
+                                >
+                                    Notifications
+                                </h2>
+
+                                <p
+                                    class="
+                                        mt-0.5
+                                        text-xs
+                                        text-slate-500
+                                        
+                                        dark:text-slate-400
+"
+                                >
+                                    Recent community updates
+                                </p>
+
+                            </div>
+
+
+                            <button
+                                type="button"
+                                id="btnMarkAllSeen"
+                                class="
+                                    min-h-10
+                                    rounded-xl
+                                    bg-emerald-50
+                                    px-3
+                                    text-xs
+                                    font-bold
+                                    text-emerald-800
+                                    transition
+                                    hover:bg-emerald-100
+                                    
+                                    dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/50
+"
+                            >
+                                Mark all seen
+                            </button>
+
                         </div>
-                      <?php else: ?>
-                        <div class="p-2 rounded-3" style="border:1px solid #eef2f7; background:#fff; margin:6px;">
-                          <div class="fw-bold"><i class="bi bi-chat-left-dots-fill me-1"></i> New comment</div>
-                          <div class="fw-semibold"><?= esc($n['actor_name'] ?? 'Someone') ?>:</div>
-                          <div class="text-muted fw-semibold"><?= esc($n['snippet'] ?? '') ?><?= strlen($n['snippet'] ?? '')>=90 ? '…' : '' ?></div>
-                          <div class="text-muted small fw-semibold"><?= esc(date('M d, Y h:i A', strtotime($n['created_at']))) ?></div>
+
+
+                        <div
+                            class="
+                                max-h-[380px]
+                                overflow-y-auto
+                                p-2
+                            "
+                        >
+
+                            <?php if (empty($notifItems)): ?>
+
+                                <div
+                                    class="
+                                        flex flex-col
+                                        items-center
+                                        justify-center
+                                        px-5 py-10
+                                        text-center
+                                    "
+                                >
+
+                                    <div
+                                        class="
+                                            flex h-14 w-14
+                                            items-center justify-center
+                                            rounded-2xl
+                                            bg-slate-100
+                                            text-2xl
+                                            text-slate-500
+                                            
+                                            dark:bg-slate-800 dark:text-slate-400
+"
+                                    >
+                                        <i class="bi bi-bell-slash"></i>
+                                    </div>
+
+                                    <p
+                                        class="
+                                            mt-3
+                                            font-semibold
+                                            text-slate-700
+                                            
+                                            dark:text-slate-300
+"
+                                    >
+                                        You're all caught up
+                                    </p>
+
+                                    <p
+                                        class="
+                                            mt-1
+                                            text-sm
+                                            text-slate-500
+                                            
+                                            dark:text-slate-400
+"
+                                    >
+                                        No new notifications.
+                                    </p>
+
+                                </div>
+
+                            <?php else: ?>
+
+                                <?php foreach ($notifItems as $n): ?>
+
+                                    <div
+                                        class="
+                                            m-1
+                                            rounded-xl
+                                            border border-slate-100
+                                            bg-slate-50
+dark:bg-slate-800/70
+                                            p-3
+                                            
+                                            dark:border-slate-800
+"
+                                    >
+
+                                        <?php if ($n['kind'] === 'announcement'): ?>
+
+                                            <div
+                                                class="
+                                                    flex items-start
+                                                    gap-3
+                                                "
+                                            >
+
+                                                <div
+                                                    class="
+                                                        flex h-10 w-10
+                                                        shrink-0
+                                                        items-center justify-center
+                                                        rounded-xl
+                                                        bg-emerald-100
+                                                        text-emerald-700
+                                                        
+                                                        dark:bg-emerald-950/60 dark:text-emerald-400
+"
+                                                >
+                                                    <i class="bi bi-megaphone-fill"></i>
+                                                </div>
+
+                                                <div class="min-w-0">
+
+                                                    <p
+                                                        class="
+                                                            text-sm
+                                                            font-bold
+                                                            text-slate-900
+                                                            
+                                                            dark:text-slate-100
+"
+                                                    >
+                                                        New announcement
+                                                    </p>
+
+                                                    <p
+                                                        class="
+                                                            mt-0.5
+                                                            break-words
+                                                            text-sm
+                                                            font-medium
+                                                            text-slate-700
+                                                            
+                                                            dark:text-slate-300
+"
+                                                    >
+                                                        <?= esc($n['title']) ?>
+                                                    </p>
+
+                                                    <p
+                                                        class="
+                                                            mt-1
+                                                            text-xs
+                                                            text-slate-500
+                                                            
+                                                            dark:text-slate-400
+"
+                                                    >
+                                                        <?= esc(
+                                                            date(
+                                                                'M d, Y h:i A',
+                                                                strtotime($n['created_at'])
+                                                            )
+                                                        ) ?>
+                                                    </p>
+
+                                                </div>
+
+                                            </div>
+
+                                        <?php else: ?>
+
+                                            <div
+                                                class="
+                                                    flex items-start
+                                                    gap-3
+                                                "
+                                            >
+
+                                                <div
+                                                    class="
+                                                        flex h-10 w-10
+                                                        shrink-0
+                                                        items-center justify-center
+                                                        rounded-xl
+                                                        bg-blue-100
+                                                        text-blue-700
+                                                        
+                                                        dark:bg-blue-950/60 dark:text-blue-300
+"
+                                                >
+                                                    <i class="bi bi-chat-left-dots-fill"></i>
+                                                </div>
+
+                                                <div class="min-w-0">
+
+                                                    <p
+                                                        class="
+                                                            text-sm
+                                                            font-bold
+                                                            text-slate-900
+                                                            
+                                                            dark:text-slate-100
+"
+                                                    >
+                                                        New comment
+                                                    </p>
+
+                                                    <p
+                                                        class="
+                                                            mt-0.5
+                                                            text-sm
+                                                            font-semibold
+                                                            text-slate-700
+                                                            
+                                                            dark:text-slate-300
+"
+                                                    >
+                                                        <?= esc($n['actor_name'] ?? 'Someone') ?>
+                                                    </p>
+
+                                                    <p
+                                                        class="
+                                                            mt-0.5
+                                                            break-words
+                                                            text-sm
+                                                            text-slate-600
+                                                            
+                                                            dark:text-slate-400
+"
+                                                    >
+                                                        <?= esc($n['snippet'] ?? '') ?>
+
+                                                        <?= strlen($n['snippet'] ?? '') >= 90
+                                                            ? '…'
+                                                            : ''
+                                                        ?>
+                                                    </p>
+
+                                                    <p
+                                                        class="
+                                                            mt-1
+                                                            text-xs
+                                                            text-slate-500
+                                                            
+                                                            dark:text-slate-400
+"
+                                                    >
+                                                        <?= esc(
+                                                            date(
+                                                                'M d, Y h:i A',
+                                                                strtotime($n['created_at'])
+                                                            )
+                                                        ) ?>
+                                                    </p>
+
+                                                </div>
+
+                                            </div>
+
+                                        <?php endif; ?>
+
+                                    </div>
+
+                                <?php endforeach; ?>
+
+                            <?php endif; ?>
+
                         </div>
-                      <?php endif; ?>
-                    <?php endforeach; ?>
-                  <?php endif; ?>
-                </div>
-                <div class="p-2 border-top d-flex gap-2 flex-wrap">
-                  <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenAnn">Seen announcements</button>
-                  <button class="btn btn-sm btn-outline-success flex-fill" id="btnSeenCom">Seen comments</button>
-                </div>
-              </div>
-            </div>
-            <div class="small text-muted desktop-user-text">
-              Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?><?= $isTenant ? ' • Tenant' : '' ?>)
-            </div>
-            <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
-          </div>
-        </div>
-      </nav>
 
-      <div class="container-xl my-4">
-        <div class="mobile-user-strip">
-          <div class="alert alert-light border shadow-sm mb-3">
-            <div class="fw-bold"><?= esc($fullName) ?></div>
-            <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?><?= $isTenant ? ' • Tenant' : '' ?></div>
-          </div>
-        </div>
 
-        <div class="fb-cover">
-          <div class="cover-badge">
-            <span>South Meridian Homes Salitran</span>
-            <small>• <?= esc($phase) ?></small>
-          </div>
-          <?php if (!empty($lat) && !empty($lng)): ?>
-            <div id="coverMap" data-lat="<?= esc($lat) ?>" data-lng="<?= esc($lng) ?>"></div>
-          <?php else: ?>
-            <div class="h-100 w-100 d-flex align-items-center justify-content-center" style="min-height:190px;">
-              <div class="text-muted fw-semibold">No location saved yet.</div>
-            </div>
-          <?php endif; ?>
-        </div>
+                        <div
+                            class="
+                                grid grid-cols-2
+                                gap-2
+                                border-t
+                                border-slate-200
+                                p-3
+                                
+                                dark:border-slate-800
+"
+                        >
 
-        <div class="fb-profile-row">
-          <div class="fb-profile-card">
-            <div class="fb-avatar"><?= esc($initials) ?></div>
-            <div>
-              <h2 class="fb-name"><?= esc($fullName) ?></h2>
-              <div class="fb-sub"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?><?= $isTenant ? ' • Tenant Account' : '' ?></div>
-              <div class="mt-2 d-flex gap-2 flex-wrap">
-                <span class="pill">📍 South Meridian Homes Salitran</span>
-                <span class="pill">🏠 <?= esc($user['house_lot_number'] ?? '') ?></span>
-              </div>
-            </div>
-            <div class="fb-actions">
-              <span class="pill"><i class="bi bi-geo-alt-fill"></i> Cover = Map</span>
-              <?php if (!$isTenant || tenant_can_access('announcements', $tenant)): ?>
-                <a class="btn btn-hoa" href="#feed"><i class="bi bi-megaphone-fill me-1"></i> Feed</a>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
+                            <button
+                                id="btnSeenAnn"
+                                type="button"
+                                class="
+                                    min-h-11
+                                    rounded-xl
+                                    border border-slate-200
+                                    px-3
+                                    text-xs
+                                    font-semibold
+                                    text-slate-700
+                                    transition
+                                    hover:bg-slate-50
+dark:bg-slate-800/70
+                                    
+                                    dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800
+"
+                            >
+                                Seen announcements
+                            </button>
 
-        <div class="row g-4 mt-2">
-          <div class="col-lg-4">
-            <div class="fb-card mb-4">
-              <div class="fb-card-h">
-                <h6>🏠 Community</h6>
-                <span class="pill"><?= count($annFeed) ?> posts</span>
-              </div>
-              <div class="fb-card-b">
-                <div class="d-flex flex-column gap-2">
-                  <div class="pill">Phase: <?= esc($phase) ?></div>
-                  <div class="pill">Subdivision: South Meridian Homes Salitran</div>
-                  <div class="pill">Lot: <?= esc($houseLot) ?></div>
-                  <?php if ($isTenant): ?>
-                    <div class="pill">Account Type: Tenant</div>
-                  <?php endif; ?>
-                </div>
-              </div>
-            </div>
+                            <button
+                                id="btnSeenCom"
+                                type="button"
+                                class="
+                                    min-h-11
+                                    rounded-xl
+                                    border border-slate-200
+                                    px-3
+                                    text-xs
+                                    font-semibold
+                                    text-slate-700
+                                    transition
+                                    hover:bg-slate-50
+dark:bg-slate-800/70
+                                    
+                                    dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800
+"
+                            >
+                                Seen comments
+                            </button>
 
-            <div class="fb-card">
-              <div class="fb-card-h"><h6>ℹ️ Tip</h6></div>
-              <div class="fb-card-b">
-                <div class="text-muted fw-semibold">
-                  This feed shows official announcements available to your account.
-                </div>
-              </div>
-            </div>
-          </div>
+                        </div>
 
-          <div class="col-lg-8">
-            <?php if (!$isTenant || !empty($tenant['can_pay_dues'])): ?>
-            <div class="fb-card mb-4">
-              <div class="fb-card-h">
-                <h6>💳 Monthly Dues Reminder</h6>
-                <span class="pill">₱<?= number_format((float)$monthlyDues, 2) ?>/month</span>
-              </div>
-              <div class="fb-card-b">
-                <?php if ($accountStartYear > $curYear): ?>
-                  <div class="alert alert-info mb-0">
-                    Your dues will start in <b><?= esc($accountStartLabel) ?></b>.
-                  </div>
-                <?php elseif (empty($unpaidMonths)): ?>
-                  <div class="alert alert-success mb-0">
-                    ✅ You are fully paid for <?= esc($curYear) ?> (<?= esc(month_name($duesStartMonthThisYear)) ?>–<?= esc(month_name($curMonth)) ?>). Thank you!
-                  </div>
-                  <div class="mt-2 text-muted small fw-semibold">
-                    Dues started from your account creation month: <?= esc($accountStartLabel) ?>.
-                  </div>
-                <?php else: ?>
-                  <div class="alert alert-danger">
-                    <div class="fw-bold mb-1">⚠️ You have unpaid monthly dues.</div>
-                    <div class="fw-semibold mb-2">
-                      Dues start from: <b><?= esc($accountStartLabel) ?></b>
                     </div>
-                    <div class="fw-semibold">
-                      Unpaid months (<?= esc($curYear) ?>):
-                      <?php foreach($unpaidMonths as $m): ?>
-                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle me-1">
-                          <?= esc(month_name($m)) ?>
-                        </span>
-                      <?php endforeach; ?>
+
+                </div>
+
+
+                <!-- Desktop account -->
+
+                <div
+                    class="
+                        hidden
+                        text-right
+
+                        md:block
+                    "
+                >
+
+                    <div
+                        class="
+                            max-w-[220px]
+                            truncate
+                            text-sm
+                            font-bold
+                            text-slate-800
+                            
+                            dark:text-slate-200
+"
+                    >
+                        <?= esc($fullName) ?>
                     </div>
-                    <div class="mt-2 fw-semibold">
-                      Next due: <b><?= esc(month_name($nextDueMonth)) ?> <?= esc($curYear) ?></b>
+
+                    <div
+                        class="
+                            text-xs
+                            font-medium
+                            text-slate-500
+                            
+                            dark:text-slate-400
+"
+                    >
+                        <?= esc($phase) ?>
+
+                        <?= $isTenant
+                            ? ' • Tenant'
+                            : ''
+                        ?>
                     </div>
-                  </div>
-                  <div class="d-flex gap-2 flex-wrap">
-                    <a class="btn btn-success fw-semibold" href="homeowner_pay_dues.php">
-                      <i class="bi bi-cash-coin me-1"></i> Pay Monthly Dues
-                    </a>
-                    <span class="pillx">
-                      Current month: <?= esc(month_name($curMonth)) ?> —
-                      <?php if (!$curMonthIsApplicable): ?>
-                        <span class="text-muted">NOT YET APPLICABLE</span>
-                      <?php elseif ($curMonthPaid): ?>
-                        <span class="text-success">PAID ✅</span>
-                      <?php else: ?>
-                        <span class="text-danger">NOT PAID ❌</span>
-                      <?php endif; ?>
+
+                </div>
+
+
+                <!-- Logout -->
+
+                <a
+                    href="logout.php"
+                    class="
+                        flex min-h-12
+                        items-center
+                        justify-center
+                        gap-2
+                        rounded-xl
+                        border border-slate-200
+                        bg-white
+                        px-3
+                        text-sm
+                        font-semibold
+                        text-slate-700
+                        transition
+                        hover:border-red-200
+                        hover:bg-red-50
+                        hover:text-red-700
+
+                        sm:px-4
+                        
+                        dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-red-950/40 dark:hover:text-red-300 dark:hover:border-red-800
+"
+                >
+                    <i class="bi bi-box-arrow-right text-lg"></i>
+
+                    <span class="hidden sm:inline">
+                        Logout
                     </span>
-                  </div>
-                  <div class="mt-2 text-muted small fw-semibold">
-                    Only the months starting from your account creation month are included.
-                  </div>
-                <?php endif; ?>
-              </div>
+                </a>
+
             </div>
-            <?php endif; ?>
 
-            <?php if (!$isTenant || tenant_can_access('announcements', $tenant)): ?>
-            <div class="d-flex flex-column gap-4" id="feed">
-              <?php if (empty($annFeed)): ?>
-                <div class="fb-card"><div class="fb-card-b">
-                  <div class="text-muted fw-semibold">No announcements visible to you right now.</div>
-                </div></div>
-              <?php else: ?>
-                <?php foreach($annFeed as $a): ?>
-                  <?php
-                    $aid = (int)$a['id'];
-                    $iLiked = ((int)$a['i_liked'] > 0);
-                    $prio = (string)$a['priority'];
-                    $prioIcon = $prio==='urgent' ? 'bi-exclamation-octagon-fill' : ($prio==='important' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill');
-                    $prioColor = $prio==='urgent' ? 'text-danger' : ($prio==='important' ? 'text-warning' : 'text-success');
-                  ?>
-                  <div class="post" data-ann-id="<?= $aid ?>">
-                    <div class="post-h">
-                      <div class="post-avatar">A</div>
-                      <div style="flex:1; min-width:0;">
-                        <div class="post-name">
-                          <i class="bi <?= esc($prioIcon) ?> <?= esc($prioColor) ?> me-1"></i>
-                          <?= esc($a['title']) ?>
-                        </div>
-                        <div class="post-meta">
-                          <?= esc($a['category']) ?> • <?= esc($phase) ?> • <?= esc(date('M d, Y h:i A', strtotime($a['created_at']))) ?>
-                        </div>
-                      </div>
-                      <span class="badge-soft"><?= esc(strtoupper($a['audience'])) ?></span>
-                    </div>
-                    <div class="post-b">
-                      <div class="post-content"><?= esc($a['message']) ?></div>
-                    </div>
-                    <div class="post-stats">
-                      <div>
-                        <span class="me-3"><i class="bi bi-hand-thumbs-up-fill me-1 text-success"></i><span class="like-count"><?= (int)$a['like_count'] ?></span></span>
-                        <span class="me-3"><i class="bi bi-chat-left-text-fill me-1"></i><span class="comment-count"><?= (int)$a['comment_count'] ?></span></span>
-                      </div>
-                      <div class="text-muted fw-semibold">Official</div>
-                    </div>
-
-                    <?php if (!$isTenant): ?>
-                    <div class="post-actions">
-                      <button class="action-btn btn-like <?= $iLiked ? 'liked' : '' ?>">
-                        <i class="bi bi-hand-thumbs-up<?= $iLiked ? '-fill' : '' ?> me-1"></i> Like
-                      </button>
-                      <button class="action-btn btn-focus-comment">
-                        <i class="bi bi-chat-left-text me-1"></i> Comment
-                      </button>
-                    </div>
-                    <?php endif; ?>
-
-                    <div class="comments">
-                      <?php
-                        $clist = $commentsByAnn[$aid] ?? [];
-                        foreach($clist as $c):
-                          $cName = trim(($c['first_name'] ?? '').' '.($c['last_name'] ?? ''));
-                          $cInit = strtoupper(substr((string)($c['first_name'] ?? 'H'),0,1));
-                      ?>
-                        <div class="fb-comment">
-                          <div class="fb-comment-avatar"><?= esc($cInit) ?></div>
-                          <div class="fb-comment-bubble">
-                            <div class="fb-comment-name"><?= esc($cName) ?></div>
-                            <div class="fb-comment-text"><?= esc($c['comment']) ?></div>
-                          </div>
-                        </div>
-                      <?php endforeach; ?>
-
-                      <?php if (!$isTenant): ?>
-                      <div class="comment-form">
-                        <input class="comment-input" type="text" placeholder="Write a comment..." maxlength="500">
-                        <button class="btn btn-hoa btn-comment-send" type="button"><i class="bi bi-send"></i></button>
-                      </div>
-                      <?php endif; ?>
-                    </div>
-                  </div>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </div>
-            <?php else: ?>
-              <div class="fb-card">
-                <div class="fb-card-b">
-                  <div class="text-muted fw-semibold">You do not have access to announcements.</div>
-                </div>
-              </div>
-            <?php endif; ?>
-          </div>
         </div>
-      </div>
+
+    </header>
+
+
+    <!-- =====================================================
+         PAGE CONTENT
+         ===================================================== -->
+
+    <main
+        class="
+            mx-auto
+            max-w-7xl
+            px-4
+            py-6
+
+            sm:px-6
+            sm:py-8
+        "
+    >
+
+
+        <!-- =================================================
+             WELCOME
+             ================================================= -->
+
+        <section class="mb-6">
+
+            <p
+                class="
+                    text-sm
+                    font-semibold
+                    text-emerald-700
+                    
+                    dark:text-emerald-400
+"
+            >
+                South Meridian Homes Salitran
+            </p>
+
+            <h1
+                class="
+                    mt-1
+                    text-2xl
+                    font-bold
+                    tracking-tight
+                    text-slate-900
+
+                    sm:text-3xl
+                    
+                    dark:text-slate-100
+"
+            >
+                Welcome,
+                <?= esc(
+                    $isTenant
+                        ? ($tenant['first_name'] ?? $fullName)
+                        : ($user['first_name'] ?? $fullName)
+                ) ?>
+                👋
+            </h1>
+
+            <p
+                class="
+                    mt-2
+                    max-w-2xl
+                    text-[15px]
+                    leading-6
+                    text-slate-600
+
+                    sm:text-base
+                    
+                    dark:text-slate-400
+"
+            >
+                View important community updates, manage your dues,
+                permits, rentals and other HOA services in one place.
+            </p>
+
+        </section>
+
+
+        <!-- =================================================
+             HOME LOCATION
+             ================================================= -->
+
+        <section
+            class="
+                overflow-hidden
+                rounded-3xl
+                border border-slate-200
+                bg-white
+                shadow-sm
+                
+                dark:bg-slate-900 dark:border-slate-800
+"
+        >
+
+            <div
+                class="
+                    relative
+                    h-[220px]
+                    overflow-hidden
+                    bg-slate-200
+
+                    sm:h-[260px]
+                    lg:h-[300px]
+                    
+                    dark:bg-slate-800
+"
+            >
+
+<?php if ($hasSubdivisionMap): ?>
+
+    <!-- Official South Meridian subdivision map -->
+    <div
+        id="coverMap"
+        class="absolute inset-0 h-full w-full"
+
+        data-map-type="subdivision"
+
+        data-map-x="<?= esc($homeMapX) ?>"
+        data-map-y="<?= esc($homeMapY) ?>"
+
+        data-block="<?= (int)$homeBlock ?>"
+        data-lot="<?= (int)$homeLot ?>"
+
+        data-street="<?= esc($homeStreet) ?>"
+
+        data-map-image="../assets/img/south_meridian_block_lot_map.png"
+    ></div>
+
+
+<?php elseif ($hasLegacyGps): ?>
+
+    <!-- Older homeowner record -->
+    <div
+        id="coverMap"
+        class="absolute inset-0 h-full w-full"
+
+        data-map-type="gps"
+
+        data-lat="<?= esc($lat) ?>"
+        data-lng="<?= esc($lng) ?>"
+    ></div>
+
+
+<?php else: ?>
+
+    <div
+        class="
+            flex h-full
+            items-center justify-center
+            p-6
+            text-center
+        "
+    >
+
+        <div>
+
+            <i
+                class="
+                    bi bi-geo-alt
+                    text-4xl
+                    text-slate-400
+                    dark:text-slate-500
+                "
+            ></i>
+
+            <p
+                class="
+                    mt-3
+                    font-semibold
+                    text-slate-600
+                    dark:text-slate-400
+                "
+            >
+                No home location saved yet.
+            </p>
+
+        </div>
+
     </div>
 
-    <?php if (!$isTenant && $mustChange): ?>
-      <div class="lock-overlay">
-        <div class="lock-modal">
-          <div class="head">
-            <i class="bi bi-shield-lock-fill fs-5"></i>
-            <div>
-              <div class="fw-bold">Change Password Required</div>
-              <div class="small opacity-75">You must change your password before continuing.</div>
+                <?php endif; ?>
+
+
+                <div
+                    class="
+                        absolute left-4 top-4
+                        z-[500]
+                        rounded-xl
+                        border border-white/70
+                        bg-white/95
+                        px-4 py-2.5
+                        shadow-md
+                        backdrop-blur
+                        
+                        dark:bg-slate-900/95 dark:border-slate-700/70
+"
+                >
+
+                    <div
+                        class="
+                            text-sm
+                            font-bold
+                            text-slate-900
+                            
+                            dark:text-slate-100
+"
+                    >
+                        Your Home Location
+                    </div>
+
+                    <div
+                        class="
+                            mt-0.5
+                            text-xs
+                            font-medium
+                            text-slate-600
+                            
+                            dark:text-slate-400
+"
+                    >
+                        <?= esc($phase) ?>
+
+<?php if ($homeBlock > 0 && $homeLot > 0): ?>
+    • Block <?= (int)$homeBlock ?>,
+    Lot <?= (int)$homeLot ?>
+<?php endif; ?>
+                    </div>
+
+                </div>
+
             </div>
-          </div>
-          <div class="body">
-            <div class="lock-note mb-3">
-              <div class="fw-semibold mb-1">Security check</div>
-              <div class="small">This is your first login. Please set a new password (min 8 characters).</div>
-            </div>
-            <?php if ($err): ?>
-              <div class="alert alert-danger"><?= esc($err) ?></div>
-            <?php endif; ?>
-            <form method="POST" autocomplete="off">
-              <input type="hidden" name="change_password_submit" value="1">
-              <div class="mb-3">
-                <label class="form-label">New Password</label>
-                <input type="password" name="password" class="form-control" minlength="8" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Confirm Password</label>
-                <input type="password" name="password2" class="form-control" minlength="8" required>
-              </div>
-              <button class="btn btn-success w-100 py-2 fw-semibold">Save Password</button>
-            </form>
-            <div class="small text-muted mt-3">Tip: Use a strong password (letters + numbers).</div>
-          </div>
-        </div>
-      </div>
+
+
+            <!-- Profile -->
+
+            <div
+                class="
+                    flex flex-col
+                    gap-4
+                    p-5
+
+                    sm:flex-row
+                    sm:items-center
+                    sm:p-6
+                "
+            >
+
+<div class="relative shrink-0">
+
+    <div
+        id="profilePicturePreview"
+        class="
+            flex h-20 w-20
+            items-center justify-center
+            overflow-hidden
+            rounded-2xl
+            bg-emerald-700
+            text-2xl
+            font-bold
+            text-white
+            shadow-sm
+            ring-2 ring-white
+            dark:ring-slate-800
+        "
+    >
+
+        <?php if ($profilePictureUrl !== ''): ?>
+
+            <img
+                src="<?= esc($profilePictureUrl) ?>"
+                alt="<?= esc($fullName) ?> profile picture"
+                class="h-full w-full object-cover"
+            >
+
+        <?php else: ?>
+
+            <span id="profileInitials">
+                <?= esc($initials) ?>
+            </span>
+
+        <?php endif; ?>
+
+    </div>
+
+
+    <?php if (!$isTenant): ?>
+
+        <button
+            type="button"
+            id="changeProfilePictureBtn"
+            class="
+                absolute -bottom-2 -right-2
+                flex h-9 w-9
+                items-center justify-center
+                rounded-full
+                border-2 border-white
+                bg-emerald-700
+                text-sm
+                text-white
+                shadow-md
+                transition
+                hover:bg-emerald-800
+
+                dark:border-slate-900
+            "
+            title="Change profile picture"
+            aria-label="Change profile picture"
+        >
+            <i class="bi bi-camera-fill"></i>
+        </button>
+
+        <input
+            type="file"
+            id="profilePictureInput"
+            accept=".jpg,.jpeg,.png,.webp"
+            class="hidden"
+        >
+
     <?php endif; ?>
-  </div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+                <div class="min-w-0 flex-1">
+
+                    <h2
+                        class="
+                            break-words
+                            text-xl
+                            font-bold
+                            text-slate-900
+
+                            sm:text-2xl
+                            
+                            dark:text-slate-100
+"
+                    >
+                        <?= esc($fullName) ?>
+                    </h2>
+
+                    <p
+                        class="
+                            mt-1
+                            text-[15px]
+                            font-medium
+                            text-slate-600
+                            
+                            dark:text-slate-400
+"
+                    >
+                        <?= esc($phase) ?>
+                        •
+                        <?= esc($user['house_lot_number'] ?? '') ?>
+
+                        <?php if ($isTenant): ?>
+                            • Tenant Account
+                        <?php endif; ?>
+                    </p>
+
+
+                    <div
+                        class="
+                            mt-3
+                            flex flex-wrap
+                            gap-2
+                        "
+                    >
+
+                        <span
+                            class="
+                                inline-flex
+                                min-h-9
+                                items-center
+                                gap-2
+                                rounded-xl
+                                bg-slate-100
+                                px-3
+                                text-sm
+                                font-medium
+                                text-slate-700
+                                
+                                dark:bg-slate-800 dark:text-slate-300
+"
+                        >
+                            <i class="bi bi-geo-alt-fill text-emerald-700 dark:text-emerald-400"></i>
+
+                            South Meridian Homes
+                        </span>
+
+                        <span
+                            class="
+                                inline-flex
+                                min-h-9
+                                items-center
+                                gap-2
+                                rounded-xl
+                                bg-slate-100
+                                px-3
+                                text-sm
+                                font-medium
+                                text-slate-700
+                                
+                                dark:bg-slate-800 dark:text-slate-300
+"
+                        >
+                            <i class="bi bi-house-door-fill text-emerald-700 dark:text-emerald-400"></i>
+
+                            <?= esc($user['house_lot_number'] ?? '') ?>
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <?php if (
+                    !$isTenant ||
+                    tenant_can_access(
+                        'announcements',
+                        $tenant
+                    )
+                ): ?>
+
+                    <a
+                        href="#feed"
+                        class="
+                            inline-flex
+                            min-h-12
+                            items-center
+                            justify-center
+                            gap-2
+                            rounded-xl
+                            bg-emerald-700
+                            px-5
+                            text-base
+                            font-semibold
+                            text-white
+                            shadow-sm
+                            transition
+                            hover:bg-emerald-800
+                            focus:outline-none
+                            focus:ring-4
+                            focus:ring-emerald-100
+                            
+                            dark:focus:ring-emerald-950
+"
+                    >
+                        <i class="bi bi-megaphone-fill"></i>
+
+                        View Announcements
+                    </a>
+
+                <?php endif; ?>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             QUICK ACTIONS
+             ================================================= -->
+
+        <section class="mt-8">
+
+            <div class="mb-4">
+
+                <h2
+                    class="
+                        text-xl
+                        font-bold
+                        text-slate-900
+                        
+                        dark:text-slate-100
+"
+                >
+                    Quick Actions
+                </h2>
+
+                <p
+                    class="
+                        mt-1
+                        text-sm
+                        text-slate-500
+                        
+                        dark:text-slate-400
+"
+                >
+                    Choose what you would like to do.
+                </p>
+
+            </div>
+
+
+            <div
+                class="
+                    grid
+                    gap-4
+
+                    sm:grid-cols-2
+                    xl:grid-cols-4
+                "
+            >
+
+
+                <?php if (
+                    !$isTenant ||
+                    tenant_can_access(
+                        'announcements',
+                        $tenant
+                    )
+                ): ?>
+
+                    <a
+                        href="#feed"
+                        class="
+                            group
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-5
+                            shadow-sm
+                            transition
+                            hover:-translate-y-0.5
+                            hover:border-emerald-200
+                            hover:shadow-md
+                            
+                            dark:bg-slate-900 dark:border-slate-800 dark:hover:border-emerald-800
+"
+                    >
+
+                        <div
+                            class="
+                                flex h-12 w-12
+                                items-center justify-center
+                                rounded-xl
+                                bg-emerald-100
+                                text-xl
+                                text-emerald-700
+                                
+                                dark:bg-emerald-950/60 dark:text-emerald-400
+"
+                        >
+                            <i class="bi bi-megaphone-fill"></i>
+                        </div>
+
+                        <h3
+                            class="
+                                mt-4
+                                text-base
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            Announcements
+                        </h3>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                leading-6
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            <?= (int)$newAnnCount ?>
+                            new community update<?= $newAnnCount === 1 ? '' : 's' ?>.
+                        </p>
+
+                    </a>
+
+                <?php endif; ?>
+
+
+                <?php if (
+                    !$isTenant ||
+                    tenant_can_access(
+                        'pay_dues',
+                        $tenant
+                    )
+                ): ?>
+
+                    <a
+                        href="homeowner_pay_dues.php"
+                        class="
+                            group
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-5
+                            shadow-sm
+                            transition
+                            hover:-translate-y-0.5
+                            hover:border-blue-200
+                            hover:shadow-md
+                            
+                            dark:bg-slate-900 dark:border-slate-800 dark:hover:border-blue-800
+"
+                    >
+
+                        <div
+                            class="
+                                flex h-12 w-12
+                                items-center justify-center
+                                rounded-xl
+                                bg-blue-100
+                                text-xl
+                                text-blue-700
+                                
+                                dark:bg-blue-950/60 dark:text-blue-300
+"
+                        >
+                            <i class="bi bi-wallet2"></i>
+                        </div>
+
+                        <h3
+                            class="
+                                mt-4
+                                text-base
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            Monthly Dues
+                        </h3>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                leading-6
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            <?= count($unpaidMonths) ?>
+
+                            unpaid
+                            month<?= count($unpaidMonths) === 1 ? '' : 's' ?>.
+                        </p>
+
+                    </a>
+
+                <?php endif; ?>
+
+
+                <?php if (
+                    !$isTenant ||
+                    tenant_can_access(
+                        'parking',
+                        $tenant
+                    )
+                ): ?>
+
+                    <a
+                        href="homeowner_parking.php"
+                        class="
+                            group
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-5
+                            shadow-sm
+                            transition
+                            hover:-translate-y-0.5
+                            hover:border-violet-200
+                            hover:shadow-md
+                            
+                            dark:bg-slate-900 dark:border-slate-800 dark:hover:border-violet-800
+"
+                    >
+
+                        <div
+                            class="
+                                flex h-12 w-12
+                                items-center justify-center
+                                rounded-xl
+                                bg-violet-100
+                                text-xl
+                                text-violet-700
+                                
+                                dark:bg-violet-950/60 dark:text-violet-300
+"
+                        >
+                            <i class="bi bi-car-front-fill"></i>
+                        </div>
+
+                        <h3
+                            class="
+                                mt-4
+                                text-base
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            Parking
+                        </h3>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                leading-6
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            Manage permits and view violations.
+                        </p>
+
+                    </a>
+
+                <?php endif; ?>
+
+
+                <?php if (
+                    !$isTenant ||
+                    tenant_can_access(
+                        'rentals',
+                        $tenant
+                    )
+                ): ?>
+
+                    <a
+                        href="homeowner_rentals.php"
+                        class="
+                            group
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-5
+                            shadow-sm
+                            transition
+                            hover:-translate-y-0.5
+                            hover:border-amber-200
+                            hover:shadow-md
+                            
+                            dark:bg-slate-900 dark:border-slate-800 dark:hover:border-amber-800
+"
+                    >
+
+                        <div
+                            class="
+                                flex h-12 w-12
+                                items-center justify-center
+                                rounded-xl
+                                bg-amber-100
+                                text-xl
+                                text-amber-700
+                                
+                                dark:bg-amber-950/60 dark:text-amber-300
+"
+                        >
+                            <i class="bi bi-calendar2-week-fill"></i>
+                        </div>
+
+                        <h3
+                            class="
+                                mt-4
+                                text-base
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            Facility Rentals
+                        </h3>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                leading-6
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            Check availability and request a booking.
+                        </p>
+
+                    </a>
+
+                <?php endif; ?>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             MAIN GRID
+             ================================================= -->
+
+        <div
+            class="
+                mt-8
+                grid
+                gap-6
+
+                xl:grid-cols-[360px_minmax(0,1fr)]
+            "
+        >
+
+
+            <!-- =================================================
+                 LEFT COLUMN
+                 ================================================= -->
+
+            <div class="space-y-6">
+
+
+                <!-- Your Home -->
+
+                <section
+                    class="
+                        rounded-2xl
+                        border border-slate-200
+                        bg-white
+                        shadow-sm
+                        
+                        dark:bg-slate-900 dark:border-slate-800
+"
+                >
+
+                    <div
+                        class="
+                            border-b
+                            border-slate-200
+                            px-5 py-4
+                            
+                            dark:border-slate-800
+"
+                    >
+
+                        <h2
+                            class="
+                                flex items-center
+                                gap-2
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            <i class="bi bi-house-heart-fill text-emerald-700 dark:text-emerald-400"></i>
+
+                            Your Home
+                        </h2>
+
+                    </div>
+
+
+                    <div class="space-y-4 p-5">
+
+                        <div>
+
+                            <p
+                                class="
+                                    text-xs
+                                    font-semibold
+                                    uppercase
+                                    tracking-wide
+                                    text-slate-400
+                                    
+                                    dark:text-slate-500
+"
+                            >
+                                Phase
+                            </p>
+
+                            <p
+                                class="
+                                    mt-1
+                                    text-base
+                                    font-semibold
+                                    text-slate-800
+                                    
+                                    dark:text-slate-200
+"
+                            >
+                                <?= esc($phase) ?>
+                            </p>
+
+                        </div>
+
+
+                        <div>
+
+                            <p
+                                class="
+                                    text-xs
+                                    font-semibold
+                                    uppercase
+                                    tracking-wide
+                                    text-slate-400
+                                    
+                                    dark:text-slate-500
+"
+                            >
+                                Home Address
+                            </p>
+
+                            <p
+                                class="
+                                    mt-1
+                                    break-words
+                                    text-base
+                                    font-semibold
+                                    text-slate-800
+                                    
+                                    dark:text-slate-200
+"
+                            >
+                                <?= esc($houseLot) ?>
+                            </p>
+
+                        </div>
+
+
+                        <div>
+
+                            <p
+                                class="
+                                    text-xs
+                                    font-semibold
+                                    uppercase
+                                    tracking-wide
+                                    text-slate-400
+                                    
+                                    dark:text-slate-500
+"
+                            >
+                                Community
+                            </p>
+
+                            <p
+                                class="
+                                    mt-1
+                                    text-base
+                                    font-semibold
+                                    text-slate-800
+                                    
+                                    dark:text-slate-200
+"
+                            >
+                                South Meridian Homes Salitran
+                            </p>
+
+                        </div>
+
+
+                        <?php if ($isTenant): ?>
+
+                            <div>
+
+                                <p
+                                    class="
+                                        text-xs
+                                        font-semibold
+                                        uppercase
+                                        tracking-wide
+                                        text-slate-400
+                                        
+                                        dark:text-slate-500
+"
+                                >
+                                    Account Type
+                                </p>
+
+                                <p
+                                    class="
+                                        mt-1
+                                        inline-flex
+                                        rounded-lg
+                                        bg-blue-50
+                                        px-3 py-1.5
+                                        text-sm
+                                        font-bold
+                                        text-blue-700
+                                        
+                                        dark:bg-blue-950/40 dark:text-blue-300
+"
+                                >
+                                    Tenant
+                                </p>
+
+                            </div>
+
+                        <?php endif; ?>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     MONTHLY DUES
+                     ================================================= -->
+
+                <?php if (
+                    !$isTenant ||
+                    !empty($tenant['can_pay_dues'])
+                ): ?>
+
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            
+                            dark:bg-slate-900 dark:border-slate-800
+"
+                    >
+
+                        <div
+                            class="
+                                flex items-center
+                                justify-between
+                                gap-3
+                                border-b
+                                border-slate-200
+                                px-5 py-4
+                                
+                                dark:border-slate-800
+"
+                        >
+
+                            <div>
+
+                                <h2
+                                    class="
+                                        flex items-center
+                                        gap-2
+                                        font-bold
+                                        text-slate-900
+                                        
+                                        dark:text-slate-100
+"
+                                >
+                                    <i class="bi bi-wallet2 text-blue-700 dark:text-blue-300"></i>
+
+                                    Monthly Dues
+                                </h2>
+
+                                <p
+                                    class="
+                                        mt-1
+                                        text-xs
+                                        text-slate-500
+                                        
+                                        dark:text-slate-400
+"
+                                >
+                                    Your current payment status
+                                </p>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="p-5">
+
+                            <div
+                                class="
+                                    text-3xl
+                                    font-bold
+                                    tracking-tight
+                                    text-slate-900
+                                    
+                                    dark:text-slate-100
+"
+                            >
+                                ₱<?= number_format((float)$monthlyDues, 2) ?>
+                            </div>
+
+                            <div
+                                class="
+                                    mt-1
+                                    text-sm
+                                    font-medium
+                                    text-slate-500
+                                    
+                                    dark:text-slate-400
+"
+                            >
+                                per month
+                            </div>
+
+
+                            <?php if ($accountStartYear > $curYear): ?>
+
+                                <div
+                                    class="
+                                        mt-5
+                                        rounded-xl
+                                        border border-blue-200
+                                        bg-blue-50
+                                        p-4
+                                        
+                                        dark:bg-blue-950/40 dark:border-blue-900
+"
+                                >
+
+                                    <div
+                                        class="
+                                            flex items-start
+                                            gap-3
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                bi bi-info-circle-fill
+                                                mt-0.5
+                                                text-lg
+                                                text-blue-700
+                                                
+                                                dark:text-blue-300
+"
+                                        ></i>
+
+                                        <p
+                                            class="
+                                                text-sm
+                                                leading-6
+                                                text-blue-900
+                                                
+                                                dark:text-blue-200
+"
+                                        >
+                                            Your monthly dues will start in
+                                            <strong>
+                                                <?= esc($accountStartLabel) ?>
+                                            </strong>.
+                                        </p>
+
+                                    </div>
+
+                                </div>
+
+
+                            <?php elseif (empty($unpaidMonths)): ?>
+
+                                <div
+                                    class="
+                                        mt-5
+                                        rounded-xl
+                                        border border-emerald-200
+                                        bg-emerald-50
+                                        p-4
+                                        
+                                        dark:bg-emerald-950/40 dark:border-emerald-900
+"
+                                >
+
+                                    <div
+                                        class="
+                                            flex items-start
+                                            gap-3
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                bi bi-check-circle-fill
+                                                mt-0.5
+                                                text-xl
+                                                text-emerald-700
+                                                
+                                                dark:text-emerald-400
+"
+                                        ></i>
+
+                                        <div>
+
+                                            <p
+                                                class="
+                                                    font-bold
+                                                    text-emerald-900
+                                                    
+                                                    dark:text-emerald-200
+"
+                                            >
+                                                You're fully paid
+                                            </p>
+
+                                            <p
+                                                class="
+                                                    mt-1
+                                                    text-sm
+                                                    leading-6
+                                                    text-emerald-800
+                                                    
+                                                    dark:text-emerald-300
+"
+                                            >
+                                                Your dues for
+                                                <?= esc($curYear) ?>
+                                                are up to date.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+
+                            <?php else: ?>
+
+                                <div
+                                    class="
+                                        mt-5
+                                        rounded-xl
+                                        border border-red-200
+                                        bg-red-50
+                                        p-4
+                                        
+                                        dark:bg-red-950/40 dark:border-red-900
+"
+                                >
+
+                                    <div
+                                        class="
+                                            flex items-start
+                                            gap-3
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                bi bi-exclamation-triangle-fill
+                                                mt-0.5
+                                                text-xl
+                                                text-red-700
+                                                
+                                                dark:text-red-300
+"
+                                        ></i>
+
+                                        <div class="min-w-0">
+
+                                            <p
+                                                class="
+                                                    font-bold
+                                                    text-red-900
+                                                    
+                                                    dark:text-red-200
+"
+                                            >
+                                                Payment required
+                                            </p>
+
+                                            <p
+                                                class="
+                                                    mt-1
+                                                    text-sm
+                                                    leading-6
+                                                    text-red-800
+                                                    
+                                                    dark:text-red-300
+"
+                                            >
+                                                You have
+                                                <strong>
+                                                    <?= count($unpaidMonths) ?>
+                                                </strong>
+
+                                                unpaid
+                                                month<?= count($unpaidMonths) === 1 ? '' : 's' ?>.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+
+                                    <div
+                                        class="
+                                            mt-4
+                                            flex flex-wrap
+                                            gap-2
+                                        "
+                                    >
+
+                                        <?php foreach ($unpaidMonths as $m): ?>
+
+                                            <span
+                                                class="
+                                                    rounded-lg
+                                                    bg-white
+                                                    px-2.5 py-1.5
+                                                    text-xs
+                                                    font-bold
+                                                    text-red-700
+                                                    ring-1
+                                                    ring-red-200
+                                                    
+                                                    dark:bg-slate-900 dark:text-red-300 dark:ring-red-900
+"
+                                            >
+                                                <?= esc(month_name($m)) ?>
+                                            </span>
+
+                                        <?php endforeach; ?>
+
+                                    </div>
+
+
+                                    <p
+                                        class="
+                                            mt-4
+                                            text-sm
+                                            text-red-800
+                                            
+                                            dark:text-red-300
+"
+                                    >
+                                        Next payment:
+                                        <strong>
+                                            <?= esc(month_name($nextDueMonth)) ?>
+                                            <?= esc($curYear) ?>
+                                        </strong>
+                                    </p>
+
+                                </div>
+
+
+                                <a
+                                    href="homeowner_pay_dues.php"
+                                    class="
+                                        mt-4
+                                        flex min-h-12
+                                        w-full
+                                        items-center
+                                        justify-center
+                                        gap-2
+                                        rounded-xl
+                                        bg-emerald-700
+                                        px-4
+                                        text-base
+                                        font-semibold
+                                        text-white
+                                        shadow-sm
+                                        transition
+                                        hover:bg-emerald-800
+                                        focus:outline-none
+                                        focus:ring-4
+                                        focus:ring-emerald-100
+                                        
+                                        dark:focus:ring-emerald-950
+"
+                                >
+                                    <i class="bi bi-cash-coin text-lg"></i>
+
+                                    Pay Monthly Dues
+                                </a>
+
+                            <?php endif; ?>
+
+
+                            <div
+                                class="
+                                    mt-5
+                                    border-t
+                                    border-slate-100
+                                    pt-4
+                                    
+                                    dark:border-slate-800
+"
+                            >
+
+                                <div
+                                    class="
+                                        flex
+                                        items-center
+                                        justify-between
+                                        gap-3
+                                    "
+                                >
+
+                                    <span
+                                        class="
+                                            text-sm
+                                            font-medium
+                                            text-slate-600
+                                            
+                                            dark:text-slate-400
+"
+                                    >
+                                        <?= esc(month_name($curMonth)) ?>
+                                    </span>
+
+
+                                    <?php if (!$curMonthIsApplicable): ?>
+
+                                        <span
+                                            class="
+                                                rounded-lg
+                                                bg-slate-100
+                                                px-2.5 py-1
+                                                text-xs
+                                                font-bold
+                                                text-slate-600
+                                                
+                                                dark:bg-slate-800 dark:text-slate-400
+"
+                                        >
+                                            Not applicable
+                                        </span>
+
+                                    <?php elseif ($curMonthPaid): ?>
+
+                                        <span
+                                            class="
+                                                rounded-lg
+                                                bg-emerald-100
+                                                px-2.5 py-1
+                                                text-xs
+                                                font-bold
+                                                text-emerald-800
+                                                
+                                                dark:bg-emerald-950/60 dark:text-emerald-300
+"
+                                        >
+                                            Paid
+                                        </span>
+
+                                    <?php else: ?>
+
+                                        <span
+                                            class="
+                                                rounded-lg
+                                                bg-red-100
+                                                px-2.5 py-1
+                                                text-xs
+                                                font-bold
+                                                text-red-800
+                                                
+                                                dark:bg-red-950/60 dark:text-red-300
+"
+                                        >
+                                            Not paid
+                                        </span>
+
+                                    <?php endif; ?>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </section>
+
+                <?php endif; ?>
+
+            </div>
+
+
+            <!-- =================================================
+                 ANNOUNCEMENT FEED
+                 ================================================= -->
+
+            <section
+                id="feed"
+                class="min-w-0"
+            >
+
+                <div
+                    class="
+                        mb-4
+                        flex flex-col
+                        gap-2
+
+                        sm:flex-row
+                        sm:items-end
+                        sm:justify-between
+                    "
+                >
+
+                    <div>
+
+                        <h2
+                            class="
+                                text-xl
+                                font-bold
+                                text-slate-900
+
+                                sm:text-2xl
+                                
+                                dark:text-slate-100
+"
+                        >
+                            Community Announcements
+                        </h2>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            Official updates visible to your account.
+                        </p>
+
+                    </div>
+
+
+                    <div
+                        class="
+                            inline-flex
+                            w-fit
+                            items-center
+                            gap-2
+                            rounded-xl
+                            bg-white
+                            px-3 py-2
+                            text-sm
+                            font-semibold
+                            text-slate-600
+                            ring-1
+                            ring-slate-200
+                            
+                            dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700
+"
+                    >
+                        <i class="bi bi-megaphone text-emerald-700 dark:text-emerald-400"></i>
+
+                        <?= count($annFeed) ?>
+
+                        post<?= count($annFeed) === 1 ? '' : 's' ?>
+                    </div>
+
+                </div>
+
+
+                <?php if (
+                    $isTenant &&
+                    !tenant_can_access(
+                        'announcements',
+                        $tenant
+                    )
+                ): ?>
+
+                    <div
+                        class="
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-8
+                            text-center
+                            shadow-sm
+                            
+                            dark:bg-slate-900 dark:border-slate-800
+"
+                    >
+
+                        <i
+                            class="
+                                bi bi-lock-fill
+                                text-3xl
+                                text-slate-400
+                                
+                                dark:text-slate-500
+"
+                        ></i>
+
+                        <h3
+                            class="
+                                mt-3
+                                font-bold
+                                text-slate-800
+                                
+                                dark:text-slate-200
+"
+                        >
+                            Announcements unavailable
+                        </h3>
+
+                        <p
+                            class="
+                                mt-1
+                                text-sm
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            Your account does not have access to this section.
+                        </p>
+
+                    </div>
+
+
+                <?php elseif (empty($annFeed)): ?>
+
+                    <div
+                        class="
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            p-10
+                            text-center
+                            shadow-sm
+                            
+                            dark:bg-slate-900 dark:border-slate-800
+"
+                    >
+
+                        <div
+                            class="
+                                mx-auto
+                                flex h-16 w-16
+                                items-center justify-center
+                                rounded-2xl
+                                bg-emerald-50
+                                text-3xl
+                                text-emerald-700
+                                
+                                dark:bg-emerald-950/40 dark:text-emerald-400
+"
+                        >
+                            <i class="bi bi-megaphone"></i>
+                        </div>
+
+                        <h3
+                            class="
+                                mt-4
+                                text-lg
+                                font-bold
+                                text-slate-900
+                                
+                                dark:text-slate-100
+"
+                        >
+                            No announcements right now
+                        </h3>
+
+                        <p
+                            class="
+                                mx-auto
+                                mt-2
+                                max-w-md
+                                text-sm
+                                leading-6
+                                text-slate-500
+                                
+                                dark:text-slate-400
+"
+                        >
+                            New official HOA updates will appear here.
+                        </p>
+
+                    </div>
+
+
+                <?php else: ?>
+
+                    <div class="space-y-5">
+
+                        <?php foreach ($annFeed as $a): ?>
+
+                            <?php
+                                $aid =
+                                    (int)$a['id'];
+
+                                $iLiked =
+                                    ((int)$a['i_liked'] > 0);
+
+                                $prio =
+                                    (string)$a['priority'];
+
+                                $prioIcon =
+                                    $prio === 'urgent'
+                                        ? 'bi-exclamation-octagon-fill'
+                                        : (
+                                            $prio === 'important'
+                                                ? 'bi-exclamation-triangle-fill'
+                                                : 'bi-info-circle-fill'
+                                        );
+
+                                $prioColor =
+                                    $prio === 'urgent'
+                                        ? 'text-red-600'
+                                        : (
+                                            $prio === 'important'
+                                                ? 'text-amber-600'
+                                                : 'text-emerald-600'
+                                        );
+
+                                $prioBadge =
+                                    $prio === 'urgent'
+                                        ? 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900'
+                                        : (
+                                            $prio === 'important'
+                                                ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900'
+                                                : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900'
+                                        );
+                            ?>
+
+
+<article
+    class="
+        post
+        overflow-hidden
+        rounded-2xl
+        border border-slate-200
+        bg-white
+        shadow-sm
+
+        dark:border-slate-800
+        dark:bg-slate-900
+    "
+    data-ann-id="<?= $aid ?>"
+>
+
+
+                                <!-- Post header -->
+
+                                <div
+                                    class="
+                                        flex items-start
+                                        gap-3
+                                        p-5
+                                    "
+                                >
+
+                                    <div
+                                        class="
+                                            flex h-12 w-12
+                                            shrink-0
+                                            items-center justify-center
+                                            rounded-xl
+                                            bg-emerald-100
+                                            text-lg
+                                            font-bold
+                                            text-emerald-800
+                                            
+                                            dark:bg-emerald-950/60 dark:text-emerald-300
+"
+                                    >
+                                        <i class="bi bi-megaphone-fill"></i>
+                                    </div>
+
+
+                                    <div class="min-w-0 flex-1">
+
+                                        <div
+                                            class="
+                                                flex flex-wrap
+                                                items-center
+                                                gap-2
+                                            "
+                                        >
+
+                                            <h3
+                                                class="
+                                                    break-words
+                                                    text-base
+                                                    font-bold
+                                                    text-slate-900
+
+                                                    sm:text-lg
+                                                    
+                                                    dark:text-slate-100
+"
+                                            >
+                                                <?= esc($a['title']) ?>
+                                            </h3>
+
+                                            <i
+                                                class="
+                                                    bi
+                                                    <?= esc($prioIcon) ?>
+                                                    <?= esc($prioColor) ?>
+                                                "
+                                            ></i>
+
+                                        </div>
+
+
+                                        <div
+                                            class="
+                                                mt-1
+                                                flex flex-wrap
+                                                items-center
+                                                gap-x-2
+                                                gap-y-1
+                                                text-xs
+                                                font-medium
+                                                text-slate-500
+                                                
+                                                dark:text-slate-400
+"
+                                        >
+
+                                            <span>
+                                                <?= esc(ucfirst($a['category'])) ?>
+                                            </span>
+
+                                            <span>•</span>
+
+                                            <span>
+                                                <?= esc($phase) ?>
+                                            </span>
+
+                                            <span>•</span>
+
+                                            <span>
+                                                <?= esc(
+                                                    date(
+                                                        'M d, Y h:i A',
+                                                        strtotime($a['created_at'])
+                                                    )
+                                                ) ?>
+                                            </span>
+
+                                        </div>
+
+                                    </div>
+
+
+                                    <span
+                                        class="
+                                            hidden
+                                            shrink-0
+                                            rounded-lg
+                                            px-2.5 py-1
+                                            text-[11px]
+                                            font-bold
+                                            uppercase
+                                            tracking-wide
+                                            ring-1
+                                            <?= $prioBadge ?>
+
+                                            sm:inline-flex
+                                        "
+                                    >
+                                        <?= esc($prio) ?>
+                                    </span>
+
+                                </div>
+
+
+                                <!-- Announcement -->
+
+                                <div
+                                    class="
+                                        px-5
+                                        pb-5
+                                    "
+                                >
+
+                                    <div
+class="
+    post-content
+    whitespace-pre-wrap
+    break-words
+    text-[15px]
+    leading-7
+    text-slate-700
+
+    sm:text-base
+
+    dark:text-slate-300
+"
+                                    >
+                                        <?= esc($a['message']) ?>
+                                    </div>
+
+                                </div>
+
+
+                                <!-- Statistics -->
+
+                                <div
+                                    class="
+                                        flex
+                                        items-center
+                                        justify-between
+                                        gap-4
+                                        border-y
+                                        border-slate-100
+                                        px-5 py-3
+                                        text-sm
+                                        text-slate-500
+                                        
+                                        dark:text-slate-400 dark:border-slate-800
+"
+                                >
+
+                                    <div
+                                        class="
+                                            flex
+                                            items-center
+                                            gap-5
+                                        "
+                                    >
+
+                                        <span
+                                            class="
+                                                flex
+                                                items-center
+                                                gap-2
+                                            "
+                                        >
+                                            <i class="bi bi-hand-thumbs-up-fill text-emerald-700 dark:text-emerald-400"></i>
+
+                                            <span class="like-count">
+                                                <?= (int)$a['like_count'] ?>
+                                            </span>
+                                        </span>
+
+
+                                        <span
+                                            class="
+                                                flex
+                                                items-center
+                                                gap-2
+                                            "
+                                        >
+                                            <i class="bi bi-chat-left-text-fill"></i>
+
+                                            <span class="comment-count">
+                                                <?= (int)$a['comment_count'] ?>
+                                            </span>
+                                        </span>
+
+                                    </div>
+
+
+                                    <span
+                                        class="
+                                            text-xs
+                                            font-semibold
+                                            text-slate-400
+                                            
+                                            dark:text-slate-500
+"
+                                    >
+                                        Official HOA Post
+                                    </span>
+
+                                </div>
+
+
+                                <!-- Like / comment buttons -->
+
+                                <?php if (!$isTenant): ?>
+
+                                    <div
+                                        class="
+                                            grid grid-cols-2
+                                            gap-2
+                                            p-3
+                                        "
+                                    >
+
+                                        <button
+                                            type="button"
+                                            class="
+                                                btn-like
+                                                flex min-h-12
+                                                items-center
+                                                justify-center
+                                                gap-2
+                                                rounded-xl
+                                                px-4
+                                                text-sm
+                                                font-semibold
+                                                transition
+
+                                                <?= $iLiked
+                                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                                                ?>
+                                                
+"
+                                        >
+                                            <i
+                                                class="
+                                                    bi
+                                                    <?= $iLiked
+                                                        ? 'bi-hand-thumbs-up-fill'
+                                                        : 'bi-hand-thumbs-up'
+                                                    ?>
+                                                    text-lg
+                                                "
+                                            ></i>
+
+                                            Like
+                                        </button>
+
+
+                                        <button
+                                            type="button"
+                                            class="
+                                                btn-focus-comment
+                                                flex min-h-12
+                                                items-center
+                                                justify-center
+                                                gap-2
+                                                rounded-xl
+                                                px-4
+                                                text-sm
+                                                font-semibold
+                                                text-slate-600
+                                                transition
+                                                hover:bg-slate-50
+                                                dark:text-slate-300
+                                                dark:hover:bg-slate-800
+"
+                                        >
+                                            <i class="bi bi-chat-left-text text-lg"></i>
+
+                                            Comment
+                                        </button>
+
+                                    </div>
+
+                                <?php endif; ?>
+
+
+                                <!-- Comments -->
+
+                                <div
+class="
+    border-t
+    border-slate-100
+    bg-slate-50/70
+    p-5
+
+    dark:border-slate-800
+    dark:bg-slate-950/40
+"
+                                >
+
+                                    <?php
+
+                                        $clist =
+                                            $commentsByAnn[$aid] ?? [];
+
+                                        foreach ($clist as $c):
+
+                                            $cName =
+                                                trim(
+                                                    ($c['first_name'] ?? '') .
+                                                    ' ' .
+                                                    ($c['last_name'] ?? '')
+                                                );
+
+                                            $cInit =
+                                                strtoupper(
+                                                    substr(
+                                                        (string)(
+                                                            $c['first_name']
+                                                            ?? 'H'
+                                                        ),
+                                                        0,
+                                                        1
+                                                    )
+                                                );
+                                                $cProfilePicturePath =
+    trim(
+        (string)(
+            $c['profile_picture_path']
+            ?? ''
+        )
+    );
+
+$cProfilePictureUrl =
+    $cProfilePicturePath !== ''
+        ? '../' . ltrim(
+            $cProfilePicturePath,
+            '/'
+        )
+        : '';
+
+                                    ?>
+
+<?php
+$isMyComment =
+    !$isTenant &&
+    (int)$c['homeowner_id'] === $hid;
+?>
+
+<div
+    class="comment-item mt-3 flex items-start gap-2.5"
+    data-comment-id="<?= (int)$c['id'] ?>"
+>
+
+<!-- Comment Avatar -->
+<div class="
+    flex h-9 w-9
+    shrink-0
+    items-center justify-center
+    overflow-hidden
+    rounded-full
+        bg-emerald-100
+        text-xs
+        font-bold
+        text-emerald-700
+
+        dark:bg-emerald-950
+        dark:text-emerald-300
+    "
+>
+
+    <?php if ($cProfilePictureUrl !== ''): ?>
+
+        <img
+            src="<?= esc($cProfilePictureUrl) ?>"
+            alt="<?= esc($cName) ?>"
+            class="h-full w-full object-cover"
+            loading="lazy"
+        >
+
+    <?php else: ?>
+
+        <?= esc($cInit) ?>
+
+    <?php endif; ?>
+
+</div>
+
+
+    <!-- Comment content -->
+    <div class="min-w-0">
+
+        <!-- Name + options -->
+        <div class="flex items-center gap-1">
+
+            <div
+                class="
+                    text-sm
+                    font-semibold
+                    leading-5
+                    text-slate-800
+
+                    dark:text-slate-100
+                "
+            >
+                <?= esc($cName) ?>
+            </div>
+
+
+            <?php if ($isMyComment): ?>
+
+                <div class="relative">
+
+                    <button
+                        type="button"
+                        class="
+                            btn-comment-options
+                            flex h-7 w-7
+                            items-center justify-center
+                            rounded-full
+                            text-slate-400
+                            transition
+
+                            hover:bg-slate-200
+                            hover:text-slate-700
+
+                            dark:hover:bg-slate-700
+                            dark:hover:text-slate-200
+                        "
+                        aria-label="Comment options"
+                    >
+                        <i class="bi bi-three-dots"></i>
+                    </button>
+
+
+                    <div
+                        class="
+                            comment-options-menu
+
+                            absolute
+                            left-0
+                            top-8
+                            z-30
+
+                            hidden
+                            min-w-[130px]
+
+                            overflow-hidden
+                            rounded-xl
+                            border border-slate-200
+                            bg-white
+                            p-1
+                            shadow-xl
+
+                            dark:border-slate-700
+                            dark:bg-slate-800
+                        "
+                    >
+
+                        <button
+                            type="button"
+                            class="
+                                btn-edit-comment
+                                flex w-full
+                                items-center
+                                gap-2
+
+                                rounded-lg
+                                px-3 py-2
+
+                                text-left
+                                text-sm
+                                font-medium
+                                text-slate-700
+
+                                hover:bg-slate-100
+
+                                dark:text-slate-200
+                                dark:hover:bg-slate-700
+                            "
+                        >
+                            <i class="bi bi-pencil"></i>
+
+                            Edit
+                        </button>
+
+
+                        <button
+                            type="button"
+                            class="
+                                btn-delete-comment
+                                flex w-full
+                                items-center
+                                gap-2
+
+                                rounded-lg
+                                px-3 py-2
+
+                                text-left
+                                text-sm
+                                font-medium
+                                text-red-600
+
+                                hover:bg-red-50
+
+                                dark:text-red-400
+                                dark:hover:bg-red-950/40
+                            "
+                        >
+                            <i class="bi bi-trash3"></i>
+
+                            Delete
+                        </button>
+
+                    </div>
+
+                </div>
+
+            <?php endif; ?>
+
+        </div>
+
+
+        <!-- Normal comment -->
+        <div
+            class="
+                comment-message
+
+                mt-1
+                w-fit
+                max-w-[min(80vw,520px)]
+
+                rounded-xl
+                rounded-tl-sm
+
+                bg-slate-100
+
+                px-3
+                py-1.5
+
+                text-left
+                text-[14px]
+                leading-5
+                text-slate-700
+
+                dark:bg-slate-800
+                dark:text-slate-200
+            "
+        >
+            <?= esc($c['comment']) ?>
+        </div>
+
+
+        <!-- Edit form -->
+        <div
+            class="
+                comment-edit-area
+                mt-2
+                hidden
+            "
+        >
+
+            <input
+                type="text"
+                maxlength="500"
+                value="<?= esc($c['comment']) ?>"
+                class="
+                    comment-edit-input
+
+                    min-h-10
+                    w-full
+                    max-w-md
+
+                    rounded-xl
+                    border border-slate-300
+                    bg-white
+
+                    px-3
+
+                    text-sm
+                    text-slate-800
+
+                    outline-none
+                    transition
+
+                    focus:border-emerald-500
+                    focus:ring-4
+                    focus:ring-emerald-100
+
+                    dark:border-slate-700
+                    dark:bg-slate-800
+                    dark:text-slate-100
+                    dark:focus:ring-emerald-950
+                "
+            >
+
+
+            <div class="mt-2 flex gap-2">
+
+                <button
+                    type="button"
+                    class="
+                        btn-save-comment
+
+                        rounded-lg
+                        bg-emerald-700
+                        px-3 py-1.5
+
+                        text-xs
+                        font-semibold
+                        text-white
+
+                        hover:bg-emerald-800
+                    "
+                >
+                    Save
+                </button>
+
+
+                <button
+                    type="button"
+                    class="
+                        btn-cancel-edit
+
+                        rounded-lg
+                        bg-slate-100
+                        px-3 py-1.5
+
+                        text-xs
+                        font-semibold
+                        text-slate-700
+
+                        hover:bg-slate-200
+
+                        dark:bg-slate-700
+                        dark:text-slate-200
+                        dark:hover:bg-slate-600
+                    "
+                >
+                    Cancel
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <!-- Date -->
+        <div
+            class="
+                mt-1
+                text-[10px]
+                font-medium
+                leading-4
+                text-slate-400
+
+                dark:text-slate-500
+            "
+        >
+            <?= esc(
+                date(
+                    'M d, Y • h:i A',
+                    strtotime($c['created_at'])
+                )
+            ) ?>
+        </div>
+
+    </div>
+
+</div>
+
+                                    <?php endforeach; ?>
+
+
+                                    <?php if (!$isTenant): ?>
+
+                                        <div
+                                            class="
+                                                comment-form
+                                                mt-4
+                                                flex
+                                                items-center
+                                                gap-2
+                                            "
+                                        >
+
+                                            <input
+class="
+    comment-input
+    min-h-12
+    min-w-0
+    flex-1
+    rounded-xl
+    border border-slate-300
+    bg-white
+    px-4
+    text-base
+    text-slate-800
+    outline-none
+    transition
+    placeholder:text-slate-400
+    focus:border-emerald-500
+    focus:ring-4
+    focus:ring-emerald-100
+
+    dark:border-slate-700
+    dark:bg-slate-800
+    dark:text-slate-100
+    dark:placeholder:text-slate-500
+    dark:focus:border-emerald-500
+    dark:focus:ring-emerald-950
+"
+                                                type="text"
+                                                placeholder="Write a comment..."
+                                                maxlength="500"
+                                                aria-label="Write a comment"
+                                            >
+
+
+                                            <button
+                                                class="
+                                                    btn-comment-send
+                                                    flex h-12 w-12
+                                                    shrink-0
+                                                    items-center justify-center
+                                                    rounded-xl
+                                                    bg-emerald-700
+                                                    text-lg
+                                                    text-white
+                                                    shadow-sm
+                                                    transition
+                                                    hover:bg-emerald-800
+                                                    focus:outline-none
+                                                    focus:ring-4
+                                                    focus:ring-emerald-100
+                                                    
+                                                    dark:focus:ring-emerald-950
+"
+                                                type="button"
+                                                aria-label="Send comment"
+                                            >
+                                                <i class="bi bi-send-fill"></i>
+                                            </button>
+
+                                        </div>
+
+                                    <?php endif; ?>
+
+                                </div>
+
+                            </article>
+
+                        <?php endforeach; ?>
+
+                    </div>
+
+                <?php endif; ?>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<!-- Delete Comment Modal -->
+<div
+    id="deleteCommentModal"
+    class="
+        fixed inset-0 z-[200]
+        hidden
+        items-center justify-center
+        bg-slate-950/60
+        p-4
+        backdrop-blur-sm
+    "
+    aria-hidden="true"
+>
+    <div
+        class="
+            w-full max-w-sm
+            rounded-2xl
+            border border-slate-200
+            bg-white
+            p-5
+            shadow-2xl
+
+            dark:border-slate-700
+            dark:bg-slate-900
+        "
+    >
+
+        <div class="flex items-start gap-3">
+
+            <div
+                class="
+                    flex h-11 w-11
+                    shrink-0
+                    items-center justify-center
+                    rounded-xl
+                    bg-red-100
+                    text-xl
+                    text-red-600
+
+                    dark:bg-red-950/60
+                    dark:text-red-300
+                "
+            >
+                <i class="bi bi-trash3-fill"></i>
+            </div>
+
+            <div class="min-w-0 flex-1">
+
+                <h3
+                    class="
+                        text-base
+                        font-bold
+                        text-slate-900
+
+                        dark:text-slate-100
+                    "
+                >
+                    Delete comment?
+                </h3>
+
+                <p
+                    class="
+                        mt-1
+                        text-sm
+                        leading-6
+                        text-slate-600
+
+                        dark:text-slate-400
+                    "
+                >
+                    This comment will be permanently removed.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="
+                mt-6
+                flex
+                justify-end
+                gap-2
+            "
+        >
+
+            <button
+                type="button"
+                id="cancelDeleteComment"
+                class="
+                    min-h-11
+                    rounded-xl
+                    bg-slate-100
+                    px-4
+                    text-sm
+                    font-semibold
+                    text-slate-700
+                    transition
+
+                    hover:bg-slate-200
+
+                    dark:bg-slate-800
+                    dark:text-slate-200
+                    dark:hover:bg-slate-700
+                "
+            >
+                Cancel
+            </button>
+
+
+            <button
+                type="button"
+                id="confirmDeleteComment"
+                class="
+                    min-h-11
+                    rounded-xl
+                    bg-red-600
+                    px-4
+                    text-sm
+                    font-semibold
+                    text-white
+                    transition
+
+                    hover:bg-red-700
+
+                    focus:outline-none
+                    focus:ring-4
+                    focus:ring-red-100
+
+                    dark:focus:ring-red-950
+                "
+            >
+                Delete
+            </button>
+
+        </div>
+
+    </div>
+</div>
 <script>
-(function initCoverMap(){
-  const mapEl = document.getElementById('coverMap');
-  if (!mapEl) return;
-  const lat = parseFloat(mapEl.dataset.lat || '');
-  const lng = parseFloat(mapEl.dataset.lng || '');
-  if (!isFinite(lat) || !isFinite(lng)) return;
-  const map = L.map('coverMap', { zoomControl:false, attributionControl:false }).setView([lat, lng], 18);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20 }).addTo(map);
-  L.marker([lat, lng]).addTo(map);
-  setTimeout(() => map.invalidateSize(), 250);
-  window.addEventListener('resize', () => setTimeout(() => map.invalidateSize(), 200));
+/*
+|--------------------------------------------------------------------------
+| Cover Map
+|--------------------------------------------------------------------------
+*/
+
+/*
+|--------------------------------------------------------------------------
+| Home Location Map
+|--------------------------------------------------------------------------
+*/
+
+(function initCoverMap() {
+
+    const mapEl =
+        document.getElementById(
+            'coverMap'
+        );
+
+    if (
+        !mapEl ||
+        typeof L === 'undefined'
+    ) {
+        return;
+    }
+
+
+    const mapType =
+        mapEl.dataset.mapType || '';
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Official South Meridian subdivision map
+    |--------------------------------------------------------------------------
+    */
+
+    if (mapType === 'subdivision') {
+
+        const x =
+            parseFloat(
+                mapEl.dataset.mapX || ''
+            );
+
+        const y =
+            parseFloat(
+                mapEl.dataset.mapY || ''
+            );
+
+        const block =
+            mapEl.dataset.block || '';
+
+        const lot =
+            mapEl.dataset.lot || '';
+
+        const street =
+            mapEl.dataset.street || '';
+
+        const imageUrl =
+            mapEl.dataset.mapImage || '';
+
+
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !imageUrl
+        ) {
+            return;
+        }
+
+
+        /*
+         * South Meridian map image:
+         * width  = 2550
+         * height = 3300
+         *
+         * Leaflet CRS.Simple uses bottom-up Y,
+         * while image coordinates use top-down Y.
+         */
+        const leafletY =
+            3300 - y;
+
+
+        const map =
+            L.map(
+                mapEl,
+                {
+                    crs: L.CRS.Simple,
+
+                    center: [
+                        leafletY,
+                        x
+                    ],
+
+                    zoom: -1,
+
+                    minZoom: -3,
+                    maxZoom: 3,
+
+                    zoomSnap: 0.25,
+
+                    zoomControl: true,
+
+                    attributionControl: false
+                }
+            );
+
+
+        const mapBounds = [
+            [0, 0],
+            [3300, 2550]
+        ];
+
+
+        L.imageOverlay(
+            imageUrl,
+            mapBounds
+        ).addTo(
+            map
+        );
+
+
+        /*
+         * Exact homeowner property marker
+         */
+        const marker =
+            L.marker(
+                [
+                    leafletY,
+                    x
+                ]
+            )
+            .addTo(
+                map
+            );
+
+
+        /*
+         * Safe popup content
+         */
+        const popup =
+            document.createElement(
+                'div'
+            );
+
+        const title =
+            document.createElement(
+                'strong'
+            );
+
+        title.textContent =
+            'Block ' +
+            block +
+            ', Lot ' +
+            lot;
+
+        popup.appendChild(
+            title
+        );
+
+
+        if (street) {
+
+            popup.appendChild(
+                document.createElement(
+                    'br'
+                )
+            );
+
+            popup.appendChild(
+                document.createTextNode(
+                    street
+                )
+            );
+        }
+
+
+        marker
+            .bindPopup(
+                popup
+            )
+            .openPopup();
+
+
+        /*
+         * Center directly on homeowner property
+         */
+        map.setView(
+            [
+                leafletY,
+                x
+            ],
+            -1
+        );
+
+
+        setTimeout(
+            function () {
+
+                map.invalidateSize(
+                    true
+                );
+
+                map.setView(
+                    [
+                        leafletY,
+                        x
+                    ],
+                    -1
+                );
+
+            },
+            250
+        );
+
+
+        window.addEventListener(
+            'resize',
+            function () {
+
+                setTimeout(
+                    function () {
+
+                        map.invalidateSize(
+                            true
+                        );
+
+                    },
+                    200
+                );
+            }
+        );
+
+
+        return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy GPS fallback
+    |--------------------------------------------------------------------------
+    */
+
+    if (mapType === 'gps') {
+
+        const lat =
+            parseFloat(
+                mapEl.dataset.lat || ''
+            );
+
+        const lng =
+            parseFloat(
+                mapEl.dataset.lng || ''
+            );
+
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+        ) {
+            return;
+        }
+
+
+        const map =
+            L.map(
+                mapEl,
+                {
+                    zoomControl: false,
+                    attributionControl: false
+                }
+            )
+            .setView(
+                [
+                    lat,
+                    lng
+                ],
+                18
+            );
+
+
+        L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            {
+                maxZoom: 20
+            }
+        ).addTo(
+            map
+        );
+
+
+        L.marker(
+            [
+                lat,
+                lng
+            ]
+        ).addTo(
+            map
+        );
+
+
+        setTimeout(
+            function () {
+
+                map.invalidateSize();
+
+            },
+            250
+        );
+    }
+
 })();
 
-async function postJSON(action, payload){
-  const fd = new FormData();
-  fd.append('action', action);
-  for (const [k,v] of Object.entries(payload || {})) fd.append(k, v);
-  const res = await fetch('homeowner_dashboard.php', { method:'POST', body: fd });
-  return await res.json();
+
+/*
+|--------------------------------------------------------------------------
+| CSRF
+|--------------------------------------------------------------------------
+*/
+
+const CSRF_TOKEN =
+    <?= json_encode(
+        $csrfToken,
+        JSON_HEX_TAG |
+        JSON_HEX_AMP |
+        JSON_HEX_APOS |
+        JSON_HEX_QUOT
+    ) ?>;
+
+
+async function postJSON(
+    action,
+    payload
+) {
+
+    const fd =
+        new FormData();
+
+    fd.append(
+        'action',
+        action
+    );
+
+    fd.append(
+        'csrf_token',
+        CSRF_TOKEN
+    );
+
+    for (
+        const [key, value]
+        of Object.entries(payload || {})
+    ) {
+
+        fd.append(
+            key,
+            value
+        );
+    }
+
+
+    const response =
+        await fetch(
+            'homeowner_dashboard.php',
+            {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            }
+        );
+
+
+    return await response.json();
 }
 
-document.getElementById('btnMarkAllSeen')?.addEventListener('click', async () => {
-  const r = await postJSON('mark_seen', { target:'all' });
-  if (r.success) location.reload();
-});
-document.getElementById('btnSeenAnn')?.addEventListener('click', async () => {
-  const r = await postJSON('mark_seen', { target:'ann' });
-  if (r.success) location.reload();
-});
-document.getElementById('btnSeenCom')?.addEventListener('click', async () => {
-  const r = await postJSON('mark_seen', { target:'comments' });
-  if (r.success) location.reload();
-});
+/*
+|--------------------------------------------------------------------------
+| Delete Comment Modal
+|--------------------------------------------------------------------------
+*/
 
-document.getElementById('feed')?.addEventListener('click', async (e) => {
-  const postEl = e.target.closest('.post');
-  if (!postEl) return;
-  const annId = postEl.getAttribute('data-ann-id');
+const deleteCommentModal =
+    document.getElementById(
+        'deleteCommentModal'
+    );
 
-  if (e.target.closest('.btn-like')) {
-    const r = await postJSON('toggle_like_ann', { announcement_id: annId });
-    if (!r.success) return alert(r.message || 'Failed.');
-    const btn = postEl.querySelector('.btn-like');
-    const icon = btn.querySelector('i');
-    btn.classList.toggle('liked', !!r.liked);
-    if (icon) icon.className = 'bi ' + (r.liked ? 'bi-hand-thumbs-up-fill' : 'bi-hand-thumbs-up') + ' me-1';
-    postEl.querySelector('.like-count').textContent = r.like_count ?? 0;
-    return;
-  }
+const cancelDeleteComment =
+    document.getElementById(
+        'cancelDeleteComment'
+    );
 
-  if (e.target.closest('.btn-focus-comment')) {
-    postEl.querySelector('.comment-input')?.focus();
-    return;
-  }
+const confirmDeleteComment =
+    document.getElementById(
+        'confirmDeleteComment'
+    );
 
-  if (e.target.closest('.btn-comment-send')) {
-    const input = postEl.querySelector('.comment-input');
-    const text = (input?.value || '').trim();
-    if (!text) return;
-    const r = await postJSON('add_comment_ann', { announcement_id: annId, comment: text });
-    if (!r.success) return alert(r.message || 'Failed to comment.');
-    const form = postEl.querySelector('.comment-form');
-    form.insertAdjacentHTML('beforebegin', r.comment_html || '');
-    input.value = '';
-    postEl.querySelector('.comment-count').textContent = r.comment_count ?? 0;
-    return;
-  }
-});
+let pendingDeleteComment = null;
+let pendingDeletePost = null;
 
-(function(){
-  const wrap = document.getElementById('sbParking');
-  const btn  = document.getElementById('sbParkingToggle');
-  if(!wrap || !btn) return;
-  btn.addEventListener('click', () => wrap.classList.toggle('open'));
+
+function openDeleteCommentModal(
+    commentItem,
+    postEl
+) {
+
+    pendingDeleteComment =
+        commentItem;
+
+    pendingDeletePost =
+        postEl;
+
+    if (!deleteCommentModal) {
+        return;
+    }
+
+    deleteCommentModal.classList.remove(
+        'hidden'
+    );
+
+    deleteCommentModal.classList.add(
+        'flex'
+    );
+
+    deleteCommentModal.setAttribute(
+        'aria-hidden',
+        'false'
+    );
+
+    document.body.classList.add(
+        'overflow-hidden'
+    );
+}
+
+
+function closeDeleteCommentModal() {
+
+    if (!deleteCommentModal) {
+        return;
+    }
+
+    deleteCommentModal.classList.add(
+        'hidden'
+    );
+
+    deleteCommentModal.classList.remove(
+        'flex'
+    );
+
+    deleteCommentModal.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+
+    document.body.classList.remove(
+        'overflow-hidden'
+    );
+
+    pendingDeleteComment = null;
+    pendingDeletePost = null;
+}
+/*
+|--------------------------------------------------------------------------
+| Notification menu
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const button =
+        document.getElementById(
+            'notificationToggle'
+        );
+
+    const menu =
+        document.getElementById(
+            'notificationMenu'
+        );
+
+    if (!button || !menu) {
+        return;
+    }
+
+
+    function closeMenu() {
+
+        menu.classList.add(
+            'hidden'
+        );
+
+        button.setAttribute(
+            'aria-expanded',
+            'false'
+        );
+    }
+
+
+    button.addEventListener(
+        'click',
+        function (event) {
+
+            event.stopPropagation();
+
+            const opening =
+                menu.classList.contains(
+                    'hidden'
+                );
+
+            menu.classList.toggle(
+                'hidden'
+            );
+
+            button.setAttribute(
+                'aria-expanded',
+                opening
+                    ? 'true'
+                    : 'false'
+            );
+        }
+    );
+
+
+    menu.addEventListener(
+        'click',
+        function (event) {
+
+            event.stopPropagation();
+        }
+    );
+
+
+    document.addEventListener(
+        'click',
+        closeMenu
+    );
+
+
+    document.addEventListener(
+        'keydown',
+        function (event) {
+
+            if (
+                event.key === 'Escape'
+            ) {
+                closeMenu();
+            }
+        }
+    );
+
 })();
 
-(function(){
-  const tenantWrap = document.getElementById('sbTenant');
-  const tenantBtn  = document.getElementById('sbTenantToggle');
-  if(!tenantWrap || !tenantBtn) return;
-  tenantBtn.addEventListener('click', () => tenantWrap.classList.toggle('open'));
+
+/*
+|--------------------------------------------------------------------------
+| Mark notifications as seen
+|--------------------------------------------------------------------------
+*/
+
+document
+    .getElementById(
+        'btnMarkAllSeen'
+    )
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            const result =
+                await postJSON(
+                    'mark_seen',
+                    {
+                        target: 'all'
+                    }
+                );
+
+            if (result.success) {
+                location.reload();
+            }
+        }
+    );
+
+
+document
+    .getElementById(
+        'btnSeenAnn'
+    )
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            const result =
+                await postJSON(
+                    'mark_seen',
+                    {
+                        target: 'ann'
+                    }
+                );
+
+            if (result.success) {
+                location.reload();
+            }
+        }
+    );
+
+
+document
+    .getElementById(
+        'btnSeenCom'
+    )
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            const result =
+                await postJSON(
+                    'mark_seen',
+                    {
+                        target: 'comments'
+                    }
+                );
+
+            if (result.success) {
+                location.reload();
+            }
+        }
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Announcement interactions
+|--------------------------------------------------------------------------
+*/
+
+document
+    .getElementById('feed')
+    ?.addEventListener(
+        'click',
+        async function (event) {
+
+            const postEl =
+                event.target.closest(
+                    '.post'
+                );
+
+            if (!postEl) {
+                return;
+            }
+
+
+            const announcementId =
+                postEl.getAttribute(
+                    'data-ann-id'
+                );
+                /*
+|--------------------------------------------------------------------------
+| Comment Options
+|--------------------------------------------------------------------------
+*/
+
+const optionsButton =
+    event.target.closest(
+        '.btn-comment-options'
+    );
+
+if (optionsButton) {
+
+    const item =
+        optionsButton.closest(
+            '.comment-item'
+        );
+
+    const menu =
+        item?.querySelector(
+            '.comment-options-menu'
+        );
+
+    document
+        .querySelectorAll(
+            '.comment-options-menu'
+        )
+        .forEach(function (otherMenu) {
+
+            if (otherMenu !== menu) {
+                otherMenu.classList.add(
+                    'hidden'
+                );
+            }
+
+        });
+
+    menu?.classList.toggle(
+        'hidden'
+    );
+
+    return;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Edit Comment
+|--------------------------------------------------------------------------
+*/
+
+const editButton =
+    event.target.closest(
+        '.btn-edit-comment'
+    );
+
+if (editButton) {
+
+    const item =
+        editButton.closest(
+            '.comment-item'
+        );
+
+    item
+        ?.querySelector(
+            '.comment-options-menu'
+        )
+        ?.classList.add('hidden');
+
+    item
+        ?.querySelector(
+            '.comment-message'
+        )
+        ?.classList.add('hidden');
+
+    item
+        ?.querySelector(
+            '.comment-edit-area'
+        )
+        ?.classList.remove('hidden');
+
+    const input =
+        item?.querySelector(
+            '.comment-edit-input'
+        );
+
+    input?.focus();
+
+    return;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Cancel Edit
+|--------------------------------------------------------------------------
+*/
+
+const cancelButton =
+    event.target.closest(
+        '.btn-cancel-edit'
+    );
+
+if (cancelButton) {
+
+    const item =
+        cancelButton.closest(
+            '.comment-item'
+        );
+
+    item
+        ?.querySelector(
+            '.comment-edit-area'
+        )
+        ?.classList.add('hidden');
+
+    item
+        ?.querySelector(
+            '.comment-message'
+        )
+        ?.classList.remove('hidden');
+
+    return;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Save Comment
+|--------------------------------------------------------------------------
+*/
+
+const saveButton =
+    event.target.closest(
+        '.btn-save-comment'
+    );
+
+if (saveButton) {
+
+    const item =
+        saveButton.closest(
+            '.comment-item'
+        );
+
+    const commentId =
+        item?.dataset.commentId;
+
+    const input =
+        item?.querySelector(
+            '.comment-edit-input'
+        );
+
+    const text =
+        (input?.value || '').trim();
+
+    if (!commentId || !text) {
+        return;
+    }
+
+    saveButton.disabled = true;
+
+    try {
+
+        const result =
+            await postJSON(
+                'edit_comment_ann',
+                {
+                    comment_id: commentId,
+                    comment: text
+                }
+            );
+
+        if (!result.success) {
+            return;
+        }
+
+        const message =
+            item.querySelector(
+                '.comment-message'
+            );
+
+        if (message) {
+            message.textContent =
+                result.comment;
+        }
+
+        item
+            .querySelector(
+                '.comment-edit-area'
+            )
+            ?.classList.add('hidden');
+
+        message?.classList.remove(
+            'hidden'
+        );
+
+    } finally {
+
+        saveButton.disabled =
+            false;
+    }
+
+    return;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Delete Comment
+|--------------------------------------------------------------------------
+*/
+
+const deleteButton =
+    event.target.closest(
+        '.btn-delete-comment'
+    );
+
+if (deleteButton) {
+
+    const item =
+        deleteButton.closest(
+            '.comment-item'
+        );
+
+    item
+        ?.querySelector(
+            '.comment-options-menu'
+        )
+        ?.classList.add('hidden');
+
+    if (item) {
+
+        openDeleteCommentModal(
+            item,
+            postEl
+        );
+    }
+
+    return;
+}
+
+
+            /*
+            |------------------------------------------------------------------
+            | Like
+            |------------------------------------------------------------------
+            */
+
+            const likeButton =
+                event.target.closest(
+                    '.btn-like'
+                );
+
+            if (likeButton) {
+
+                const result =
+                    await postJSON(
+                        'toggle_like_ann',
+                        {
+                            announcement_id:
+                                announcementId
+                        }
+                    );
+
+
+                if (!result.success) {
+
+                    alert(
+                        result.message ||
+                        'Unable to update like.'
+                    );
+
+                    return;
+                }
+
+
+                const icon =
+                    likeButton.querySelector(
+                        'i'
+                    );
+
+
+                if (result.liked) {
+
+                    likeButton.classList.add(
+                        'bg-emerald-50',
+                        'text-emerald-700',
+                        'dark:bg-emerald-950/50',
+                        'dark:text-emerald-300'
+                    );
+
+                    likeButton.classList.remove(
+                        'text-slate-600',
+                        'dark:text-slate-300',
+                        'dark:hover:bg-slate-800'
+                    );
+
+                    if (icon) {
+                        icon.className =
+                            'bi bi-hand-thumbs-up-fill text-lg';
+                    }
+
+                } else {
+
+                    likeButton.classList.remove(
+                        'bg-emerald-50',
+                        'text-emerald-700',
+                        'dark:bg-emerald-950/50',
+                        'dark:text-emerald-300'
+                    );
+
+                    likeButton.classList.add(
+                        'text-slate-600',
+                        'dark:text-slate-300',
+                        'dark:hover:bg-slate-800'
+                    );
+
+                    if (icon) {
+                        icon.className =
+                            'bi bi-hand-thumbs-up text-lg';
+                    }
+                }
+
+
+                const counter =
+                    postEl.querySelector(
+                        '.like-count'
+                    );
+
+                if (counter) {
+
+                    counter.textContent =
+                        result.like_count ?? 0;
+                }
+
+                return;
+            }
+
+
+            /*
+            |------------------------------------------------------------------
+            | Focus comment
+            |------------------------------------------------------------------
+            */
+
+            if (
+                event.target.closest(
+                    '.btn-focus-comment'
+                )
+            ) {
+
+                postEl
+                    .querySelector(
+                        '.comment-input'
+                    )
+                    ?.focus();
+
+                return;
+            }
+
+
+            /*
+            |------------------------------------------------------------------
+            | Send comment
+            |------------------------------------------------------------------
+            */
+
+            if (
+                event.target.closest(
+                    '.btn-comment-send'
+                )
+            ) {
+
+                const input =
+                    postEl.querySelector(
+                        '.comment-input'
+                    );
+
+                const text =
+                    (
+                        input?.value || ''
+                    ).trim();
+
+
+                if (!text) {
+                    return;
+                }
+
+
+                const result =
+                    await postJSON(
+                        'add_comment_ann',
+                        {
+                            announcement_id:
+                                announcementId,
+
+                            comment:
+                                text
+                        }
+                    );
+
+
+                if (!result.success) {
+
+                    alert(
+                        result.message ||
+                        'Unable to add comment.'
+                    );
+
+                    return;
+                }
+
+
+                const form =
+                    postEl.querySelector(
+                        '.comment-form'
+                    );
+
+
+                if (form) {
+
+                    form.insertAdjacentHTML(
+                        'beforebegin',
+                        result.comment_html || ''
+                    );
+                }
+
+
+                input.value = '';
+
+
+                const counter =
+                    postEl.querySelector(
+                        '.comment-count'
+                    );
+
+
+                if (counter) {
+
+                    counter.textContent =
+                        result.comment_count ?? 0;
+                }
+
+                return;
+            }
+
+        }
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Press Enter to send comment
+|--------------------------------------------------------------------------
+*/
+
+document
+    .getElementById('feed')
+    ?.addEventListener(
+        'keydown',
+        function (event) {
+
+            if (
+                event.key !== 'Enter' ||
+                !event.target.classList.contains(
+                    'comment-input'
+                )
+            ) {
+                return;
+            }
+
+
+            event.preventDefault();
+
+
+            const post =
+                event.target.closest(
+                    '.post'
+                );
+
+
+            post
+                ?.querySelector(
+                    '.btn-comment-send'
+                )
+                ?.click();
+        }
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| Sidebar dropdowns
+|--------------------------------------------------------------------------
+*/
+
+function initSidebarDropdown(
+    buttonId,
+    menuId,
+    caretId
+) {
+
+    const button =
+        document.getElementById(
+            buttonId
+        );
+
+    const menu =
+        document.getElementById(
+            menuId
+        );
+
+    const caret =
+        document.getElementById(
+            caretId
+        );
+
+
+    if (!button || !menu) {
+        return;
+    }
+
+
+    button.addEventListener(
+        'click',
+        function () {
+
+            const willOpen =
+                menu.classList.contains(
+                    'hidden'
+                );
+
+
+            menu.classList.toggle(
+                'hidden'
+            );
+
+
+            button.setAttribute(
+                'aria-expanded',
+                willOpen
+                    ? 'true'
+                    : 'false'
+            );
+
+
+            if (caret) {
+
+                caret.classList.toggle(
+                    'rotate-180',
+                    willOpen
+                );
+            }
+
+        }
+    );
+
+}
+
+
+initSidebarDropdown(
+    'sbParkingToggle',
+    'sbParkingMenu',
+    'sbParkingCaret'
+);
+
+
+initSidebarDropdown(
+    'sbTenantToggle',
+    'sbTenantMenu',
+    'sbTenantCaret'
+);
+
+/*
+|--------------------------------------------------------------------------
+| Confirm Delete Comment
+|--------------------------------------------------------------------------
+*/
+
+confirmDeleteComment
+    ?.addEventListener(
+        'click',
+        async function () {
+
+            if (
+                !pendingDeleteComment ||
+                !pendingDeletePost
+            ) {
+                return;
+            }
+
+            const commentId =
+                pendingDeleteComment
+                    .dataset.commentId;
+
+            if (!commentId) {
+                return;
+            }
+
+            confirmDeleteComment.disabled =
+                true;
+
+            confirmDeleteComment.textContent =
+                'Deleting...';
+
+            try {
+
+                const result =
+                    await postJSON(
+                        'delete_comment_ann',
+                        {
+                            comment_id:
+                                commentId
+                        }
+                    );
+
+                if (!result.success) {
+                    return;
+                }
+
+                pendingDeleteComment.remove();
+
+                const counter =
+                    pendingDeletePost
+                        .querySelector(
+                            '.comment-count'
+                        );
+
+                if (counter) {
+
+                    counter.textContent =
+                        result.comment_count ?? 0;
+                }
+
+                closeDeleteCommentModal();
+
+            } finally {
+
+                confirmDeleteComment.disabled =
+                    false;
+
+                confirmDeleteComment.textContent =
+                    'Delete';
+            }
+        }
+    );
+
+
+cancelDeleteComment
+    ?.addEventListener(
+        'click',
+        closeDeleteCommentModal
+    );
+
+
+deleteCommentModal
+    ?.addEventListener(
+        'click',
+        function (event) {
+
+            if (
+                event.target ===
+                deleteCommentModal
+            ) {
+
+                closeDeleteCommentModal();
+            }
+        }
+    );
+/*
+|--------------------------------------------------------------------------
+| Mobile sidebar
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const sidebar =
+        document.getElementById(
+            'sidebar'
+        );
+
+    const overlay =
+        document.getElementById(
+            'sidebarOverlay'
+        );
+
+    const openButton =
+        document.getElementById(
+            'sidebarToggle'
+        );
+
+    const closeButton =
+        document.getElementById(
+            'sidebarClose'
+        );
+
+
+    if (
+        !sidebar ||
+        !overlay ||
+        !openButton
+    ) {
+        return;
+    }
+
+
+    function openSidebar() {
+
+        sidebar.classList.remove(
+            '-translate-x-full'
+        );
+
+        overlay.classList.remove(
+            'hidden'
+        );
+
+        document.body.classList.add(
+            'overflow-hidden'
+        );
+    }
+
+
+    function closeSidebar() {
+
+        sidebar.classList.add(
+            '-translate-x-full'
+        );
+
+        overlay.classList.add(
+            'hidden'
+        );
+
+        document.body.classList.remove(
+            'overflow-hidden'
+        );
+    }
+
+
+    openButton.addEventListener(
+        'click',
+        openSidebar
+    );
+
+
+    closeButton?.addEventListener(
+        'click',
+        closeSidebar
+    );
+
+
+    overlay.addEventListener(
+        'click',
+        closeSidebar
+    );
+
+
+    sidebar
+        .querySelectorAll('a')
+        .forEach(
+            function (link) {
+
+                link.addEventListener(
+                    'click',
+                    function () {
+
+                        if (
+                            window.innerWidth <
+                            1024
+                        ) {
+                            closeSidebar();
+                        }
+
+                    }
+                );
+            }
+        );
+
+
+    window.addEventListener(
+        'resize',
+        function () {
+
+            if (
+                window.innerWidth >=
+                1024
+            ) {
+
+                overlay.classList.add(
+                    'hidden'
+                );
+
+                document.body.classList.remove(
+                    'overflow-hidden'
+                );
+            }
+        }
+    );
+
 })();
 
-(function(){
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebarOverlay');
-  const toggle  = document.getElementById('sidebarToggle');
-  if (!sidebar || !overlay || !toggle) return;
-  function openSidebar(){ sidebar.classList.add('show'); overlay.classList.add('show'); document.body.style.overflow = 'hidden'; }
-  function closeSidebar(){ sidebar.classList.remove('show'); overlay.classList.remove('show'); document.body.style.overflow = ''; }
-  toggle.addEventListener('click', openSidebar);
-  overlay.addEventListener('click', closeSidebar);
-  window.addEventListener('resize', function(){ if (window.innerWidth >= 992) closeSidebar(); });
-  sidebar.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', function(){ if (window.innerWidth < 992) closeSidebar(); });
-  });
+
+/*
+|--------------------------------------------------------------------------
+| Access denied notification
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const toast =
+        document.getElementById(
+            'accessDeniedToast'
+        );
+
+    const closeButton =
+        document.getElementById(
+            'accessDeniedClose'
+        );
+
+
+    if (!toast) {
+        return;
+    }
+
+
+    function closeToast() {
+
+        toast.remove();
+    }
+
+
+    closeButton?.addEventListener(
+        'click',
+        closeToast
+    );
+
+
+    setTimeout(
+        closeToast,
+        5000
+    );
+
 })();
 
-document.addEventListener('DOMContentLoaded', function () {
-  const deniedToast = document.getElementById('accessDeniedToast');
-  if (deniedToast) {
-    new bootstrap.Toast(deniedToast, { delay: 3500 }).show();
-  }
-});
+/*
+|--------------------------------------------------------------------------
+| Light / Dark Theme
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const toggle =
+        document.getElementById(
+            'themeToggle'
+        );
+
+    const icon =
+        document.getElementById(
+            'themeIcon'
+        );
+
+
+    if (!toggle || !icon) {
+        return;
+    }
+
+
+    function updateThemeIcon() {
+
+        const dark =
+            document.documentElement
+                .classList
+                .contains('dark');
+
+
+        icon.className =
+            dark
+                ? 'bi bi-sun-fill'
+                : 'bi bi-moon-stars-fill';
+
+
+        toggle.setAttribute(
+            'aria-label',
+            dark
+                ? 'Switch to light mode'
+                : 'Switch to dark mode'
+        );
+
+
+        toggle.setAttribute(
+            'title',
+            dark
+                ? 'Switch to light mode'
+                : 'Switch to dark mode'
+        );
+    }
+
+
+    toggle.addEventListener(
+        'click',
+        function () {
+
+            const dark =
+                document.documentElement
+                    .classList
+                    .toggle('dark');
+
+
+            localStorage.setItem(
+                'hoa-theme',
+                dark
+                    ? 'dark'
+                    : 'light'
+            );
+
+
+            updateThemeIcon();
+        }
+    );
+
+
+    updateThemeIcon();
+
+})();
+
+/*
+|--------------------------------------------------------------------------
+| Homeowner Profile Picture
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const changeButton =
+        document.getElementById(
+            'changeProfilePictureBtn'
+        );
+
+    const fileInput =
+        document.getElementById(
+            'profilePictureInput'
+        );
+
+    const preview =
+        document.getElementById(
+            'profilePicturePreview'
+        );
+
+
+    if (
+        !changeButton ||
+        !fileInput ||
+        !preview
+    ) {
+        return;
+    }
+
+
+    changeButton.addEventListener(
+        'click',
+        function () {
+
+            fileInput.click();
+
+        }
+    );
+
+
+    fileInput.addEventListener(
+        'change',
+        async function () {
+
+            const file =
+                this.files &&
+                this.files[0];
+
+            if (!file) {
+                return;
+            }
+
+
+            /*
+             * Client-side size check.
+             */
+            if (
+                file.size >
+                5 * 1024 * 1024
+            ) {
+
+                alert(
+                    'Profile picture must be 5 MB or smaller.'
+                );
+
+                fileInput.value = '';
+
+                return;
+            }
+
+
+            const allowedTypes = [
+                'image/jpeg',
+                'image/png',
+                'image/webp'
+            ];
+
+
+            if (
+                !allowedTypes.includes(
+                    file.type
+                )
+            ) {
+
+                alert(
+                    'Please select a JPG, PNG, or WEBP image.'
+                );
+
+                fileInput.value = '';
+
+                return;
+            }
+
+
+            changeButton.disabled = true;
+
+
+            const oldHtml =
+                changeButton.innerHTML;
+
+            changeButton.innerHTML =
+                '<i class="bi bi-hourglass-split"></i>';
+
+
+            try {
+
+                const formData =
+                    new FormData();
+
+                formData.append(
+                    'action',
+                    'update_profile_picture'
+                );
+
+                formData.append(
+                    'csrf_token',
+                    CSRF_TOKEN
+                );
+
+                formData.append(
+                    'profile_picture',
+                    file
+                );
+
+
+                const response =
+                    await fetch(
+                        'homeowner_dashboard.php',
+                        {
+                            method: 'POST',
+                            body: formData,
+                            credentials: 'same-origin'
+                        }
+                    );
+
+
+                const result =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !result.success
+                ) {
+
+                    throw new Error(
+                        result.message ||
+                        'Unable to update profile picture.'
+                    );
+                }
+
+
+                /*
+                 * Update dashboard preview immediately.
+                 */
+                preview.innerHTML = '';
+
+                const image =
+                    document.createElement(
+                        'img'
+                    );
+
+                image.src =
+                    result.image_url +
+                    '?v=' +
+                    Date.now();
+
+                image.alt =
+                    'Profile picture';
+
+                image.className =
+                    'h-full w-full object-cover';
+
+                preview.appendChild(
+                    image
+                );
+
+
+                /*
+                 * Reload so sidebar also gets the new image.
+                 */
+                setTimeout(
+                    function () {
+
+                        location.reload();
+
+                    },
+                    500
+                );
+
+
+            } catch (error) {
+
+                console.error(error);
+
+                alert(
+                    error.message ||
+                    'Unable to upload profile picture.'
+                );
+
+
+            } finally {
+
+                changeButton.disabled =
+                    false;
+
+                changeButton.innerHTML =
+                    oldHtml;
+
+                fileInput.value =
+                    '';
+
+            }
+
+        }
+    );
+
+})();
 </script>
 </body>
 </html>

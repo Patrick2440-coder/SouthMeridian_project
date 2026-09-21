@@ -1,0 +1,3 @@
+[18-Sep-2026 15:18:12 Europe/Berlin] [2026-09-18T15:18:12+02:00] PayMongo dues payment processed. checkout=cs_e8d232d3e86cbbdd0f2b1fae, event=evt_5TBnLCNbJ42DuREfCLG69uYv
+[18-Sep-2026 15:25:27 Europe/Berlin] [2026-09-18T15:25:27+02:00] PayMongo dues payment processed. checkout=cs_4660ce76dd349f5244f8a5c1, event=evt_3b6eT1yi9LCA3NxTdz2pkekq
+[18-Sep-2026 15:31:32 Europe/Berlin] [2026-09-18T15:31:32+02:00] Parking permit activated from verified PayMongo payment. permit=10, checkout=cs_a8bc1e5db86444a69393b65d, event=evt_h5mL5pTNVT7J9GN72BxFCUz5

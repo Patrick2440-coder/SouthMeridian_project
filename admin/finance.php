@@ -75,8 +75,30 @@ $current_balance = $opening + $total_paid + $total_don - $total_exp;
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+
+<!-- ADMIN DARK MODE -->
+<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+<script>
+(function () {
+    try {
+        const savedTheme = localStorage.getItem('hoa-theme');
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+
+        document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 	<!-- Global site tag (gtag.js) - Google Analytics -->
 	 <!-- Include CSS for DataTables -->
@@ -84,26 +106,40 @@ $current_balance = $opening + $total_paid + $total_don - $total_exp;
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 <style>
-    /* ACCESS TOAST */
+/* ACCESS TOAST */
 .access-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-  z-index: 99999;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: all .3s ease;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+
+    background: #ef4444;
+    color: #fff;
+
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
 }
 
 .access-toast.show {
-  opacity: 1;
-  transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
 </style>
 </head>
@@ -116,6 +152,17 @@ $current_balance = $opening + $total_paid + $total_don - $total_exp;
 			
 		</div>
 		<div class="header-right">
+
+    <!-- DARK MODE TOGGLE -->
+    <div class="admin-theme-switch">
+        <button type="button"
+                id="themeToggle"
+                class="admin-theme-toggle"
+                aria-label="Switch theme"
+                title="Switch theme">
+            <span id="themeIcon">☾</span>
+        </button>
+    </div>
 
 			<div class="user-notification">
 				<div class="dropdown">
@@ -367,12 +414,16 @@ $current_balance = $opening + $total_paid + $total_don - $total_exp;
     </div>
   </div>
 
-  <script src="vendors/scripts/core.js"></script>
-  <script src="vendors/scripts/script.min.js"></script>
-  <script src="vendors/scripts/process.js"></script>
-  <script src="vendors/scripts/layout-settings.js"></script>
+<script src="vendors/scripts/core.js"></script>
+<script src="vendors/scripts/script.min.js"></script>
+<script src="vendors/scripts/process.js"></script>
+<script src="vendors/scripts/layout-settings.js"></script>
+
+<!-- ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
+
 <div id="accessToast" class="access-toast">
-  🚫 You do not have access to that part.
+    🚫 You do not have access to that part.
 </div>
 <script>
 window.userPermissions = <?= json_encode($permissions) ?>;

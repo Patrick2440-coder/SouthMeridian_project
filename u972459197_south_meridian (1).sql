@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 14, 2026 at 06:19 PM
+-- Generation Time: Sep 21, 2026 at 10:01 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `u972459197_south_meridian.sql`
+-- Database: `u972459197_south_meridian`
 --
 
 -- --------------------------------------------------------
@@ -277,7 +277,9 @@ CREATE TABLE `announcement_comments` (
 --
 
 INSERT INTO `announcement_comments` (`id`, `announcement_id`, `homeowner_id`, `comment`, `created_at`) VALUES
-(11, 15, 120, 'okayy', '2026-03-30 10:30:46');
+(11, 15, 120, 'okayy', '2026-03-30 10:30:46'),
+(12, 15, 129, 'hi', '2026-09-18 16:08:29'),
+(17, 15, 126, 'wadasd', '2026-09-21 18:41:27');
 
 -- --------------------------------------------------------
 
@@ -291,6 +293,13 @@ CREATE TABLE `announcement_likes` (
   `homeowner_id` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `announcement_likes`
+--
+
+INSERT INTO `announcement_likes` (`id`, `announcement_id`, `homeowner_id`, `created_at`) VALUES
+(6, 15, 129, '2026-09-18 16:08:31');
 
 -- --------------------------------------------------------
 
@@ -341,7 +350,7 @@ INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`
 (126, 16, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-03-30 07:33:52'),
 (127, 16, 'homeowner', NULL, NULL, 'Jheanna Abigail Abella', 'jheannaabigailerolesabella@gmail.com', '2026-03-30 07:33:52'),
 (128, 16, 'homeowner', NULL, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:33:52'),
-(129, 16, 'homeowner', 113, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:33:52'),
+(129, 16, 'homeowner', NULL, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:33:52'),
 (130, 16, 'homeowner', 115, NULL, 'mark dexter  legacion', 'chann7721@gmail.com', '2026-03-30 07:33:52'),
 (131, 16, 'homeowner', 116, NULL, 'dawdsasddwad awdsa dawdsa', 'jayjay@gmail.com', '2026-03-30 07:33:52'),
 (132, 16, 'homeowner', 117, NULL, 'dsawd dsawd dsawddsaw', 'jayandrew@gmail.com', '2026-03-30 07:33:52'),
@@ -360,7 +369,7 @@ INSERT INTO `announcement_recipients` (`id`, `announcement_id`, `recipient_type`
 (145, 17, 'homeowner', 46, NULL, 'Grace T Salazar', 'p1_grace.salazar@hoa.local', '2026-03-30 07:45:48'),
 (146, 17, 'homeowner', NULL, NULL, 'Jheanna Abigail Abella', 'jheannaabigailerolesabella@gmail.com', '2026-03-30 07:45:48'),
 (147, 17, 'homeowner', NULL, NULL, 'Jay Andrew  baculpo', 'liamalexander2440@gmail.com', '2026-03-30 07:45:48'),
-(148, 17, 'homeowner', 113, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:45:48'),
+(148, 17, 'homeowner', NULL, NULL, 'patrick  baculpo', 'ljbaculpo2440@gmail.com', '2026-03-30 07:45:48'),
 (149, 17, 'homeowner', 115, NULL, 'mark dexter  legacion', 'chann7721@gmail.com', '2026-03-30 07:45:48'),
 (150, 17, 'homeowner', 116, NULL, 'dawdsasddwad awdsa dawdsa', 'jayjay@gmail.com', '2026-03-30 07:45:48'),
 (151, 17, 'homeowner', 117, NULL, 'dsawd dsawd dsawddsaw', 'jayandrew@gmail.com', '2026-03-30 07:45:48'),
@@ -393,7 +402,6 @@ CREATE TABLE `complaints` (
 --
 
 INSERT INTO `complaints` (`id`, `homeowner_id`, `phase`, `admin_id`, `subject`, `category`, `description`, `status`, `priority`, `created_at`, `updated_at`) VALUES
-(8, 113, 'Phase 1', 9, 'Aso', 'general', 'ang ingay ng aso', 'closed', 'high', '2026-03-28 05:47:05', '2026-03-30 08:23:37'),
 (9, 114, 'Phase 2', 8, 'Tae', 'security', 'Si sia natae', 'in_progress', 'normal', '2026-03-28 08:44:19', '2026-03-28 08:49:12'),
 (10, 120, 'Phase 1', 6, 'tae', 'other', 'dsawdsawdsawdsawdsawdsawdwafdgfg', 'open', 'high', '2026-03-30 16:39:35', '2026-03-30 16:39:35');
 
@@ -418,14 +426,9 @@ CREATE TABLE `complaint_messages` (
 --
 
 INSERT INTO `complaint_messages` (`id`, `complaint_id`, `sender_type`, `sender_homeowner_id`, `sender_admin_id`, `message`, `created_at`) VALUES
-(18, 8, 'homeowner', 113, NULL, 'ang ingay ng aso', '2026-03-28 05:47:05'),
 (19, 9, 'homeowner', 114, NULL, 'Si sia natae', '2026-03-28 08:44:19'),
 (20, 9, 'admin', NULL, 25, 'Complaint status updated to RESOLVED.', '2026-03-28 08:47:13'),
 (21, 9, 'admin', NULL, 8, 'hi', '2026-03-28 08:49:12'),
-(22, 8, 'admin', NULL, 9, 'noted ill check that', '2026-03-30 07:56:24'),
-(23, 8, 'admin', NULL, 9, 'Complaint status updated to OPEN.', '2026-03-30 08:04:32'),
-(24, 8, 'admin', NULL, 9, 'Complaint status updated to OPEN.', '2026-03-30 08:09:54'),
-(25, 8, 'admin', NULL, 9, 'Complaint status updated to CLOSED.', '2026-03-30 08:23:37'),
 (26, 10, 'homeowner', 120, NULL, 'dsawdsawdsawdsawdsawdsawdwafdgfg', '2026-03-30 16:39:35');
 
 -- --------------------------------------------------------
@@ -457,7 +460,6 @@ INSERT INTO `election_nominations` (`id`, `election_id`, `phase`, `position`, `h
 (19, 5, 'Phase 1', 'Treasurer', 120, 1, '2026-04-07 21:32:56'),
 (20, 5, 'Phase 1', 'Auditor', 42, 1, '2026-04-07 21:33:00'),
 (21, 5, 'Phase 1', 'Board of Director', 43, 1, '2026-04-07 21:33:04'),
-(22, 5, 'Phase 1', 'Board of Director', 113, 1, '2026-04-07 21:33:07'),
 (23, 5, 'Phase 1', 'Board of Director', 41, 1, '2026-04-07 21:33:10'),
 (24, 5, 'Phase 1', 'Board of Director', 115, 1, '2026-04-07 21:33:13'),
 (25, 5, 'Phase 1', 'Board of Director', 38, 1, '2026-04-07 21:33:16'),
@@ -517,7 +519,6 @@ INSERT INTO `election_votes` (`id`, `election_id`, `phase`, `position`, `voter_h
 (7, 5, 'Phase 1', 'Board of Director', 115, 41, '2026-04-07 21:34:06'),
 (8, 5, 'Phase 1', 'Board of Director', 115, 43, '2026-04-07 21:34:06'),
 (9, 5, 'Phase 1', 'Board of Director', 115, 44, '2026-04-07 21:34:06'),
-(10, 5, 'Phase 1', 'Board of Director', 115, 113, '2026-04-07 21:34:06'),
 (11, 5, 'Phase 1', 'Board of Director', 115, 115, '2026-04-07 21:34:06');
 
 -- --------------------------------------------------------
@@ -625,7 +626,8 @@ CREATE TABLE `finance_dues_settings` (
 --
 
 INSERT INTO `finance_dues_settings` (`id`, `phase`, `monthly_dues`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 'Phase 1', 200.00, 9, '2026-03-30 08:34:43');
+(1, 'Phase 1', 200.00, 9, '2026-03-30 08:34:43'),
+(4, 'Phase 2', 100.00, 8, '2026-09-18 12:26:53');
 
 -- --------------------------------------------------------
 
@@ -695,7 +697,9 @@ CREATE TABLE `finance_payments` (
 
 INSERT INTO `finance_payments` (`id`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `paid_at`, `reference_no`, `notes`, `created_by_admin_id`, `created_at`) VALUES
 (3, 39, 'Phase 1', 2026, 2, 200.00, 'paid', '2026-02-17 18:57:10', '', 'cash', NULL, '2026-02-17 10:57:10'),
-(11, 118, 'Phase 1', 2026, 3, 200.00, 'paid', '2026-03-30 08:42:39', '209324267582', 'for 3 months', 9, '2026-03-30 08:42:39');
+(11, 118, 'Phase 1', 2026, 3, 200.00, 'paid', '2026-03-30 08:42:39', '209324267582', 'for 3 months', 9, '2026-03-30 08:42:39'),
+(14, 126, 'Phase 2', 2026, 9, 100.00, 'paid', '2026-09-18 21:18:12', 'pay_hh1LBqMWEVg4xk68L9CUmSaP', 'PayMongo', NULL, '2026-09-18 13:18:12'),
+(15, 126, 'Phase 2', 2026, 10, 100.00, 'paid', '2026-09-18 21:25:27', 'pay_EEycVa4gcm1VQWEdjfHhMFAr', 'PayMongo', NULL, '2026-09-18 13:25:27');
 
 -- --------------------------------------------------------
 
@@ -726,7 +730,10 @@ CREATE TABLE `finance_paymongo_checkouts` (
 --
 
 INSERT INTO `finance_paymongo_checkouts` (`id`, `checkout_session_id`, `checkout_url`, `homeowner_id`, `phase`, `pay_year`, `pay_month`, `amount`, `status`, `payment_id`, `paid_at`, `last_event_type`, `last_event_id`, `created_at`, `updated_at`) VALUES
-(53, 'cs_7eaa7da5aedf531a38b01ba9', 'https://checkout.paymongo.com/7eaa7da5aedf531a38b01ba9', 115, 'Phase 1', 2026, 3, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-04-07 03:56:36', '2026-04-07 03:56:36');
+(53, 'cs_7eaa7da5aedf531a38b01ba9', 'https://checkout.paymongo.com/7eaa7da5aedf531a38b01ba9', 115, 'Phase 1', 2026, 3, 200.00, 'pending', NULL, NULL, NULL, NULL, '2026-04-07 03:56:36', '2026-04-07 03:56:36'),
+(54, 'cs_e8d232d3e86cbbdd0f2b1fae', 'https://checkout.paymongo.com/e8d232d3e86cbbdd0f2b1fae', 126, 'Phase 2', 2026, 9, 100.00, 'paid', 'pay_hh1LBqMWEVg4xk68L9CUmSaP', '2026-09-18 21:18:12', 'checkout_session.payment.paid', 'evt_5TBnLCNbJ42DuREfCLG69uYv', '2026-09-18 13:17:56', '2026-09-18 13:18:12'),
+(55, 'cs_88687cba9ceb5921bf5f8a6b', 'https://checkout.paymongo.com/88687cba9ceb5921bf5f8a6b', 126, 'Phase 2', 2026, 10, 100.00, 'expired', NULL, NULL, NULL, NULL, '2026-09-18 13:18:47', '2026-09-18 13:24:54'),
+(56, 'cs_4660ce76dd349f5244f8a5c1', 'https://checkout.paymongo.com/4660ce76dd349f5244f8a5c1', 126, 'Phase 2', 2026, 10, 100.00, 'paid', 'pay_EEycVa4gcm1VQWEdjfHhMFAr', '2026-09-18 21:25:27', 'checkout_session.payment.paid', 'evt_3b6eT1yi9LCA3NxTdz2pkekq', '2026-09-18 13:24:54', '2026-09-18 13:25:27');
 
 -- --------------------------------------------------------
 
@@ -835,6 +842,7 @@ CREATE TABLE `homeowners` (
   `exact_location` text DEFAULT NULL,
   `valid_id_path` varchar(255) NOT NULL,
   `proof_of_billing_path` varchar(255) NOT NULL,
+  `profile_picture_path` varchar(255) DEFAULT NULL,
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `map_x` int(11) DEFAULT NULL,
@@ -850,57 +858,57 @@ CREATE TABLE `homeowners` (
 -- Dumping data for table `homeowners`
 --
 
-INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `password`, `must_change_password`, `phase`, `house_lot_number`, `block`, `lot`, `street`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `exact_location`, `valid_id_path`, `proof_of_billing_path`, `latitude`, `longitude`, `map_x`, `map_y`, `status`, `admin_id`, `created_at`, `reset_token`, `reset_expires`) VALUES
-(37, 'P137', 'Mark', 'A', 'Santos', '09170000001', 'p1_mark.santos@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id1.png', 'uploads/seed/p1_bill1.png', 14.3541010, 120.9461010, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(38, 'P138', 'Anne', 'M', 'Reyes', '09170000002', 'p1_anne.reyes@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id2.png', 'uploads/seed/p1_bill2.png', 14.3545890, 120.9463410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(39, 'P139', 'John', 'D', 'Cruz', '09170000003', 'p1_john.cruz@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id3.png', 'uploads/seed/p1_bill3.png', 14.3541410, 120.9461410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(40, 'P140', 'Jenny', 'L', 'Garcia', '09170000004', 'p1_jenny.garcia@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id4.png', 'uploads/seed/p1_bill4.png', 14.3541610, 120.9461610, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(41, 'P141', 'Paolo', 'R', 'Flores', '09170000005', 'p1_paolo.flores@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 1 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id5.png', 'uploads/seed/p1_bill5.png', 14.3541810, 120.9461810, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(42, 'P142', 'Liza', 'C', 'Domingo', '09170000006', 'p1_liza.domingo@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 2 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id6.png', 'uploads/seed/p1_bill6.png', 14.3542010, 120.9462010, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(43, 'P143', 'Ryan', 'P', 'Navarro', '09170000007', 'p1_ryan.navarro@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 2 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id7.png', 'uploads/seed/p1_bill7.png', 14.3542210, 120.9462210, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(44, 'P144', 'Mika', 'S', 'Dela Cruz', '09170000008', 'p1_mika.delacruz@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 2 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id8.png', 'uploads/seed/p1_bill8.png', 14.3542410, 120.9462410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(45, 'P145', 'Carlo', 'B', 'Lim', '09170000009', 'p1_carlo.lim@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 2 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id9.png', 'uploads/seed/p1_bill9.png', 14.3542610, 120.9462610, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(46, 'P146', 'Grace', 'T', 'Salazar', '09170000010', 'p1_grace.salazar@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 1', 'Blk 2 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id10.png', 'uploads/seed/p1_bill10.png', 14.3542810, 120.9462810, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
-(47, 'P247', 'Kevin', 'J', 'Villanueva', '09170000011', 'p2_kevin.villanueva@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 3 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id1.png', 'uploads/seed/p2_bill1.png', 14.3537010, 120.9467010, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(48, 'P248', 'Nina', 'F', 'Torres', '09170000012', 'p2_nina.torres@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 3 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id2.png', 'uploads/seed/p2_bill2.png', 14.3537210, 120.9467210, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(49, 'P249', 'Jasper', 'K', 'Aquino', '09170000013', 'p2_jasper.aquino@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 3 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id3.png', 'uploads/seed/p2_bill3.png', 14.3537410, 120.9467410, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(50, 'P250', 'Bea', 'R', 'Mendoza', '09170000014', 'p2_bea.mendoza@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 3 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id4.png', 'uploads/seed/p2_bill4.png', 14.3537610, 120.9467610, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(51, 'P251', 'Oscar', 'M', 'Pascual', '09170000015', 'p2_oscar.pascual@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 3 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id5.png', 'uploads/seed/p2_bill5.png', 14.3537810, 120.9467810, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(52, 'P252', 'Elaine', 'S', 'Ramos', '09170000016', 'p2_elaine.ramos@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 4 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id6.png', 'uploads/seed/p2_bill6.png', 14.3538010, 120.9468010, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(53, 'P253', 'Tony', 'L', 'Chua', '09170000017', 'p2_tony.chua@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 4 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id7.png', 'uploads/seed/p2_bill7.png', 14.3538210, 120.9468210, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(54, 'P254', 'Kaye', 'D', 'Lopez', '09170000018', 'p2_kaye.lopez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 4 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id8.png', 'uploads/seed/p2_bill8.png', 14.3538410, 120.9468410, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(55, 'P255', 'Hanna', 'G', 'Valdez', '09170000019', 'p2_hanna.valdez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 4 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id9.png', 'uploads/seed/p2_bill9.png', 14.3538610, 120.9468610, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(56, 'P256', 'Leo', 'P', 'Castro', '09170000020', 'p2_leo.castro@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 2', 'Blk 4 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id10.png', 'uploads/seed/p2_bill10.png', 14.3538810, 120.9468810, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
-(57, 'P357', 'Ivy', 'N', 'Bautista', '09170000021', 'p3_ivy.bautista@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 5 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id1.png', 'uploads/seed/p3_bill1.png', 14.3532010, 120.9472010, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(58, 'P358', 'Arvin', 'C', 'Marquez', '09170000022', 'p3_arvin.marquez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 5 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id2.png', 'uploads/seed/p3_bill2.png', 14.3532210, 120.9472210, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(59, 'P359', 'Shane', 'R', 'Diaz', '09170000023', 'p3_shane.diaz@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 5 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id3.png', 'uploads/seed/p3_bill3.png', 14.3532410, 120.9472410, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(60, 'P360', 'Mara', 'S', 'Velasco', '09170000024', 'p3_mara.velasco@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 5 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id4.png', 'uploads/seed/p3_bill4.png', 14.3532610, 120.9472610, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(61, 'P361', 'Noel', 'T', 'Fernandez', '09170000025', 'p3_noel.fernandez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 5 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id5.png', 'uploads/seed/p3_bill5.png', 14.3532810, 120.9472810, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(62, 'P362', 'Bianca', 'L', 'Mercado', '09170000026', 'p3_bianca.mercado@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id6.png', 'uploads/seed/p3_bill6.png', 14.3533010, 120.9473010, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(63, 'P363', 'Drew', 'P', 'Gomez', '09170000027', 'p3_drew.gomez@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id7.png', 'uploads/seed/p3_bill7.png', 14.3533210, 120.9473210, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(64, 'P364', 'Tina', 'A', 'Sison', '09170000028', 'p3_tina.sison@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id8.png', 'uploads/seed/p3_bill8.png', 14.3533410, 120.9473410, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(65, 'P365', 'Cedric', 'M', 'Herrera', '09170000029', 'p3_cedric.herrera@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id9.png', 'uploads/seed/p3_bill9.png', 14.3533610, 120.9473610, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(66, 'P366', 'Aya', 'G', 'Pineda', '09170000030', 'p3_aya.pineda@hoa.local', '$2y$10$wH5QfKqzB7bKp6pQK0f6eOq1JpZp9nQnqgC0h9oQk0qj6oJrWw5aW', 1, 'Phase 3', 'Blk 6 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id10.png', 'uploads/seed/p3_bill10.png', 14.3533810, 120.9473810, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
-(105, 'P1105', 'Liam', '', 'Alexander', '09916964490', 'leiannmartinez2440@gmail.com', '$2y$10$/61TLQav66EUbPZPuneKdeQFDHJHm0YztTFxYSkcgT202sWUqPxqm', 1, 'Phase 1', 'blk 15 lot 6', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Belgium Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774460632_id_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', 'uploads/1774460632_proof_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', 14.3561584, 120.9456968, NULL, NULL, 'rejected', 6, '2026-03-25 17:43:52', NULL, NULL),
-(110, 'P1110', 'patrick', '', 'baculpo', '09916964490', 'dawdawd@gmail.com', '$2y$10$vxc9vBkBUOVwwVbz2cR2eeprbY/DnS5GPpVnA6XrSilK.uZXExJ/6', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675096_id_sm_logo.png', 'uploads/1774675096_proof_favicon.png', 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:18:16', NULL, NULL),
-(111, 'P1111', 'erick', '', 'baculpo', '09916964490', 'awasdaawd@gmail.com', '$2y$10$kMLp7SxuJ1t.YtV547nQfOEeAlk.bTF090d4KeGlav7oWDgdegGTm', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675589_id_sm_logo.png', 'uploads/1774675589_proof_favicon.png', 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:26:29', NULL, NULL),
-(112, 'P1112', 'patrick', '', 'baculpo', '09916964490', 'awasdawasdadwadwad@gmail.com', '$2y$10$vk/IDJmuxCPRsf0cKRFtgOT5O0GcrNB5Ya05FQxYa6Rq4X3/WhVOi', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675631_id_sm_logo.png', 'uploads/1774675631_proof_favicon.png', 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:27:11', NULL, NULL),
-(113, 'P1113', 'patrick', '', 'baculpo', '09916964490', 'ljbaculpo2440@gmail.com', '$2y$10$WZGrcthoB6dcppNXY/NL/e4neIpywntdaxvGoNwTl6SWP082npchO', 0, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675917_1f698386_id_sm_logo.png', 'uploads/1774675917_1f698386_proof_favicon.png', 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-28 05:31:57', NULL, NULL),
-(114, 'P2114', 'Dex', 'Lex', 'Sia', '09321213123', 'patanijayandrew@gmail.com', '$2y$10$gbLTctHXSbAm0pXxn1G0LuyicwWg7HUyRIsEP/bOjxd98UQh.Vlzy', 0, 'Phase 2', 'bllk 1 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774685361_69a5eb91_id_Screenshot_2025-03-24_180255.png', 'uploads/1774685361_69a5eb91_proof_Screenshot_2025-03-24_181051.png', 14.3558050, 120.9448171, NULL, NULL, 'approved', 8, '2026-03-28 08:09:21', NULL, NULL),
-(115, 'P1115', 'mark dexter', '', 'legacion', '09278509963', 'chann7721@gmail.com', '$2y$10$b1vXI6LTZvyPRrZ9N.tYiu/0HO8wvtg4elR9f3Xdag19SlK3PCKCK', 0, 'Phase 1', 'house 7', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Brazil Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774792840_c35c93b6_id_NCST_NEW_LOGO.png', 'uploads/1774792840_c35c93b6_proof_NCST_NEW_LOGO.png', 14.3562831, 120.9455252, NULL, NULL, 'approved', 9, '2026-03-29 14:00:40', NULL, NULL),
-(116, 'P1116', 'dawdsasddwad', 'awdsa', 'dawdsa', 'dsawdsa', 'jayjay@gmail.com', '$2y$10$28r3UwhHcZKV8l00d8gSe.NH.UdWTpox7Vrf1d/xggheChUQbzyYm', 1, 'Phase 1', '12312', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774811983_38bd00af_id_Screenshot_2025-03-24_180255.png', 'uploads/1774811983_38bd00af_proof_Screenshot_2025-03-24_180255.png', 14.3557738, 120.9454929, NULL, NULL, 'approved', 9, '2026-03-29 19:20:10', 'aacc1a2a17c22935ed529eb54fbe5b18acfa79af4d436c968361fb0821478a36', '2026-03-29 21:09:53'),
-(117, 'P1117', 'dsawd', 'dsawd', 'dsawddsaw', 'dwadsadwa', 'jayandrew@gmail.com', '$2y$10$ohp6MwZzSbgX8cjsdy60XOWDOsgQqcFpFFXhFMH5ewpj7yXAItVEK', 1, 'Phase 1', 'dawdsa', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815400_1d369df5_id_HOmanage.drawio.png', 'uploads/1774815400_1d369df5_proof_Usermanagementhomeowners.drawio.png', 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:16:44', 'be56bcac674db45f2c6625b4cb310aeec87305f1cf05acb271b2bcbf954d9e7c', '2026-03-29 21:16:58'),
-(118, 'P1118', 'Jay', 'Andrew', 'Patani', '09321213123', 'jayyjayy@gmail.com', '$2y$10$.Ol/DL4Dtmt2QZmCA8YWyeuOUGAmSkPzBn05p4gdbEM1vKSiTcQfa', 1, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815627_5c74759c_id_regho.drawio.png', 'uploads/1774815627_5c74759c_proof_HOmanage.drawio.png', 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:20:27', 'a403d19756683908fc1f443688830e8238f5498198fefdaf0896335a79bccab3', '2026-03-30 04:27:10'),
-(119, 'P1119', 'Jay', 'Andrew', 'Patani', 'dsawdsa', 'jayandrewpatani18@gmail.co', '$2y$10$DQgkzVHSW73CZxgxeSFtYOz84KCaNFz4n1Q1F7ILsp2FDKjkaDzB.', 1, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815716_f7bb79de_id_HOmanage.drawio.png', 'uploads/1774815716_f7bb79de_proof_regho.drawio.png', 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:21:56', '9803dc49d910d5f5dcec6ab8a64a5cc420bbec78f8610bd0d0b04a1696d836c8', '2026-03-29 21:22:51'),
-(120, 'P1120', 'Jay', 'Andrew', 'Patani', '09321213123', 'jayandrewpatani18@gmail.com', '$2y$10$Z5FORNk5MJno4bBdErd4NuEeLMw/fG0YdBUjzlsbxojqXkqe6iiuO', 0, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815985_a4c5071a_id_HOMhomeowners.drawio.png', 'uploads/1774815985_a4c5071a_proof_HOMhomeowners.drawio.png', 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:26:25', NULL, NULL),
-(121, 'P1121', 'w131w', '231321', '21312', '32131', '321321@gmail.com', '$2y$10$p0OA2ILB9mCXxb/QctBk0.ZfUbDKALotmcIDyXd9qM79LdGqfxovy', 1, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774845848_ab0351e1_id_HOmanage.drawio.png', 'uploads/1774845848_ab0351e1_proof_HOmanage.drawio.png', 14.3548655, 120.9460555, NULL, NULL, 'rejected', 9, '2026-03-30 04:44:14', NULL, NULL),
-(122, 'P1122', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juan@gmail.com', '$2y$10$A8bwHroYFAUjePwKLjyrOeTzHrJDjkKi4Ao.AgIGrdac8zK72COpy', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902506_02dfe519_id_manages.php', 'uploads/1774902506_02dfe519_proof_manage.php', 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:28:26', NULL, NULL),
-(123, 'P1123', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juana@gmail.com', '$2y$10$pU2cHYNX3.AC0rZh2epWb.QkJm9bogOJaXj.rcwEkdJXiFGk5HbFK', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902735_66824780_id_manages.php', 'uploads/1774902735_66824780_proof_manage.php', 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:32:15', NULL, NULL),
-(124, 'P1124', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juansa@gmail.com', '$2y$10$nVeBBAlZ3Qol32Z0vdHeFOKW1sHnWHmSYhAhg3V5bPU5YwVa9e4pO', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902912_e81742a4_id_manages.phtml', 'uploads/1774902912_e81742a4_proof_manage.phtml', 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:35:12', NULL, NULL),
-(125, 'P2125', 'Patrick Justin', 'Enriquez', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$/y.4b0keCvrK35X4pLsvMuJqt/rj0STw0ULjBstBJvl4m8bFI.hHS', 1, 'Phase 2', 'blk 15 lot 9  Camia', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '2 years', 'Owner', 'Jeanna Eroles', '09916963390', NULL, 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, 'approved', 8, '2026-08-11 00:32:48', 'bfc6181a45d64bfdf1b51e6cb9690f5c946d136b39c99da9789c03f9da5a2732', '2026-08-12 00:21:11'),
-(126, 'P2126', 'Jersson', 'Andi', 'Baculpo', '09916694490', 'baculpo2440@gmail.com', '$2y$10$R/Ibd4XcPhPqb8DkRvvms.Zp/cvpl3Z.NXE.yRIs/zSiysrJEktd.', 1, 'Phase 2', 'Block 2 Lot 3', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '2 years', 'Owner', 'Jelai Andy', '09916963390', NULL, 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, 'approved', 8, '2026-09-01 16:46:49', '78d505d9679c34cb129a21611d871f675d27f01bfc0529f795112fa5fd9a140f', '2026-09-14 17:40:28'),
-(127, 'P1127', 'Marie', 'Jelaika', 'Baculpo', '09916963390', 'jelaika2440@gmail.com', '$2y$10$6Ln26NTcvd5ypwxRD3z3We4wKgKGYRgRuz/9o1Zse1wem163asaMq', 1, 'Phase 1', 'Block 2 Lot 3', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '3 years', 'Owner', 'Patricia Baculpo', '09949401064', NULL, 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, 'pending', 9, '2026-09-02 12:37:29', NULL, NULL),
-(128, 'P2128', 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', '$2y$10$jT76w8YQ6JGn3bVAXV4r9OWRLufkzbZF8Eq9DAGCjD8o6OtDK4lh6', 1, 'Phase 2', 'Block 2 Lot 8', '2', '8', 'Equator Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '3 years', 'Owner', 'Rian', '9949401064', '', 'imports/not_provided', 'imports/not_provided', NULL, NULL, 1718, 2998, 'approved', 8, '2026-09-08 13:48:01', '61df044743b02fa25f30606536b446c7074b8d17e384302a2812c209aa62bd56', '2026-09-14 17:40:18');
+INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `password`, `must_change_password`, `phase`, `house_lot_number`, `block`, `lot`, `street`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `exact_location`, `valid_id_path`, `proof_of_billing_path`, `profile_picture_path`, `latitude`, `longitude`, `map_x`, `map_y`, `status`, `admin_id`, `created_at`, `reset_token`, `reset_expires`) VALUES
+(37, 'P137', 'Mark', 'A', 'Santos', '09170000001', 'p1_mark.santos@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 1 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id1.png', 'uploads/seed/p1_bill1.png', NULL, 14.3541010, 120.9461010, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(38, 'P138', 'Anne', 'M', 'Reyes', '09170000002', 'p1_anne.reyes@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 1 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id2.png', 'uploads/seed/p1_bill2.png', NULL, 14.3545890, 120.9463410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(39, 'P139', 'John', 'D', 'Cruz', '09170000003', 'p1_john.cruz@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 1 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id3.png', 'uploads/seed/p1_bill3.png', NULL, 14.3541410, 120.9461410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(40, 'P140', 'Jenny', 'L', 'Garcia', '09170000004', 'p1_jenny.garcia@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 1 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id4.png', 'uploads/seed/p1_bill4.png', NULL, 14.3541610, 120.9461610, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(41, 'P141', 'Paolo', 'R', 'Flores', '09170000005', 'p1_paolo.flores@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 1 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id5.png', 'uploads/seed/p1_bill5.png', NULL, 14.3541810, 120.9461810, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(42, 'P142', 'Liza', 'C', 'Domingo', '09170000006', 'p1_liza.domingo@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 2 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id6.png', 'uploads/seed/p1_bill6.png', NULL, 14.3542010, 120.9462010, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(43, 'P143', 'Ryan', 'P', 'Navarro', '09170000007', 'p1_ryan.navarro@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 2 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id7.png', 'uploads/seed/p1_bill7.png', NULL, 14.3542210, 120.9462210, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(44, 'P144', 'Mika', 'S', 'Dela Cruz', '09170000008', 'p1_mika.delacruz@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 2 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id8.png', 'uploads/seed/p1_bill8.png', NULL, 14.3542410, 120.9462410, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(45, 'P145', 'Carlo', 'B', 'Lim', '09170000009', 'p1_carlo.lim@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 2 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id9.png', 'uploads/seed/p1_bill9.png', NULL, 14.3542610, 120.9462610, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(46, 'P146', 'Grace', 'T', 'Salazar', '09170000010', 'p1_grace.salazar@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Blk 2 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p1_id10.png', 'uploads/seed/p1_bill10.png', NULL, 14.3542810, 120.9462810, NULL, NULL, 'approved', 2, '2026-02-13 20:11:51', NULL, NULL),
+(47, 'P247', 'Kevin', 'J', 'Villanueva', '09170000011', 'p2_kevin.villanueva@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 3 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id1.png', 'uploads/seed/p2_bill1.png', NULL, 14.3537010, 120.9467010, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(48, 'P248', 'Nina', 'F', 'Torres', '09170000012', 'p2_nina.torres@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 3 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id2.png', 'uploads/seed/p2_bill2.png', NULL, 14.3537210, 120.9467210, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(49, 'P249', 'Jasper', 'K', 'Aquino', '09170000013', 'p2_jasper.aquino@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 3 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id3.png', 'uploads/seed/p2_bill3.png', NULL, 14.3537410, 120.9467410, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(50, 'P250', 'Bea', 'R', 'Mendoza', '09170000014', 'p2_bea.mendoza@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 3 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id4.png', 'uploads/seed/p2_bill4.png', NULL, 14.3537610, 120.9467610, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(51, 'P251', 'Oscar', 'M', 'Pascual', '09170000015', 'p2_oscar.pascual@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 3 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id5.png', 'uploads/seed/p2_bill5.png', NULL, 14.3537810, 120.9467810, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(52, 'P252', 'Elaine', 'S', 'Ramos', '09170000016', 'p2_elaine.ramos@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 4 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id6.png', 'uploads/seed/p2_bill6.png', NULL, 14.3538010, 120.9468010, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(53, 'P253', 'Tony', 'L', 'Chua', '09170000017', 'p2_tony.chua@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 4 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id7.png', 'uploads/seed/p2_bill7.png', NULL, 14.3538210, 120.9468210, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(54, 'P254', 'Kaye', 'D', 'Lopez', '09170000018', 'p2_kaye.lopez@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 4 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id8.png', 'uploads/seed/p2_bill8.png', NULL, 14.3538410, 120.9468410, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(55, 'P255', 'Hanna', 'G', 'Valdez', '09170000019', 'p2_hanna.valdez@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 4 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id9.png', 'uploads/seed/p2_bill9.png', NULL, 14.3538610, 120.9468610, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(56, 'P256', 'Leo', 'P', 'Castro', '09170000020', 'p2_leo.castro@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Blk 4 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p2_id10.png', 'uploads/seed/p2_bill10.png', NULL, 14.3538810, 120.9468810, NULL, NULL, 'approved', 3, '2026-02-13 20:11:51', NULL, NULL),
+(57, 'P357', 'Ivy', 'N', 'Bautista', '09170000021', 'p3_ivy.bautista@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 5 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id1.png', 'uploads/seed/p3_bill1.png', NULL, 14.3532010, 120.9472010, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(58, 'P358', 'Arvin', 'C', 'Marquez', '09170000022', 'p3_arvin.marquez@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 5 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id2.png', 'uploads/seed/p3_bill2.png', NULL, 14.3532210, 120.9472210, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(59, 'P359', 'Shane', 'R', 'Diaz', '09170000023', 'p3_shane.diaz@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 5 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id3.png', 'uploads/seed/p3_bill3.png', NULL, 14.3532410, 120.9472410, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(60, 'P360', 'Mara', 'S', 'Velasco', '09170000024', 'p3_mara.velasco@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 5 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id4.png', 'uploads/seed/p3_bill4.png', NULL, 14.3532610, 120.9472610, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(61, 'P361', 'Noel', 'T', 'Fernandez', '09170000025', 'p3_noel.fernandez@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 5 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id5.png', 'uploads/seed/p3_bill5.png', NULL, 14.3532810, 120.9472810, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(62, 'P362', 'Bianca', 'L', 'Mercado', '09170000026', 'p3_bianca.mercado@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 6 Lot 1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id6.png', 'uploads/seed/p3_bill6.png', NULL, 14.3533010, 120.9473010, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(63, 'P363', 'Drew', 'P', 'Gomez', '09170000027', 'p3_drew.gomez@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 6 Lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id7.png', 'uploads/seed/p3_bill7.png', NULL, 14.3533210, 120.9473210, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(64, 'P364', 'Tina', 'A', 'Sison', '09170000028', 'p3_tina.sison@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 6 Lot 3', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id8.png', 'uploads/seed/p3_bill8.png', NULL, 14.3533410, 120.9473410, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(65, 'P365', 'Cedric', 'M', 'Herrera', '09170000029', 'p3_cedric.herrera@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 6 Lot 4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id9.png', 'uploads/seed/p3_bill9.png', NULL, 14.3533610, 120.9473610, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(66, 'P366', 'Aya', 'G', 'Pineda', '09170000030', 'p3_aya.pineda@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Blk 6 Lot 5', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/seed/p3_id10.png', 'uploads/seed/p3_bill10.png', NULL, 14.3533810, 120.9473810, NULL, NULL, 'approved', 4, '2026-02-13 20:11:51', NULL, NULL),
+(105, 'P1105', 'Liam', '', 'Alexander', '09916964490', 'leiannmartinez2440@gmail.com', '$2y$10$/61TLQav66EUbPZPuneKdeQFDHJHm0YztTFxYSkcgT202sWUqPxqm', 1, 'Phase 1', 'blk 15 lot 6', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Belgium Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774460632_id_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', 'uploads/1774460632_proof_IT310_Information_Assurance_and_Security_1_2nd_Sem_Final.pdf', NULL, 14.3561584, 120.9456968, NULL, NULL, 'rejected', 6, '2026-03-25 17:43:52', NULL, NULL),
+(110, 'P1110', 'patrick', '', 'baculpo', '09916964490', 'dawdawd@gmail.com', '$2y$10$vxc9vBkBUOVwwVbz2cR2eeprbY/DnS5GPpVnA6XrSilK.uZXExJ/6', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675096_id_sm_logo.png', 'uploads/1774675096_proof_favicon.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:18:16', NULL, NULL),
+(111, 'P1111', 'erick', '', 'baculpo', '09916964490', 'awasdaawd@gmail.com', '$2y$10$kMLp7SxuJ1t.YtV547nQfOEeAlk.bTF090d4KeGlav7oWDgdegGTm', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675589_id_sm_logo.png', 'uploads/1774675589_proof_favicon.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:26:29', NULL, NULL),
+(112, 'P1112', 'patrick', '', 'baculpo', '09916964490', 'awasdawasdadwadwad@gmail.com', '$2y$10$vk/IDJmuxCPRsf0cKRFtgOT5O0GcrNB5Ya05FQxYa6Rq4X3/WhVOi', 1, 'Phase 1', 'blk 7 lot 9', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774675631_id_sm_logo.png', 'uploads/1774675631_proof_favicon.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'rejected', 6, '2026-03-28 05:27:11', NULL, NULL),
+(114, 'P2114', 'Dex', 'Lex', 'Sia', '09321213123', 'patanijayandrew@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'bllk 1 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774685361_69a5eb91_id_Screenshot_2025-03-24_180255.png', 'uploads/1774685361_69a5eb91_proof_Screenshot_2025-03-24_181051.png', NULL, 14.3558050, 120.9448171, NULL, NULL, 'approved', 8, '2026-03-28 08:09:21', NULL, NULL),
+(115, 'P1115', 'mark dexter', '', 'legacion', '09278509963', 'chann7721@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'house 7', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Brazil Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774792840_c35c93b6_id_NCST_NEW_LOGO.png', 'uploads/1774792840_c35c93b6_proof_NCST_NEW_LOGO.png', NULL, 14.3562831, 120.9455252, NULL, NULL, 'approved', 9, '2026-03-29 14:00:40', NULL, NULL),
+(116, 'P1116', 'dawdsasddwad', 'awdsa', 'dawdsa', 'dsawdsa', 'jayjay@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', '12312', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774811983_38bd00af_id_Screenshot_2025-03-24_180255.png', 'uploads/1774811983_38bd00af_proof_Screenshot_2025-03-24_180255.png', NULL, 14.3557738, 120.9454929, NULL, NULL, 'approved', 9, '2026-03-29 19:20:10', 'aacc1a2a17c22935ed529eb54fbe5b18acfa79af4d436c968361fb0821478a36', '2026-03-29 21:09:53'),
+(117, 'P1117', 'dsawd', 'dsawd', 'dsawddsaw', 'dwadsadwa', 'jayandrew@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'dawdsa', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815400_1d369df5_id_HOmanage.drawio.png', 'uploads/1774815400_1d369df5_proof_Usermanagementhomeowners.drawio.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:16:44', 'be56bcac674db45f2c6625b4cb310aeec87305f1cf05acb271b2bcbf954d9e7c', '2026-03-29 21:16:58'),
+(118, 'P1118', 'Jay', 'Andrew', 'Patani', '09321213123', 'jayyjayy@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815627_5c74759c_id_regho.drawio.png', 'uploads/1774815627_5c74759c_proof_HOmanage.drawio.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:20:27', 'a403d19756683908fc1f443688830e8238f5498198fefdaf0896335a79bccab3', '2026-03-30 04:27:10'),
+(119, 'P1119', 'Jay', 'Andrew', 'Patani', 'dsawdsa', 'jayandrewpatani18@gmail.co', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815716_f7bb79de_id_HOmanage.drawio.png', 'uploads/1774815716_f7bb79de_proof_regho.drawio.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:21:56', '9803dc49d910d5f5dcec6ab8a64a5cc420bbec78f8610bd0d0b04a1696d836c8', '2026-03-29 21:22:51'),
+(120, 'P1120', 'Jay', 'Andrew', 'Patani', '09321213123', 'jayandrewpatani18@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, 'Salitran', 'Dasmariñas', 'Cavite', 'Calabarzon', '4114', 'Philippines', 'Equator Street', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774815985_a4c5071a_id_HOMhomeowners.drawio.png', 'uploads/1774815985_a4c5071a_proof_HOMhomeowners.drawio.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'approved', 9, '2026-03-29 20:26:25', NULL, NULL),
+(121, 'P1121', 'w131w', '231321', '21312', '32131', '321321@gmail.com', '$2y$10$p0OA2ILB9mCXxb/QctBk0.ZfUbDKALotmcIDyXd9qM79LdGqfxovy', 1, 'Phase 1', 'blk 12 lot 2', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774845848_ab0351e1_id_HOmanage.drawio.png', 'uploads/1774845848_ab0351e1_proof_HOmanage.drawio.png', NULL, 14.3548655, 120.9460555, NULL, NULL, 'rejected', 9, '2026-03-30 04:44:14', NULL, NULL),
+(122, 'P1122', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juan@gmail.com', '$2y$10$A8bwHroYFAUjePwKLjyrOeTzHrJDjkKi4Ao.AgIGrdac8zK72COpy', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902506_02dfe519_id_manages.php', 'uploads/1774902506_02dfe519_proof_manage.php', NULL, 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:28:26', NULL, NULL),
+(123, 'P1123', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juana@gmail.com', '$2y$10$pU2cHYNX3.AC0rZh2epWb.QkJm9bogOJaXj.rcwEkdJXiFGk5HbFK', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902735_66824780_id_manages.php', 'uploads/1774902735_66824780_proof_manage.php', NULL, 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:32:15', NULL, NULL),
+(124, 'P1124', 'Juan', 'Santos', 'Dela Cruz', '09123456789', 'juansa@gmail.com', '$2y$10$nVeBBAlZ3Qol32Z0vdHeFOKW1sHnWHmSYhAhg3V5bPU5YwVa9e4pO', 1, 'Phase 1', 'Blk 5 Lot 12', NULL, NULL, NULL, '', '', '', '', '', '', '', NULL, 'Owner', NULL, NULL, NULL, 'uploads/1774902912_e81742a4_id_manages.phtml', 'uploads/1774902912_e81742a4_proof_manage.phtml', NULL, 14.3545000, 120.9460000, NULL, NULL, 'rejected', 9, '2026-03-30 20:35:12', NULL, NULL),
+(125, 'P2125', 'Patrick Justin', 'Enriquez', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'blk 15 lot 9  Camia', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '2 years', 'Owner', 'Jeanna Eroles', '09916963390', NULL, 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 8, '2026-08-11 00:32:48', 'bfc6181a45d64bfdf1b51e6cb9690f5c946d136b39c99da9789c03f9da5a2732', '2026-08-12 00:21:11'),
+(126, 'P2126', 'Jersson', 'Andi', 'Baculpo', '09916694490', 'baculpo2440@gmail.com', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 2 Lot 3', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '2 years', 'Owner', 'Jelai Andy', '09916963390', NULL, 'imports/not_provided', 'imports/not_provided', 'uploads/profile_pictures/93c32e6ddc68712787840f9beebb7abd.jpg', NULL, NULL, NULL, NULL, 'approved', 8, '2026-09-01 16:46:49', '1d3cb7d1d3f94352f21d7a25afa02106b44003432e97aca15145dc6392171edd', '2026-09-18 15:00:59'),
+(127, 'P1127', 'Marie', 'Jelaika', 'Baculpo', '09916963390', 'jelaika2440@gmail.com', '$2y$10$6Ln26NTcvd5ypwxRD3z3We4wKgKGYRgRuz/9o1Zse1wem163asaMq', 1, 'Phase 1', 'Block 2 Lot 3', NULL, NULL, NULL, 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', '3 years', 'Owner', 'Patricia Baculpo', '09949401064', NULL, 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'pending', 9, '2026-09-02 12:37:29', NULL, NULL),
+(128, 'P2128', 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', '$2y$10$3782VpbVhvMT7vQXcWqWTO.QDtzK94NuzijGXBSOEDRIP26uZqNqS', 1, 'Phase 2', 'Block 2 Lot 8', '2', '8', 'Equator Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '3 years', 'Owner', 'Rian', '9949401064', '', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1718, 2998, 'pending', 8, '2026-09-08 13:48:01', NULL, NULL),
+(129, 'P2129', 'Pattwick', 'wick', 'Baculpo', '09916963390', 'ljbaculpo2440@gmail.com', '$2y$10$rLrpebyYd1ahVV9Sum72OOosoHqX7YiKzfBxa821h2TPPtW.Pbt1C', 0, 'Phase 2', 'Block 15 Lot 17', '15', '17', 'Columbia Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/d8133191a99f4d153fc0f248d5871b77_id.png', 'uploads/23deb28bbab65170f78e37cf62021490_proof.jpg', NULL, NULL, NULL, 805, 649, 'approved', 8, '2026-09-18 13:58:54', NULL, NULL);
 
 --
 -- Triggers `homeowners`
@@ -938,10 +946,11 @@ CREATE TABLE `homeowner_feed_state` (
 --
 
 INSERT INTO `homeowner_feed_state` (`homeowner_id`, `last_ann_seen`, `last_comment_seen`, `created_at`, `updated_at`) VALUES
-(113, '2026-03-28 05:43:29', '2026-03-28 05:43:29', '2026-03-28 05:43:29', '2026-03-28 05:43:29'),
 (114, '2026-03-28 08:20:06', '2026-03-28 08:20:06', '2026-03-28 08:20:06', '2026-03-28 08:20:06'),
 (115, '2026-03-29 14:01:56', '2026-03-29 14:01:56', '2026-03-29 14:01:56', '2026-03-29 14:01:56'),
-(120, '2026-03-29 20:28:03', '2026-03-29 20:28:03', '2026-03-29 20:28:03', '2026-03-29 20:28:03');
+(120, '2026-03-29 20:28:03', '2026-03-29 20:28:03', '2026-03-29 20:28:03', '2026-03-29 20:28:03'),
+(126, '2026-09-18 20:01:40', '2026-09-18 20:01:40', '2026-09-18 12:01:40', '2026-09-18 12:01:40'),
+(129, '2026-09-19 00:08:38', '2026-09-19 00:08:38', '2026-09-18 14:00:31', '2026-09-18 16:08:38');
 
 -- --------------------------------------------------------
 
@@ -991,13 +1000,10 @@ CREATE TABLE `homeowner_import_queue` (
 INSERT INTO `homeowner_import_queue` (`id`, `source_row`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `phase`, `block`, `lot`, `street`, `map_x`, `map_y`, `house_lot_number`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `exact_location`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `status`, `duplicate_homeowner_id`, `approved_homeowner_id`, `imported_by`, `created_at`, `approved_at`) VALUES
 (1, 3, 'Patrick Justin', 'Enriquez', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', 'Phase 2', NULL, NULL, NULL, 0, 0, 'blk 15 lot 9  Camia', 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', NULL, '2 years', 'Owner', 'Jeanna Eroles', '09916963390', 'approved', NULL, 125, 8, '2026-08-11 00:31:10', '2026-08-11 08:32:48'),
 (2, 3, 'Jersson', 'Andi', 'Baculpo', '09916694490', 'baculpo2440@gmail.com', 'Phase 2', NULL, NULL, NULL, 0, 0, 'Block 2 Lot 3', 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', NULL, '2 years', 'Owner', 'Jelai Andy', '09916963390', 'approved', NULL, 126, 8, '2026-09-01 16:46:30', '2026-09-02 00:46:49'),
-(3, 3, 'Marie', 'Jelaika', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', 'Phase 1', NULL, NULL, NULL, 0, 0, 'Block 2 Lot 3', 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', NULL, '3 years', 'Owner', 'Patricia Baculpo', '09949401064', 'duplicate', 125, NULL, 8, '2026-09-02 12:36:19', NULL),
+(3, 3, 'Marie', 'Jelaika', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', 'Phase 1', NULL, NULL, NULL, 0, 0, 'Block 2 Lot 3', 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', NULL, '3 years', 'Owner', 'Patricia Baculpo', '09949401064', 'duplicate', 125, NULL, 9, '2026-09-02 12:36:19', NULL),
 (4, 3, 'Marie', 'Jelaika', 'Baculpo', '09916963390', 'jelaika2440@gmail.com', 'Phase 1', NULL, NULL, NULL, 0, 0, 'Block 2 Lot 3', 'South Meridian Homes', 'Dasmarinas City', 'Cavite', NULL, NULL, NULL, '', NULL, '3 years', 'Owner', 'Patricia Baculpo', '09949401064', 'approved', NULL, 127, 9, '2026-09-02 12:37:21', '2026-09-02 20:37:29'),
 (5, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '', '3 years', 'Owner', 'Rian', '9949401064', 'approved', NULL, 128, 8, '2026-09-08 13:46:08', '2026-09-08 21:48:01'),
-(7, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '', '3 years', 'Owner', 'Rian', '9949401064', 'pending', NULL, NULL, 8, '2026-09-14 14:39:38', NULL),
-(8, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '', '3 years', 'Owner', 'Rian', '9949401064', 'pending', NULL, NULL, 8, '2026-09-14 14:40:01', NULL),
-(9, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '', '3 years', 'Owner', 'Rian', '9949401064', 'pending', NULL, NULL, 8, '2026-09-14 14:40:40', NULL),
-(14, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', 'Block 2, Lot 8, Equator Street', '3 years', 'Owner', 'Rian', '9949401064', 'duplicate', 128, NULL, 8, '2026-09-14 15:28:19', NULL);
+(6, 2, 'Erick', 'Rian', 'Alvarez', '9916963390', 'baculpo@gmail.com', 'Phase 2', '2', '8', 'Equator Street', 1718, 2998, 'Block 2 Lot 8', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '', '3 years', 'Owner', 'Rian', '9949401064', 'duplicate', 128, NULL, 8, '2026-09-08 13:49:22', NULL);
 
 -- --------------------------------------------------------
 
@@ -1025,8 +1031,6 @@ CREATE TABLE `homeowner_officer_messages` (
 --
 
 INSERT INTO `homeowner_officer_messages` (`id`, `phase`, `homeowner_id`, `admin_id`, `sender_type`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `is_read_by_homeowner`, `is_read_by_admin`, `created_at`) VALUES
-(1, 'Phase 1', 113, 9, 'homeowner', 'hello', NULL, NULL, NULL, 1, 1, '2026-03-28 05:44:35'),
-(2, 'Phase 1', 113, 9, 'admin', 'hi', NULL, NULL, NULL, 0, 1, '2026-04-05 09:15:23'),
 (3, 'Phase 1', 115, 9, 'homeowner', 'awdasdaw', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:20'),
 (4, 'Phase 1', 115, 9, 'homeowner', 'awdasd', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:21'),
 (5, 'Phase 1', 115, 9, 'homeowner', 'awda', NULL, NULL, NULL, 1, 0, '2026-04-07 20:53:22'),
@@ -1113,7 +1117,38 @@ INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_nam
 (85, 123, 'Maria', '', 'Dela Cruz', ''),
 (86, 123, 'Pedro', '', 'Dela Cruz', ''),
 (87, 124, 'Maria', '', 'Dela Cruz', ''),
-(88, 124, 'Pedro', '', 'Dela Cruz', '');
+(88, 124, 'Pedro', '', 'Dela Cruz', ''),
+(89, 129, 'patrick', 'awdawd', 'baculpo', 'Relative');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `parking_paymongo_checkouts`
+--
+
+CREATE TABLE `parking_paymongo_checkouts` (
+  `id` int(11) NOT NULL,
+  `checkout_session_id` varchar(100) NOT NULL,
+  `checkout_url` text DEFAULT NULL,
+  `permit_id` int(11) NOT NULL,
+  `homeowner_id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `status` enum('pending','paid','failed','expired') NOT NULL DEFAULT 'pending',
+  `payment_id` varchar(100) DEFAULT NULL,
+  `paid_at` datetime DEFAULT NULL,
+  `last_event_type` varchar(100) DEFAULT NULL,
+  `last_event_id` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `parking_paymongo_checkouts`
+--
+
+INSERT INTO `parking_paymongo_checkouts` (`id`, `checkout_session_id`, `checkout_url`, `permit_id`, `homeowner_id`, `phase`, `amount`, `status`, `payment_id`, `paid_at`, `last_event_type`, `last_event_id`, `created_at`, `updated_at`) VALUES
+(1, 'cs_a8bc1e5db86444a69393b65d', 'https://checkout.paymongo.com/a8bc1e5db86444a69393b65d', 10, 126, 'Phase 2', 500.00, 'paid', 'pay_J7i4LhoDXDEdXzAYR916VJ2A', '2026-09-18 21:31:32', 'checkout_session.payment.paid', 'evt_h5mL5pTNVT7J9GN72BxFCUz5', '2026-09-18 13:31:02', '2026-09-18 13:31:32');
 
 -- --------------------------------------------------------
 
@@ -1156,7 +1191,8 @@ CREATE TABLE `parking_permits` (
 --
 
 INSERT INTO `parking_permits` (`id`, `phase`, `homeowner_id`, `request_type`, `renew_of_id`, `plate_no`, `vehicle_type`, `vehicle_make`, `vehicle_model`, `vehicle_color`, `permit_no`, `sticker_year`, `permit_duration`, `payment_method`, `contract_path`, `status`, `valid_from`, `valid_until`, `requested_at`, `approved_by_admin_id`, `approved_at`, `rejected_reason`, `revoked_reason`, `updated_at`, `vehicle_front_path`, `vehicle_back_path`, `payment_status`) VALUES
-(8, 'Phase 1', 115, 'new', NULL, '12ABC', 'car', 'toyoto', 'vios', '0', 'P1-001', 2026, '1_month', 'online', 'uploads/parking_contracts/parking_contract_1775375714_8524390d.html', 'pending', '2026-04-05', '2026-05-04', '2026-04-05 07:55:14', 9, '2026-04-05 15:55:45', NULL, NULL, '2026-04-05 07:55:45', 'uploads/parking_permits/1775375714_e5546aebf56b.jpg', 'uploads/parking_permits/1775375714_c7372fb34717.jpg', 'for payment');
+(8, 'Phase 1', 115, 'new', NULL, '12ABC', 'car', 'toyoto', 'vios', '0', 'P1-001', 2026, '1_month', 'online', 'uploads/parking_contracts/parking_contract_1775375714_8524390d.html', 'pending', '2026-04-05', '2026-05-04', '2026-04-05 07:55:14', 9, '2026-04-05 15:55:45', NULL, NULL, '2026-04-05 07:55:45', 'uploads/parking_permits/1775375714_e5546aebf56b.jpg', 'uploads/parking_permits/1775375714_c7372fb34717.jpg', 'for payment'),
+(10, 'Phase 2', 126, 'new', NULL, '101231', 'car', 'red', 'blue', '0', 'P2-001', 2026, '1_month', 'online', 'uploads/parking_contracts/parking_contract_1789738192_5fc02d51.html', 'active', '2026-09-18', '2026-10-17', '2026-09-18 13:29:52', 8, '2026-09-18 21:30:57', NULL, NULL, '2026-09-18 13:31:32', 'uploads/parking_permits/1789738192_003f03de2bef.jpg', 'uploads/parking_permits/1789738192_08a180eefd82.jpg', 'paid');
 
 -- --------------------------------------------------------
 
@@ -1204,7 +1240,6 @@ CREATE TABLE `public_chat_messages` (
 --
 
 INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `created_at`) VALUES
-(5, 'Phase 1', 113, 'hi', NULL, NULL, NULL, '2026-03-28 05:44:31'),
 (6, 'Phase 2', 114, 'Hi', NULL, NULL, NULL, '2026-03-28 08:36:23'),
 (7, 'Phase 1', 115, 'hello', NULL, NULL, NULL, '2026-04-04 08:51:34'),
 (8, 'Phase 1', 115, '', 'abi.jpg', 'uploads/chat_files/1775377010_7628adbe.jpg', 'image/jpeg', '2026-04-05 08:16:50'),
@@ -1212,7 +1247,8 @@ INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `a
 (10, 'Phase 1', 115, 'awasdawda', NULL, NULL, NULL, '2026-04-07 20:49:42'),
 (11, 'Phase 1', 115, 'awdadsdaw', NULL, NULL, NULL, '2026-04-07 20:49:44'),
 (12, 'Phase 1', 115, 'awdasdaw', NULL, NULL, NULL, '2026-04-07 20:49:46'),
-(13, 'Phase 1', 115, 'awdadasd', NULL, NULL, NULL, '2026-04-07 20:49:48');
+(13, 'Phase 1', 115, 'awdadasd', NULL, NULL, NULL, '2026-04-07 20:49:48'),
+(14, 'Phase 2', 126, 'wasda', NULL, NULL, NULL, '2026-09-21 18:52:19');
 
 -- --------------------------------------------------------
 
@@ -1596,6 +1632,16 @@ ALTER TABLE `household_members`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `parking_paymongo_checkouts`
+--
+ALTER TABLE `parking_paymongo_checkouts`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_parking_checkout_session` (`checkout_session_id`),
+  ADD KEY `idx_parking_checkout_permit` (`permit_id`),
+  ADD KEY `idx_parking_checkout_homeowner` (`homeowner_id`),
+  ADD KEY `idx_parking_checkout_status` (`status`);
+
+--
 -- Indexes for table `parking_permits`
 --
 ALTER TABLE `parking_permits`
@@ -1701,13 +1747,13 @@ ALTER TABLE `announcement_attachments`
 -- AUTO_INCREMENT for table `announcement_comments`
 --
 ALTER TABLE `announcement_comments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `announcement_likes`
 --
 ALTER TABLE `announcement_likes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `announcement_recipients`
@@ -1767,7 +1813,7 @@ ALTER TABLE `finance_donations`
 -- AUTO_INCREMENT for table `finance_dues_settings`
 --
 ALTER TABLE `finance_dues_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `finance_expenses`
@@ -1785,13 +1831,13 @@ ALTER TABLE `finance_opening_balance`
 -- AUTO_INCREMENT for table `finance_payments`
 --
 ALTER TABLE `finance_payments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `finance_paymongo_checkouts`
 --
 ALTER TABLE `finance_paymongo_checkouts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
 
 --
 -- AUTO_INCREMENT for table `finance_report_requests`
@@ -1809,13 +1855,13 @@ ALTER TABLE `hoa_officers`
 -- AUTO_INCREMENT for table `homeowners`
 --
 ALTER TABLE `homeowners`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=129;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=130;
 
 --
 -- AUTO_INCREMENT for table `homeowner_import_queue`
 --
 ALTER TABLE `homeowner_import_queue`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `homeowner_officer_messages`
@@ -1833,13 +1879,19 @@ ALTER TABLE `homeowner_positions`
 -- AUTO_INCREMENT for table `household_members`
 --
 ALTER TABLE `household_members`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=89;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=90;
+
+--
+-- AUTO_INCREMENT for table `parking_paymongo_checkouts`
+--
+ALTER TABLE `parking_paymongo_checkouts`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `parking_permits`
 --
 ALTER TABLE `parking_permits`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `parking_violations`
@@ -1851,7 +1903,7 @@ ALTER TABLE `parking_violations`
 -- AUTO_INCREMENT for table `public_chat_messages`
 --
 ALTER TABLE `public_chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `public_chat_mutes`
@@ -2026,6 +2078,13 @@ ALTER TABLE `homeowner_officer_messages`
 ALTER TABLE `homeowner_positions`
   ADD CONSTRAINT `fk_hp_admin` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_hp_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `parking_paymongo_checkouts`
+--
+ALTER TABLE `parking_paymongo_checkouts`
+  ADD CONSTRAINT `fk_parking_checkout_homeowner` FOREIGN KEY (`homeowner_id`) REFERENCES `homeowners` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_parking_checkout_permit` FOREIGN KEY (`permit_id`) REFERENCES `parking_permits` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `parking_permits`

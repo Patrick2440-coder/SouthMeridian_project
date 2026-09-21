@@ -13,49 +13,165 @@ require_once 'tenant_module_guard.php';
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-function safe_ext(string $name): string {
-  $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-  return preg_replace('/[^a-z0-9]+/','', $ext);
-}
-
 function normalize_web_path(string $path): string {
   return str_replace('\\', '/', $path);
 }
 
-function save_upload(string $field, string $fsBaseDir, string $dbBaseDir): ?string {
-  if (empty($_FILES[$field]) || $_FILES[$field]['error'] === UPLOAD_ERR_NO_FILE) return null;
-  if ($_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
-
-  $tmp  = $_FILES[$field]['tmp_name'];
-  $orig = (string)$_FILES[$field]['name'];
-  $ext  = safe_ext($orig);
-
-  $allowed = ['pdf','jpg','jpeg','png'];
-  if (!in_array($ext, $allowed, true)) return null;
-
-  if (!is_dir($fsBaseDir)) {
-    if (!mkdir($fsBaseDir, 0777, true) && !is_dir($fsBaseDir)) return null;
+function cleanup_created_files(array $paths): void {
+  foreach (array_unique($paths) as $path) {
+    $path = trim((string)$path);
+    if ($path !== '' && is_file($path)) {
+      @unlink($path);
+    }
   }
-
-  $newName   = time().'_'.bin2hex(random_bytes(6)).'.'.$ext;
-  $destFs    = rtrim($fsBaseDir, '/\\').DIRECTORY_SEPARATOR.$newName;
-  $destDbRel = normalize_web_path(rtrim($dbBaseDir, '/\\').'/'.$newName);
-
-  if (!move_uploaded_file($tmp, $destFs)) return null;
-  return $destDbRel;
 }
 
-function write_contract_file(string $html, string $fsBaseDir, string $dbBaseDir): ?string {
-  if (!is_dir($fsBaseDir)) {
-    if (!mkdir($fsBaseDir, 0777, true) && !is_dir($fsBaseDir)) return null;
+function save_upload(
+  string $field,
+  string $fsBaseDir,
+  string $dbBaseDir,
+  int $maxBytes = 5242880
+): array {
+  $result = [
+    'db_path' => null,
+    'fs_path' => null,
+    'error'   => '',
+  ];
+
+  if (
+    empty($_FILES[$field]) ||
+    (int)($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE
+  ) {
+    $result['error'] = 'No file was selected.';
+    return $result;
   }
 
-  $fileName = 'parking_contract_'.time().'_'.bin2hex(random_bytes(4)).'.html';
-  $destFs   = rtrim($fsBaseDir, '/\\').DIRECTORY_SEPARATOR.$fileName;
-  $destDb   = normalize_web_path(rtrim($dbBaseDir, '/\\').'/'.$fileName);
+  $file = $_FILES[$field];
+  $uploadError = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
 
-  if (file_put_contents($destFs, $html) === false) return null;
-  return $destDb;
+  if ($uploadError !== UPLOAD_ERR_OK) {
+    $result['error'] = 'The upload did not complete successfully.';
+    return $result;
+  }
+
+  $tmp = (string)($file['tmp_name'] ?? '');
+
+  if ($tmp === '' || !is_uploaded_file($tmp)) {
+    $result['error'] = 'The uploaded file could not be verified.';
+    return $result;
+  }
+
+  $size = (int)($file['size'] ?? 0);
+
+  if ($size <= 0) {
+    $result['error'] = 'The uploaded file is empty.';
+    return $result;
+  }
+
+  if ($size > $maxBytes) {
+    $result['error'] = 'The file is larger than 5 MB.';
+    return $result;
+  }
+
+  if (!function_exists('finfo_open')) {
+    $result['error'] = 'The server cannot verify this file type.';
+    return $result;
+  }
+
+  $finfo = finfo_open(FILEINFO_MIME_TYPE);
+
+  if ($finfo === false) {
+    $result['error'] = 'The server cannot verify this file type.';
+    return $result;
+  }
+
+  $mime = strtolower((string)finfo_file($finfo, $tmp));
+  finfo_close($finfo);
+
+  $allowedMime = [
+    'image/jpeg'      => 'jpg',
+    'image/png'       => 'png',
+    'application/pdf' => 'pdf',
+  ];
+
+  if (!isset($allowedMime[$mime])) {
+    $result['error'] = 'Only JPG, PNG, or PDF files are allowed.';
+    return $result;
+  }
+
+  if (!is_dir($fsBaseDir)) {
+    if (!mkdir($fsBaseDir, 0775, true) && !is_dir($fsBaseDir)) {
+      $result['error'] = 'The upload folder could not be created.';
+      return $result;
+    }
+  }
+
+  $newName = bin2hex(random_bytes(16)) . '.' . $allowedMime[$mime];
+
+  $destFs =
+    rtrim($fsBaseDir, '/\\') .
+    DIRECTORY_SEPARATOR .
+    $newName;
+
+  $destDbRel =
+    normalize_web_path(
+      rtrim($dbBaseDir, '/\\') .
+      '/' .
+      $newName
+    );
+
+  if (!move_uploaded_file($tmp, $destFs)) {
+    $result['error'] = 'The uploaded file could not be saved.';
+    return $result;
+  }
+
+  @chmod($destFs, 0644);
+
+  $result['db_path'] = $destDbRel;
+  $result['fs_path'] = $destFs;
+
+  return $result;
+}
+
+function write_contract_file(string $html, string $fsBaseDir, string $dbBaseDir): array {
+  $result = [
+    'db_path' => null,
+    'fs_path' => null,
+    'error'   => '',
+  ];
+
+  if (!is_dir($fsBaseDir)) {
+    if (!mkdir($fsBaseDir, 0775, true) && !is_dir($fsBaseDir)) {
+      $result['error'] = 'The contract folder could not be created.';
+      return $result;
+    }
+  }
+
+  $fileName = 'parking_contract_' . bin2hex(random_bytes(16)) . '.html';
+
+  $destFs =
+    rtrim($fsBaseDir, '/\\') .
+    DIRECTORY_SEPARATOR .
+    $fileName;
+
+  $destDb =
+    normalize_web_path(
+      rtrim($dbBaseDir, '/\\') .
+      '/' .
+      $fileName
+    );
+
+  if (file_put_contents($destFs, $html, LOCK_EX) === false) {
+    $result['error'] = 'The parking contract could not be generated.';
+    return $result;
+  }
+
+  @chmod($destFs, 0644);
+
+  $result['db_path'] = $destDb;
+  $result['fs_path'] = $destFs;
+
+  return $result;
 }
 
 function computePermitDates(string $duration, ?string $baseStart = null): array {
@@ -337,9 +453,41 @@ $renewalWindowDays = 30;
 $activePage = basename($_SERVER['PHP_SELF']);
 $parkingOpen = in_array($activePage, ['homeowner_parking.php','homeowner_parking_permit.php'], true);
 
-$adminRootFs = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') . DIRECTORY_SEPARATOR . 'project' . DIRECTORY_SEPARATOR . 'admin';
-$parkingUploadFsRoot  = $adminRootFs . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'parking_permits';
-$contractUploadFsRoot = $adminRootFs . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'parking_contracts';
+/*
+  Use the real project root instead of assuming the project folder is named "project".
+*/
+$projectRootFs = dirname(__DIR__);
+$adminRootFs   = $projectRootFs . DIRECTORY_SEPARATOR . 'admin';
+
+$parkingUploadFsRoot =
+  $adminRootFs .
+  DIRECTORY_SEPARATOR .
+  'uploads' .
+  DIRECTORY_SEPARATOR .
+  'parking_permits';
+
+$contractUploadFsRoot =
+  $adminRootFs .
+  DIRECTORY_SEPARATOR .
+  'uploads' .
+  DIRECTORY_SEPARATOR .
+  'parking_contracts';
+
+/*
+  Keep this homeowner's permit lifecycle current.
+*/
+$stmt = $conn->prepare("
+  UPDATE parking_permits
+  SET status='expired'
+  WHERE homeowner_id=? AND phase=?
+    AND status='active'
+    AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+    AND valid_until IS NOT NULL
+    AND valid_until < CURDATE()
+");
+$stmt->bind_param("is", $hid, $phase);
+$stmt->execute();
+$stmt->close();
 
 /*
   Active permit
@@ -349,6 +497,8 @@ $stmt = $conn->prepare("
   FROM parking_permits
   WHERE homeowner_id=? AND phase=? AND status='active'
     AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+    AND valid_from IS NOT NULL
+    AND valid_from <= CURDATE()
     AND valid_until >= CURDATE()
   ORDER BY valid_until DESC, id DESC
   LIMIT 1
@@ -356,6 +506,27 @@ $stmt = $conn->prepare("
 $stmt->bind_param("is", $hid, $phase);
 $stmt->execute();
 $activePermit = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+/*
+  Paid renewal / permit that is scheduled to start in the future.
+  It remains status='active' in the database, but it is NOT treated
+  as the currently effective permit until valid_from arrives.
+*/
+$stmt = $conn->prepare("
+  SELECT *
+  FROM parking_permits
+  WHERE homeowner_id=? AND phase=? AND status='active'
+    AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+    AND valid_from IS NOT NULL
+    AND valid_from > CURDATE()
+    AND valid_until >= valid_from
+  ORDER BY valid_from ASC, id ASC
+  LIMIT 1
+");
+$stmt->bind_param("is", $hid, $phase);
+$stmt->execute();
+$upcomingPermit = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 /*
@@ -380,10 +551,28 @@ $stmt->close();
 
 $hasOpenRequest = !empty($currentStatusPermit);
 
+/*
+  Latest rejected / revoked / expired permit record.
+  This is informational only and does not block a new application.
+*/
+$stmt = $conn->prepare("
+  SELECT *
+  FROM parking_permits
+  WHERE homeowner_id=? AND phase=?
+    AND status IN ('rejected','revoked','expired')
+  ORDER BY COALESCE(updated_at, approved_at, requested_at) DESC, id DESC
+  LIMIT 1
+");
+$stmt->bind_param("is", $hid, $phase);
+$stmt->execute();
+$lastClosedPermit = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
 $renewPermit = null;
 $renewPermitId = (int)($_GET['renew_id'] ?? 0);
 $renewAllowed = false;
 $renewDaysRemaining = null;
+$scheduledRenewalForSelected = null;
 
 if ($renewPermitId > 0) {
   $stmt = $conn->prepare("
@@ -391,6 +580,8 @@ if ($renewPermitId > 0) {
     FROM parking_permits
     WHERE id=? AND homeowner_id=? AND phase=? AND status='active'
       AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+      AND valid_from IS NOT NULL
+      AND valid_from <= CURDATE()
       AND valid_until >= CURDATE()
     LIMIT 1
   ");
@@ -402,211 +593,375 @@ if ($renewPermitId > 0) {
   if ($renewPermit) {
     $renewDaysRemaining = days_until_expiry($renewPermit['valid_until'] ?? null);
     $renewAllowed = can_renew_now($renewPermit['valid_until'] ?? null, $renewalWindowDays);
+
+    if ($renewAllowed) {
+      $stmt = $conn->prepare("
+        SELECT id, permit_no, valid_from, valid_until
+        FROM parking_permits
+        WHERE homeowner_id=? AND phase=?
+          AND request_type='renew'
+          AND renew_of_id=?
+          AND status='active'
+          AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+          AND valid_from > CURDATE()
+        ORDER BY valid_from ASC, id ASC
+        LIMIT 1
+      ");
+      $stmt->bind_param("isi", $hid, $phase, $renewPermitId);
+      $stmt->execute();
+      $scheduledRenewalForSelected = $stmt->get_result()->fetch_assoc();
+      $stmt->close();
+
+      if ($scheduledRenewalForSelected) {
+        $renewAllowed = false;
+      }
+    }
   }
 }
 
 $msg = "";
 $msgType = "success";
 
+/* CSRF protection for permit applications and renewals. */
+if (empty($_SESSION['csrf_parking_permit'])) {
+  $_SESSION['csrf_parking_permit'] = bin2hex(random_bytes(32));
+}
+$csrfParkingPermit = (string)$_SESSION['csrf_parking_permit'];
+
 if ($renewPermitId > 0) {
   if (!$renewPermit) {
     set_msg($msg, $msgType, "danger", "Invalid renewal request.");
+  } elseif ($scheduledRenewalForSelected) {
+    set_msg(
+      $msg,
+      $msgType,
+      "warning",
+      "This permit already has a paid renewal scheduled to start on " .
+      ($scheduledRenewalForSelected['valid_from'] ?? 'the scheduled date') .
+      "."
+    );
   } elseif (!$renewAllowed) {
     set_msg($msg, $msgType, "warning", "Renewal is only allowed within {$renewalWindowDays} days before permit expiration.");
   }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permit'])) {
-  $stmt = $conn->prepare("
-    SELECT *
-    FROM parking_permits
-    WHERE homeowner_id=? AND phase=?
-      AND (
-        (status='pending' AND LOWER(COALESCE(payment_status, 'unpaid')) IN ('unpaid', 'not paid', 'pending'))
-        OR
-        (status='pending' AND LOWER(COALESCE(payment_status, 'unpaid'))='for payment')
-      )
-    ORDER BY id DESC
-    LIMIT 1
-  ");
-  $stmt->bind_param("is", $hid, $phase);
-  $stmt->execute();
-  $latestOpenCheck = $stmt->get_result()->fetch_assoc();
-  $stmt->close();
+  $postedCsrf = (string)($_POST['csrf_token'] ?? '');
 
-  $requestRenewId = (int)($_POST['renew_of_id'] ?? 0);
-  $renewBasePermit = null;
-  $isRenewalRequest = false;
-
-  if ($requestRenewId > 0) {
+  if ($postedCsrf === '' || !hash_equals($csrfParkingPermit, $postedCsrf)) {
+    set_msg(
+      $msg,
+      $msgType,
+      "danger",
+      "Your session token is no longer valid. Please refresh the page and try again."
+    );
+  } else {
     $stmt = $conn->prepare("
       SELECT *
       FROM parking_permits
-      WHERE id=? AND homeowner_id=? AND phase=? AND status='active'
-        AND LOWER(COALESCE(payment_status, 'paid'))='paid'
-        AND valid_until >= CURDATE()
+      WHERE homeowner_id=? AND phase=?
+        AND (
+          (status='pending' AND LOWER(COALESCE(payment_status, 'unpaid')) IN ('unpaid', 'not paid', 'pending'))
+          OR
+          (status='pending' AND LOWER(COALESCE(payment_status, 'unpaid'))='for payment')
+        )
+      ORDER BY id DESC
       LIMIT 1
     ");
-    $stmt->bind_param("iis", $requestRenewId, $hid, $phase);
+    $stmt->bind_param("is", $hid, $phase);
     $stmt->execute();
-    $renewBasePermit = $stmt->get_result()->fetch_assoc();
+    $latestOpenCheck = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if ($renewBasePermit && can_renew_now($renewBasePermit['valid_until'] ?? null, $renewalWindowDays)) {
-      $isRenewalRequest = true;
-    } elseif ($requestRenewId > 0) {
-      set_msg($msg, $msgType, "warning", "Renewal is only allowed within {$renewalWindowDays} days before permit expiration.");
-    }
-  }
+    $requestRenewId = (int)($_POST['renew_of_id'] ?? 0);
+    $renewBasePermit = null;
+    $isRenewalRequest = false;
 
-  if ($latestOpenCheck) {
-    $latestPaymentStatus = strtolower(trim((string)($latestOpenCheck['payment_status'] ?? 'unpaid')));
+    if ($requestRenewId > 0) {
+      $stmt = $conn->prepare("
+        SELECT *
+        FROM parking_permits
+        WHERE id=? AND homeowner_id=? AND phase=? AND status='active'
+          AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+          AND valid_from IS NOT NULL
+          AND valid_from <= CURDATE()
+          AND valid_until >= CURDATE()
+        LIMIT 1
+      ");
+      $stmt->bind_param("iis", $requestRenewId, $hid, $phase);
+      $stmt->execute();
+      $renewBasePermit = $stmt->get_result()->fetch_assoc();
+      $stmt->close();
 
-    if ($latestPaymentStatus === 'for payment') {
-      set_msg($msg,$msgType,"warning","Your previous parking permit request is already approved and waiting for payment. Please finish that first.");
-    } else {
-      set_msg($msg,$msgType,"warning","Please wait for your previous parking permit application to be approved first.");
-    }
+      if (
+        $renewBasePermit &&
+        can_renew_now($renewBasePermit['valid_until'] ?? null, $renewalWindowDays)
+      ) {
+        $stmt = $conn->prepare("
+          SELECT id, valid_from
+          FROM parking_permits
+          WHERE homeowner_id=? AND phase=?
+            AND request_type='renew'
+            AND renew_of_id=?
+            AND status='active'
+            AND LOWER(COALESCE(payment_status, 'paid'))='paid'
+            AND valid_from > CURDATE()
+          ORDER BY valid_from ASC, id ASC
+          LIMIT 1
+        ");
+        $stmt->bind_param("isi", $hid, $phase, $requestRenewId);
+        $stmt->execute();
+        $existingScheduledRenewal = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
 
-    $currentStatusPermit = $latestOpenCheck;
-    $hasOpenRequest = true;
-  } elseif ($requestRenewId > 0 && !$isRenewalRequest) {
-  } else {
-    $plate       = strtoupper(trim((string)($_POST['plate_no'] ?? '')));
-    $vehicleType = strtolower(trim((string)($_POST['vehicle_type'] ?? '')));
-    $make        = trim((string)($_POST['vehicle_make'] ?? ''));
-    $model       = trim((string)($_POST['vehicle_model'] ?? ''));
-    $color       = trim((string)($_POST['vehicle_color'] ?? ''));
-    $duration    = (string)($_POST['permit_duration'] ?? '');
-    $payment     = (string)($_POST['payment_method'] ?? '');
-
-    if ($plate === '' || strlen($plate) < 4) {
-      set_msg($msg,$msgType,"danger","Please enter a valid plate number.");
-    } elseif (!in_array($vehicleType, ['car','motorcycle','ebike'], true)) {
-      set_msg($msg,$msgType,"danger","Please select a valid vehicle type.");
-    } elseif (!in_array($duration, ['1_month','3_months','6_months','1_year'], true)) {
-      set_msg($msg,$msgType,"danger","Please select a valid permit duration.");
-    } elseif (!in_array($payment, ['online','cash'], true)) {
-      set_msg($msg,$msgType,"danger","Please select a valid payment method.");
-    } else {
-      $requestType = $isRenewalRequest ? 'renew' : 'new';
-      $renewOfId   = $isRenewalRequest ? (int)$renewBasePermit['id'] : null;
-
-      if ($isRenewalRequest && !empty($renewBasePermit['valid_until'])) {
-        $baseStart = (new DateTime($renewBasePermit['valid_until']))->modify('+1 day')->format('Y-m-d');
+        if ($existingScheduledRenewal) {
+          set_msg(
+            $msg,
+            $msgType,
+            "warning",
+            "This permit already has a paid renewal scheduled to start on " .
+            ($existingScheduledRenewal['valid_from'] ?? 'the scheduled date') .
+            "."
+          );
+        } else {
+          $isRenewalRequest = true;
+        }
       } else {
-        $baseStart = date('Y-m-d');
+        set_msg(
+          $msg,
+          $msgType,
+          "warning",
+          "Renewal is only allowed within {$renewalWindowDays} days before permit expiration."
+        );
+      }
+    }
+
+    if ($latestOpenCheck) {
+      $latestPaymentStatus = strtolower(trim((string)($latestOpenCheck['payment_status'] ?? 'unpaid')));
+
+      if ($latestPaymentStatus === 'for payment') {
+        set_msg(
+          $msg,
+          $msgType,
+          "warning",
+          "Your previous parking permit request is already approved and waiting for payment. Please finish that first."
+        );
+      } else {
+        set_msg(
+          $msg,
+          $msgType,
+          "warning",
+          "Please wait for your previous parking permit application to be approved first."
+        );
       }
 
-      [$previewFrom, $previewUntil] = computePermitDates($duration, $baseStart);
+      $currentStatusPermit = $latestOpenCheck;
+      $hasOpenRequest = true;
 
-      $parkingFsDir = $parkingUploadFsRoot;
-      $parkingDbDir = 'uploads/parking_permits';
+    } elseif ($requestRenewId > 0 && !$isRenewalRequest) {
+      // Renewal validation already produced the page message above.
 
-      $vehicle_front_path = save_upload('vehicle_front', $parkingFsDir, $parkingDbDir);
-      $vehicle_back_path  = save_upload('vehicle_back', $parkingFsDir, $parkingDbDir);
+    } else {
+      $plate       = strtoupper(trim((string)($_POST['plate_no'] ?? '')));
+      $vehicleType = strtolower(trim((string)($_POST['vehicle_type'] ?? '')));
+      $make        = trim((string)($_POST['vehicle_make'] ?? ''));
+      $model       = trim((string)($_POST['vehicle_model'] ?? ''));
+      $color       = trim((string)($_POST['vehicle_color'] ?? ''));
+      $duration    = (string)($_POST['permit_duration'] ?? '');
+      $payment     = (string)($_POST['payment_method'] ?? '');
 
-      $missing = [];
-      if (!$vehicle_front_path) $missing[] = "Vehicle Front Picture";
-      if (!$vehicle_back_path)  $missing[] = "Vehicle Back Picture";
+      if ($plate === '' || strlen($plate) < 4) {
+        set_msg($msg, $msgType, "danger", "Please enter a valid plate number.");
 
-      if ($missing) {
-        set_msg($msg,$msgType,"danger","Missing or invalid required uploads: ".implode(", ", $missing));
+      } elseif (!in_array($vehicleType, ['car','motorcycle','ebike'], true)) {
+        set_msg($msg, $msgType, "danger", "Please select a valid vehicle type.");
+
+      } elseif (!in_array($duration, ['1_month','3_months','6_months','1_year'], true)) {
+        set_msg($msg, $msgType, "danger", "Please select a valid permit duration.");
+
+      } elseif (!in_array($payment, ['online','cash'], true)) {
+        set_msg($msg, $msgType, "danger", "Please select a valid payment method.");
+
       } else {
-        $contractFsDir = $contractUploadFsRoot;
-        $contractDbDir = 'uploads/parking_contracts';
+        $requestType = $isRenewalRequest ? 'renew' : 'new';
+        $renewOfId   = $isRenewalRequest ? (int)$renewBasePermit['id'] : null;
 
-        $contractHtml = build_contract_html([
-          'hoa_name'               => 'South Meridian Homes Salitran',
-          'full_name'              => $fullName,
-          'phase'                  => $phase,
-          'house_lot'              => $user['house_lot_number'] ?? '',
-          'request_type'           => $requestType,
-          'sticker_year'           => $yearNow,
-          'plate_no'               => $plate,
-          'vehicle_type_label'     => vehicle_type_label($vehicleType),
-          'vehicle_make'           => $make,
-          'vehicle_model'          => $model,
-          'vehicle_color'          => $color,
-          'permit_duration_label'  => duration_label($duration),
-          'payment_method_label'   => payment_label($payment),
-          'valid_from'             => $previewFrom,
-          'valid_until'            => $previewUntil,
-        ]);
-
-        $contractPath = write_contract_file($contractHtml, $contractFsDir, $contractDbDir);
-
-        if (!$contractPath) {
-          set_msg($msg,$msgType,"danger","Failed to generate parking permit contract.");
+        /*
+          These dates are provisional application/contract preview dates only.
+          The final validity period will be recalculated when payment is completed
+          and the permit is activated by the admin or verified PayMongo webhook.
+        */
+        if ($isRenewalRequest && !empty($renewBasePermit['valid_until'])) {
+          $baseStart =
+            (new DateTime($renewBasePermit['valid_until']))
+              ->modify('+1 day')
+              ->format('Y-m-d');
         } else {
-          $validFrom     = $previewFrom;
-          $validUntil    = $previewUntil;
-          $paymentStatus = 'unpaid';
+          $baseStart = date('Y-m-d');
+        }
 
-          $stmt = $conn->prepare("
-            INSERT INTO parking_permits
-            (
-              homeowner_id,
-              request_type,
-              renew_of_id,
-              phase,
-              plate_no,
-              vehicle_type,
-              vehicle_make,
-              vehicle_model,
-              vehicle_color,
-              sticker_year,
-              permit_duration,
-              payment_method,
-              valid_from,
-              valid_until,
-              payment_status,
-              status,
-              vehicle_front_path,
-              vehicle_back_path,
-              contract_path,
-              requested_at
-            )
-            VALUES
-            (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW()
-            )
-          ");
+        [$previewFrom, $previewUntil] = computePermitDates($duration, $baseStart);
 
-          if (!$stmt) {
-            set_msg($msg,$msgType,"danger","SQL prepare failed: ".$conn->error);
-          } else {
-            $stmt->bind_param(
-              "isisssssisssssssss",
-              $hid,
-              $requestType,
-              $renewOfId,
-              $phase,
-              $plate,
-              $vehicleType,
-              $make,
-              $model,
-              $color,
-              $yearNow,
-              $duration,
-              $payment,
-              $validFrom,
-              $validUntil,
-              $paymentStatus,
-              $vehicle_front_path,
-              $vehicle_back_path,
-              $contractPath
+        $parkingFsDir = $parkingUploadFsRoot;
+        $parkingDbDir = 'uploads/parking_permits';
+        $createdFiles = [];
+
+        $frontUpload = save_upload('vehicle_front', $parkingFsDir, $parkingDbDir);
+        if (!empty($frontUpload['fs_path'])) {
+          $createdFiles[] = $frontUpload['fs_path'];
+        }
+
+        $backUpload = save_upload('vehicle_back', $parkingFsDir, $parkingDbDir);
+        if (!empty($backUpload['fs_path'])) {
+          $createdFiles[] = $backUpload['fs_path'];
+        }
+
+        $uploadErrors = [];
+
+        if (empty($frontUpload['db_path'])) {
+          $uploadErrors[] =
+            "Vehicle Front Picture: " .
+            ($frontUpload['error'] ?: 'Invalid upload.');
+        }
+
+        if (empty($backUpload['db_path'])) {
+          $uploadErrors[] =
+            "Vehicle Back Picture: " .
+            ($backUpload['error'] ?: 'Invalid upload.');
+        }
+
+        if ($uploadErrors) {
+          cleanup_created_files($createdFiles);
+          set_msg($msg, $msgType, "danger", implode(' ', $uploadErrors));
+
+        } else {
+          $vehicle_front_path = (string)$frontUpload['db_path'];
+          $vehicle_back_path  = (string)$backUpload['db_path'];
+
+          $contractFsDir = $contractUploadFsRoot;
+          $contractDbDir = 'uploads/parking_contracts';
+
+          $contractHtml = build_contract_html([
+            'hoa_name'               => 'South Meridian Homes Salitran',
+            'full_name'              => $fullName,
+            'phase'                  => $phase,
+            'house_lot'              => $user['house_lot_number'] ?? '',
+            'request_type'           => $requestType,
+            'sticker_year'           => $yearNow,
+            'plate_no'               => $plate,
+            'vehicle_type_label'     => vehicle_type_label($vehicleType),
+            'vehicle_make'           => $make,
+            'vehicle_model'          => $model,
+            'vehicle_color'          => $color,
+            'permit_duration_label'  => duration_label($duration),
+            'payment_method_label'   => payment_label($payment),
+            'valid_from'             => $previewFrom,
+            'valid_until'            => $previewUntil,
+          ]);
+
+          $contractUpload = write_contract_file($contractHtml, $contractFsDir, $contractDbDir);
+
+          if (!empty($contractUpload['fs_path'])) {
+            $createdFiles[] = $contractUpload['fs_path'];
+          }
+
+          $contractPath = (string)($contractUpload['db_path'] ?? '');
+
+          if ($contractPath === '') {
+            cleanup_created_files($createdFiles);
+            set_msg(
+              $msg,
+              $msgType,
+              "danger",
+              "Failed to generate parking permit contract."
             );
 
-            $ok  = $stmt->execute();
-            $err = $stmt->error;
-            $stmt->close();
+          } else {
+            $validFrom     = $previewFrom;
+            $validUntil    = $previewUntil;
+            $paymentStatus = 'unpaid';
 
-            if (!$ok) {
-              set_msg($msg,$msgType,"danger","Failed to submit request. ".$err);
+            $stmt = $conn->prepare("
+              INSERT INTO parking_permits
+              (
+                homeowner_id,
+                request_type,
+                renew_of_id,
+                phase,
+                plate_no,
+                vehicle_type,
+                vehicle_make,
+                vehicle_model,
+                vehicle_color,
+                sticker_year,
+                permit_duration,
+                payment_method,
+                valid_from,
+                valid_until,
+                payment_status,
+                status,
+                vehicle_front_path,
+                vehicle_back_path,
+                contract_path,
+                requested_at
+              )
+              VALUES
+              (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW()
+              )
+            ");
+
+            if (!$stmt) {
+              cleanup_created_files($createdFiles);
+              error_log('Parking permit insert prepare failed: ' . $conn->error);
+              set_msg(
+                $msg,
+                $msgType,
+                "danger",
+                "Failed to submit the parking permit request. Please try again."
+              );
+
             } else {
-              header("Location: homeowner_parking_permit.php?ok=1");
-              exit;
+              /* Correct type mapping for all 18 bound values. */
+              $stmt->bind_param(
+                "isissssssissssssss",
+                $hid,
+                $requestType,
+                $renewOfId,
+                $phase,
+                $plate,
+                $vehicleType,
+                $make,
+                $model,
+                $color,
+                $yearNow,
+                $duration,
+                $payment,
+                $validFrom,
+                $validUntil,
+                $paymentStatus,
+                $vehicle_front_path,
+                $vehicle_back_path,
+                $contractPath
+              );
+
+              $ok = $stmt->execute();
+              $dbError = $stmt->error;
+              $stmt->close();
+
+              if (!$ok) {
+                cleanup_created_files($createdFiles);
+                error_log('Parking permit insert failed: ' . $dbError);
+                set_msg(
+                  $msg,
+                  $msgType,
+                  "danger",
+                  "Failed to submit the parking permit request. Please try again."
+                );
+              } else {
+                header("Location: homeowner_parking_permit.php?ok=1");
+                exit;
+              }
             }
           }
         }
@@ -671,6 +1026,114 @@ $hasOpenRequest = !empty($currentStatusPermit);
 
 $chatPages = ['homeowner_public_chat.php'];
 $chatOpen = in_array($activePage, $chatPages, true);
+
+
+function permit_status_tailwind(string $status, string $paymentStatus = ''): string {
+  $status = strtolower(trim($status));
+  $paymentStatus = strtolower(trim($paymentStatus));
+
+  if ($status === 'active') {
+    return 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900';
+  }
+  if ($status === 'pending' && $paymentStatus === 'for payment') {
+    return 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900';
+  }
+  if ($status === 'pending') {
+    return 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900';
+  }
+  if (in_array($status, ['rejected','revoked','expired'], true)) {
+    return 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900';
+  }
+  return 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700';
+}
+
+function permit_status_text(string $status, string $paymentStatus = ''): string {
+  $status = strtolower(trim($status));
+  $paymentStatus = strtolower(trim($paymentStatus));
+
+  if ($status === 'pending' && $paymentStatus === 'for payment') return 'For Payment';
+  return $status !== '' ? ucfirst($status) : 'Unknown';
+}
+
+function permit_status_icon(string $status, string $paymentStatus = ''): string {
+  $status = strtolower(trim($status));
+  $paymentStatus = strtolower(trim($paymentStatus));
+
+  if ($status === 'active') return 'bi-check-circle-fill';
+  if ($status === 'pending' && $paymentStatus === 'for payment') return 'bi-credit-card-fill';
+  if ($status === 'pending') return 'bi-clock-fill';
+  if ($status === 'rejected') return 'bi-x-circle-fill';
+  if ($status === 'revoked') return 'bi-slash-circle-fill';
+  if ($status === 'expired') return 'bi-calendar-x-fill';
+  return 'bi-info-circle-fill';
+}
+
+function payment_status_tailwind(string $status): string {
+  $status = strtolower(trim($status));
+
+  if ($status === 'paid') {
+    return 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900';
+  }
+  if ($status === 'for payment') {
+    return 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900';
+  }
+  if ($status === 'pending') {
+    return 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900';
+  }
+  return 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900';
+}
+
+$houseLot = (string)($user['house_lot_number'] ?? '');
+
+$currStatus = strtolower(trim((string)($currentStatusPermit['status'] ?? '')));
+$currPaymentStatus = strtolower(trim((string)($currentStatusPermit['payment_status'] ?? '')));
+
+$prefillPlate = $renewPermit['plate_no'] ?? '';
+$prefillMake = $renewPermit['vehicle_make'] ?? '';
+$prefillModel = $renewPermit['vehicle_model'] ?? '';
+$prefillColor = $renewPermit['vehicle_color'] ?? '';
+$prefillVehicleType = $renewPermit['vehicle_type'] ?? '';
+$nextStartDate = '';
+
+if ($renewPermit && !empty($renewPermit['valid_until'])) {
+  $nextStartDate = (new DateTime($renewPermit['valid_until']))->modify('+1 day')->format('Y-m-d');
+}
+
+$activePermitDaysRemaining = $activePermit
+  ? days_until_expiry($activePermit['valid_until'] ?? null)
+  : null;
+
+$activePermitHasScheduledRenewal =
+  $activePermit &&
+  $upcomingPermit &&
+  (int)($upcomingPermit['renew_of_id'] ?? 0) === (int)($activePermit['id'] ?? 0);
+
+$msgUi = [
+  'success' => [
+    'wrap' => 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40',
+    'iconWrap' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+    'text' => 'text-emerald-800 dark:text-emerald-300',
+    'title' => 'text-emerald-900 dark:text-emerald-200',
+    'icon' => 'bi-check-circle-fill',
+  ],
+  'danger' => [
+    'wrap' => 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
+    'iconWrap' => 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+    'text' => 'text-red-800 dark:text-red-300',
+    'title' => 'text-red-900 dark:text-red-200',
+    'icon' => 'bi-x-circle-fill',
+  ],
+  'warning' => [
+    'wrap' => 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40',
+    'iconWrap' => 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    'text' => 'text-amber-800 dark:text-amber-300',
+    'title' => 'text-amber-900 dark:text-amber-200',
+    'icon' => 'bi-exclamation-triangle-fill',
+  ],
+];
+
+$currentMsgUi = $msgUi[$msgType] ?? $msgUi['warning'];
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -679,468 +1142,2184 @@ $chatOpen = in_array($activePage, $chatPages, true);
 <title><?= esc($pageTitle) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/homeowner_dashboard.css">
-
-<style>
-html, body { max-width:100%; overflow-x:hidden; }
-.app-shell{ position:relative; }
-
-.sidebar-overlay{
-  position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:1040;
-  opacity:0; visibility:hidden; transition:.25s ease;
-}
-.sidebar-overlay.show{ opacity:1; visibility:visible; }
-
-.sb-dd{display:flex;flex-direction:column;gap:6px;}
-.sb-dd-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;}
-.sb-dd-menu{display:none;padding-left:12px;margin-top:2px;border-left:2px solid rgba(255,255,255,.08);}
-.sb-dd.open .sb-dd-menu{display:block;}
-.sb-dd-caret{transition:transform .15s ease;}
-.sb-dd.open .sb-dd-caret{transform:rotate(180deg);}
-.req-list li{ margin-bottom:6px; }
-
-.topbar-mobile-btn{
-  border:1px solid #dbe3ea; background:#fff; color:#0f5132; border-radius:10px;
-  width:42px; height:42px; display:inline-flex; align-items:center; justify-content:center;
-}
-
-.mobile-user-strip{ display:none; }
-.permit-box{ border:1px solid #eef2f7; background:#fff; border-radius:18px; }
-.file-label{ font-size:.92rem; font-weight:700; }
-
-.form-disabled {
-  opacity: .65;
-  pointer-events: none;
-}
-
-.info-mini{
-  font-size:.88rem;
-  color:#6c757d;
-}
-
-@media (max-width: 991.98px){
-  .sidebar{
-    position:fixed !important; top:0; left:-290px; width:280px !important; max-width:85vw;
-    height:100vh; z-index:1050; transition:left .25s ease; overflow-y:auto;
-  }
-  .sidebar.show{ left:0; }
-  .main-area{ width:100% !important; margin-left:0 !important; }
-  .container-xl{ padding-left:14px; padding-right:14px; }
-  .desktop-user-text{ display:none !important; }
-  .mobile-user-strip{ display:block; margin-bottom:14px; }
-}
-
-@media (max-width: 767.98px){
-  .navbar-brand{
-    font-size:1rem; max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .fb-card-h, .fb-card-b{ padding-left:14px !important; padding-right:14px !important; }
-  .permit-box{ padding:14px !important; border-radius:14px; }
-  .form-label{ font-size:.92rem; }
-  .btn, .form-control, .form-select{ font-size:.95rem; }
-}
-  /* Desktop fixed sidebar */
-@media (min-width: 992px){
-  .sidebar{
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 280px;
-    height: 100vh;
-    overflow-y: auto;
-    z-index: 1030;
-  }
-
-  .main-area{
-    margin-left: 280px;
-    width: calc(100% - 280px);
-  }
-}
-.sidebar{
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-</style>
-</head>
-
-<body>
-<div class="app-shell">
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-  <?php include 'homeowner_sidebar.php'; ?>
-
-  <div class="main-area">
-    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-      <div class="container-xl">
-        <div class="d-flex align-items-center gap-2">
-          <button type="button" class="topbar-mobile-btn d-inline-flex d-lg-none" id="sidebarToggle" aria-label="Open menu">
-            <i class="bi bi-list fs-4"></i>
-          </button>
-          <a class="navbar-brand fw-bold text-success m-0" href="homeowner_dashboard.php">🏘 HOA Community</a>
-        </div>
-
-        <div class="ms-auto d-flex align-items-center gap-3">
-          <div class="small text-muted desktop-user-text">
-            Logged in as <b><?= esc($fullName) ?></b> (<?= esc($phase) ?><?= $isTenant ? ' • Tenant' : '' ?>)
-          </div>
-          <a href="logout.php" class="btn btn-sm btn-outline-success">Logout</a>
-        </div>
-      </div>
-    </nav>
-
-    <div class="container-xl my-4">
-
-      <div class="mobile-user-strip">
-        <div class="alert alert-light border shadow-sm mb-3">
-          <div class="fw-bold"><?= esc($fullName) ?></div>
-          <div class="small text-muted"><?= esc($phase) ?> • <?= esc($user['house_lot_number'] ?? '') ?><?= $isTenant ? ' • Tenant' : '' ?></div>
-        </div>
-      </div>
-
-      <?php if ($msg !== ''): ?>
-        <div class="alert alert-<?= esc($msgType) ?>"><?= esc($msg) ?></div>
-      <?php endif; ?>
-
-      <div class="fb-card mb-4">
-        <div class="fb-card-h">
-          <h6>📝 Apply / Renew Parking Permit (<?= (int)$yearNow ?>)</h6>
-          <span class="pill"><?= esc($phase) ?></span>
-        </div>
-        <div class="fb-card-b">
-          <div class="row g-3">
-            <div class="col-lg-6">
-              <div class="permit-box p-3">
-                <div class="fw-bold mb-2">Current Status</div>
-
-                <?php
-                  $currStatus = strtolower(trim((string)($currentStatusPermit['status'] ?? '')));
-                  $currPaymentStatus = strtolower(trim((string)($currentStatusPermit['payment_status'] ?? '')));
-                ?>
-
-                <?php if ($currentStatusPermit && $currStatus === 'pending' && $currPaymentStatus !== 'for payment'): ?>
-                  <div class="alert alert-warning mb-0">
-                    <div class="fw-bold mb-1">Application Submitted</div>
-                    Your parking permit request is now waiting for <b>admin approval</b>.<br><br>
-                    Plate: <b><?= esc($currentStatusPermit['plate_no'] ?? '') ?></b><br>
-                    Vehicle Type: <b><?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?></b><br>
-                    Status: <?= badge($currentStatusPermit['status'] ?? 'pending', $currentStatusPermit['payment_status'] ?? 'unpaid') ?><br>
-                    Payment Status: <b><?= esc(payment_status_label((string)($currentStatusPermit['payment_status'] ?? 'unpaid'))) ?></b><br>
-                    Requested At: <b><?= esc($currentStatusPermit['requested_at'] ?? '') ?></b><br>
-                    Sticker Year: <b><?= esc($currentStatusPermit['sticker_year'] ?? '') ?></b>
-
-                    <?php if (!empty($currentStatusPermit['contract_path'])): ?>
-                      <div class="mt-2">
-                        <a href="homeowner_contract.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>" class="btn btn-sm btn-outline-success">
-                          <i class="bi bi-download me-1"></i> Download Contract Copy
-                        </a>
-                      </div>
-                    <?php endif; ?>
-                  </div>
-
-                <?php elseif ($currentStatusPermit && $currStatus === 'pending' && $currPaymentStatus === 'for payment'): ?>
-                  <div class="alert alert-info mb-0">
-                    <div class="fw-bold mb-1">Approved — Payment Required</div>
-                    Your parking permit request has been approved by admin. You may now complete payment.<br><br>
-                    Plate: <b><?= esc($currentStatusPermit['plate_no'] ?? '') ?></b><br>
-                    Vehicle Type: <b><?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?></b><br>
-                    Status: <?= badge($currentStatusPermit['status'] ?? 'pending', $currentStatusPermit['payment_status'] ?? 'for payment') ?><br>
-                    Payment Status: <b><?= esc(payment_status_label((string)($currentStatusPermit['payment_status'] ?? 'for payment'))) ?></b><br>
-                    Duration: <b><?= esc(duration_label((string)($currentStatusPermit['permit_duration'] ?? ''))) ?></b><br>
-                    Payment: <b><?= esc(payment_label((string)($currentStatusPermit['payment_method'] ?? ''))) ?></b><br>
-                    Validity: <b><?= esc($currentStatusPermit['valid_from'] ?? '') ?></b> → <b><?= esc($currentStatusPermit['valid_until'] ?? '') ?></b>
-
-                    <?php if (!empty($currentStatusPermit['contract_path'])): ?>
-                      <div class="mt-2">
-                        <a href="homeowner_contract.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>" class="btn btn-sm btn-outline-success">
-                          <i class="bi bi-download me-1"></i> Download Contract Copy
-                        </a>
-                      </div>
-                    <?php endif; ?>
-
-                    <?php if (strtolower(trim((string)($currentStatusPermit['payment_method'] ?? ''))) === 'online'): ?>
-                      <div class="mt-2">
-                        <a href="paymongo_parking_checkout.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>" class="btn btn-sm btn-primary">
-                          <i class="bi bi-credit-card me-1"></i> Pay Online Now
-                        </a>
-                      </div>
-                    <?php elseif (strtolower(trim((string)($currentStatusPermit['payment_method'] ?? ''))) === 'cash'): ?>
-                      <div class="mt-2 alert alert-light border mb-0 small">
-                        Please proceed with your cash / physical payment to the HOA office. Your permit will become active after payment is recorded.
-                      </div>
-                    <?php endif; ?>
-                  </div>
-
-                <?php else: ?>
-                  <div class="alert alert-secondary mb-0">
-                    No pending or unpaid permit request found. You may apply for a new permit or submit a renewal when eligible.
-                  </div>
-                <?php endif; ?>
-              </div>
-
-              <div class="permit-box p-3 mt-3">
-                <div class="fw-bold mb-2">Requirements</div>
-                <ul class="req-list mb-0">
-                  <li><b>Picture of Vehicle (Front)</b></li>
-                  <li><b>Picture of Vehicle (Back)</b></li>
-                  <li><b>Select vehicle type</b> (Car, Motorcycle, or E-Bike)</li>
-                  <li><b>Choose permit duration</b> (1 month, 3 months, 6 months, or 1 year)</li>
-                  <li><b>Choose payment method</b> (Online or Cash/Physical)</li>
-                </ul>
-              </div>
-
-              <?php if ($renewPermit): ?>
-                <div class="permit-box p-3 mt-3">
-                  <div class="fw-bold mb-2">Renewal Reference Permit</div>
-                  <div><b>Permit No:</b> <?= esc($renewPermit['permit_no'] ?? '—') ?></div>
-                  <div><b>Plate No:</b> <?= esc($renewPermit['plate_no'] ?? '') ?></div>
-                  <div><b>Vehicle Type:</b> <?= esc(vehicle_type_label((string)($renewPermit['vehicle_type'] ?? 'car'))) ?></div>
-                  <div><b>Valid Until:</b> <?= esc($renewPermit['valid_until'] ?? '') ?></div>
-                  <div><b>Days Remaining:</b> <?= $renewDaysRemaining !== null ? (int)$renewDaysRemaining : 'Expired' ?></div>
-                  <div class="info-mini mt-2">
-                    Renewal is only available within <?= (int)$renewalWindowDays ?> days before expiration.
-                  </div>
-                </div>
-              <?php endif; ?>
-            </div>
-
-            <div class="col-lg-6">
-              <?php if ($hasOpenRequest): ?>
-                <?php
-                  $lockPaymentStatus = strtolower(trim((string)($currentStatusPermit['payment_status'] ?? '')));
-                ?>
-                <div class="alert alert-warning mb-3">
-                  <div class="fw-bold mb-1">Application Temporarily Locked</div>
-                  <?php if ($lockPaymentStatus === 'for payment'): ?>
-                    You cannot submit a new parking permit request yet because your previous request is already approved and waiting for payment.
-                  <?php else: ?>
-                    You cannot submit a new parking permit request yet because your previous request is still waiting for admin approval.
-                  <?php endif; ?>
-                </div>
-
-                <form class="form-disabled">
-                  <div class="fw-bold mb-2">Vehicle Details</div>
-                  <div class="mb-2">
-                    <label class="form-label fw-semibold">Plate Number</label>
-                    <input type="text" class="form-control" disabled value="<?= esc($currentStatusPermit['plate_no'] ?? '') ?>">
-                  </div>
-
-                  <div class="mb-2">
-                    <label class="form-label fw-semibold">Vehicle Type</label>
-                    <input type="text" class="form-control" disabled value="<?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?>">
-                  </div>
-
-                  <div class="row g-2">
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Brand</label>
-                      <input type="text" class="form-control" disabled value="<?= esc($currentStatusPermit['vehicle_make'] ?? '') ?>">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Model</label>
-                      <input type="text" class="form-control" disabled value="<?= esc($currentStatusPermit['vehicle_model'] ?? '') ?>">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Color</label>
-                      <input type="text" class="form-control" disabled value="<?= esc($currentStatusPermit['vehicle_color'] ?? '') ?>">
-                    </div>
-                  </div>
-
-                  <div class="mt-2">
-                    <label class="form-label fw-semibold">Permit Duration</label>
-                    <input type="text" class="form-control" disabled value="<?= esc(duration_label((string)($currentStatusPermit['permit_duration'] ?? ''))) ?>">
-                  </div>
-
-                  <div class="mt-2 mb-3">
-                    <label class="form-label fw-semibold">Payment Method</label>
-                    <input type="text" class="form-control" disabled value="<?= esc(payment_label((string)($currentStatusPermit['payment_method'] ?? ''))) ?>">
-                  </div>
-
-                  <button type="button" class="btn btn-secondary w-100 fw-bold py-2" disabled>
-                    <i class="bi bi-lock me-1"></i>
-                    <?php if ($lockPaymentStatus === 'for payment'): ?>
-                      Finish Payment First
-                    <?php else: ?>
-                      Wait for Admin Approval
-                    <?php endif; ?>
-                  </button>
-                </form>
-
-              <?php elseif ($renewPermitId > 0 && (!$renewPermit || !$renewAllowed)): ?>
-                <div class="alert alert-secondary">
-                  <div class="fw-bold mb-1">Renewal Not Yet Available</div>
-                  Renewal requests are only allowed within <?= (int)$renewalWindowDays ?> days before the active permit expires.
-                </div>
-
-              <?php else: ?>
-                <?php
-                  $prefillPlate = $renewPermit['plate_no'] ?? '';
-                  $prefillMake  = $renewPermit['vehicle_make'] ?? '';
-                  $prefillModel = $renewPermit['vehicle_model'] ?? '';
-                  $prefillColor = $renewPermit['vehicle_color'] ?? '';
-                  $prefillVehicleType = $renewPermit['vehicle_type'] ?? '';
-                  $nextStartDate = '';
-
-                  if ($renewPermit && !empty($renewPermit['valid_until'])) {
-                    $nextStartDate = (new DateTime($renewPermit['valid_until']))->modify('+1 day')->format('Y-m-d');
-                  }
-                ?>
-                <form method="POST" enctype="multipart/form-data" class="permit-box p-3">
-                  <input type="hidden" name="submit_permit" value="1">
-                  <input type="hidden" name="renew_of_id" value="<?= $renewAllowed && $renewPermit ? (int)$renewPermit['id'] : 0 ?>">
-
-                  <div class="fw-bold mb-2">
-                    <?= $renewAllowed && $renewPermit ? 'Renew Permit' : 'New Permit Application' ?>
-                  </div>
-
-                  <?php if ($renewAllowed && $renewPermit): ?>
-                    <div class="alert alert-light border small">
-                      You are renewing permit <b><?= esc($renewPermit['permit_no'] ?? '—') ?></b>.
-                      <?php if ($nextStartDate !== ''): ?>
-                        The proposed new validity will start on <b><?= esc($nextStartDate) ?></b>, which is the day after your current permit expires.
-                      <?php endif; ?>
-                    </div>
-                  <?php else: ?>
-                    <div class="alert alert-light border small">
-                      The system will automatically compute your proposed validity period based on your selected duration.
-                      Your request will first go to admin approval. Payment will only be available after approval.
-                    </div>
-                  <?php endif; ?>
-
-                  <div class="mb-2">
-                    <label class="form-label fw-semibold">Plate Number</label>
-                    <input type="text" name="plate_no" class="form-control" required maxlength="30" value="<?= esc($prefillPlate) ?>">
-                  </div>
-
-                  <div class="mb-2">
-                    <label class="form-label fw-semibold">Vehicle Type</label>
-                    <select name="vehicle_type" class="form-select" required>
-                      <option value="">Select Vehicle Type</option>
-                      <option value="car" <?= $prefillVehicleType === 'car' ? 'selected' : '' ?>>Car</option>
-                      <option value="motorcycle" <?= $prefillVehicleType === 'motorcycle' ? 'selected' : '' ?>>Motorcycle</option>
-                      <option value="ebike" <?= $prefillVehicleType === 'ebike' ? 'selected' : '' ?>>E-Bike</option>
-                    </select>
-                  </div>
-
-                  <div class="row g-2">
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Brand</label>
-                      <input type="text" name="vehicle_make" class="form-control" maxlength="80" value="<?= esc($prefillMake) ?>">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Model</label>
-                      <input type="text" name="vehicle_model" class="form-control" maxlength="80" value="<?= esc($prefillModel) ?>">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label fw-semibold">Color</label>
-                      <input type="text" name="vehicle_color" class="form-control" maxlength="50" value="<?= esc($prefillColor) ?>">
-                    </div>
-                  </div>
-
-                  <div class="mt-2">
-                    <label class="form-label fw-semibold">Permit Duration</label>
-                    <select name="permit_duration" class="form-select" required>
-                      <option value="" selected>Select Duration</option>
-                      <option value="1_month">1 Month</option>
-                      <option value="3_months">3 Months</option>
-                      <option value="6_months">6 Months</option>
-                      <option value="1_year">1 Year</option>
-                    </select>
-                  </div>
-
-                  <div class="mt-2 mb-3">
-                    <label class="form-label fw-semibold">Payment Method</label>
-                    <select name="payment_method" class="form-select" required>
-                      <option value="" selected>Select Payment</option>
-                      <option value="online">Online Payment</option>
-                      <option value="cash">Cash / Physical Payment</option>
-                    </select>
-                  </div>
-
-                  <hr>
-
-                  <div class="fw-bold mb-2">Upload Requirements</div>
-
-                  <div class="mb-2">
-                    <label class="file-label">Picture of Vehicle (Front)</label>
-                    <input type="file" name="vehicle_front" class="form-control" required accept=".pdf,.jpg,.jpeg,.png">
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="file-label">Picture of Vehicle (Back)</label>
-                    <input type="file" name="vehicle_back" class="form-control" required accept=".pdf,.jpg,.jpeg,.png">
-                  </div>
-
-                  <button class="btn btn-success w-100 fw-bold py-2">
-                    <i class="bi bi-send me-1"></i>
-                    <?= $renewAllowed && $renewPermit ? 'Submit Renewal Request' : 'Submit Permit Request' ?>
-                  </button>
-
-                  <div class="text-muted small fw-semibold mt-2">
-                    The form resets on reload. Previous application details are shown only in the Current Status section.
-                  </div>
-                </form>
-              <?php endif; ?>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <div class="mt-4 text-center text-muted small fw-semibold">
-        © South Meridian Homes Salitran
-      </div>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-(function(){
-  const wrap = document.getElementById('sbParking');
-  const btn  = document.getElementById('sbParkingToggle');
-  if(!wrap || !btn) return;
-  btn.addEventListener('click', () => wrap.classList.toggle('open'));
-})();
-
-(function(){
-  const tenantWrap = document.getElementById('sbTenant');
-  const tenantBtn  = document.getElementById('sbTenantToggle');
-  if(!tenantWrap || !tenantBtn) return;
-  tenantBtn.addEventListener('click', () => tenantWrap.classList.toggle('open'));
-})();
-
-(function(){
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebarOverlay');
-  const toggle  = document.getElementById('sidebarToggle');
-
-  if (!sidebar || !overlay || !toggle) return;
-
-  function openSidebar(){
-    sidebar.classList.add('show');
-    overlay.classList.add('show');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeSidebar(){
-    sidebar.classList.remove('show');
-    overlay.classList.remove('show');
-    document.body.style.overflow = '';
-  }
-
-  toggle.addEventListener('click', openSidebar);
-  overlay.addEventListener('click', closeSidebar);
-
-  window.addEventListener('resize', function(){
-    if (window.innerWidth >= 992) closeSidebar();
-  });
-
-  sidebar.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', function(){
-      if (window.innerWidth < 992) closeSidebar();
-    });
-  });
+(function () {
+    const savedTheme = localStorage.getItem('hoa-theme');
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const useDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+    document.documentElement.classList.toggle('dark', useDark);
 })();
 </script>
+
+<style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+>
+</head>
+
+<body
+    class="
+        bg-slate-50
+        text-slate-900
+        antialiased
+        transition-colors
+        duration-200
+        dark:bg-slate-950
+        dark:text-slate-100
+    "
+>
+
+<div
+    id="sidebarOverlay"
+    class="
+        fixed inset-0 z-50
+        hidden
+        bg-slate-950/50
+        backdrop-blur-[1px]
+        lg:hidden
+    "
+></div>
+
+<?php include 'homeowner_sidebar.php'; ?>
+
+<div class="min-h-screen lg:ml-[280px]">
+
+    <header
+        class="
+            sticky top-0 z-40
+            border-b border-slate-200
+            bg-white/95
+            backdrop-blur
+            transition-colors
+            dark:border-slate-800
+            dark:bg-slate-900/95
+        "
+    >
+        <div
+            class="
+                mx-auto
+                flex min-h-[72px] max-w-7xl
+                items-center gap-3
+                px-4 sm:px-6
+            "
+        >
+            <button
+                type="button"
+                id="sidebarToggle"
+                class="
+                    flex h-12 w-12 shrink-0
+                    items-center justify-center
+                    rounded-xl
+                    border border-slate-200
+                    bg-white
+                    text-2xl text-slate-700
+                    shadow-sm transition
+                    hover:bg-slate-50
+                    focus:outline-none focus:ring-4 focus:ring-emerald-100
+                    dark:border-slate-700
+                    dark:bg-slate-800
+                    dark:text-slate-200
+                    dark:hover:bg-slate-700
+                    dark:focus:ring-emerald-950
+                    lg:hidden
+                "
+                aria-label="Open menu"
+            >
+                <i class="bi bi-list"></i>
+            </button>
+
+            <a
+                href="homeowner_dashboard.php"
+                class="min-w-0"
+            >
+                <div
+                    class="
+                        truncate
+                        text-base font-bold text-emerald-800
+                        sm:text-lg
+                        dark:text-emerald-300
+                    "
+                >
+                    HOA Community
+                </div>
+
+                <div
+                    class="
+                        hidden
+                        text-xs font-medium text-slate-500
+                        sm:block
+                        dark:text-slate-400
+                    "
+                >
+                    South Meridian Homes Salitran
+                </div>
+            </a>
+
+            <div class="ml-auto flex items-center gap-2 sm:gap-3">
+
+                <button
+                    type="button"
+                    id="themeToggle"
+                    class="
+                        flex h-12 w-12 shrink-0
+                        items-center justify-center
+                        rounded-xl
+                        border border-slate-200
+                        bg-white
+                        text-xl text-slate-700
+                        shadow-sm transition
+                        hover:border-emerald-200
+                        hover:bg-emerald-50
+                        hover:text-emerald-800
+                        focus:outline-none focus:ring-4 focus:ring-emerald-100
+                        dark:border-slate-700
+                        dark:bg-slate-900
+                        dark:text-slate-200
+                        dark:hover:border-slate-600
+                        dark:hover:bg-slate-800
+                        dark:hover:text-emerald-300
+                        dark:focus:ring-emerald-950
+                    "
+                    aria-label="Switch to dark mode"
+                    title="Switch to dark mode"
+                >
+                    <i id="themeIcon" class="bi bi-moon-stars-fill"></i>
+                </button>
+
+                <div class="hidden text-right md:block">
+                    <div
+                        class="
+                            max-w-[220px] truncate
+                            text-sm font-bold text-slate-800
+                            dark:text-slate-200
+                        "
+                    >
+                        <?= esc($fullName) ?>
+                    </div>
+
+                    <div
+                        class="
+                            text-xs font-medium text-slate-500
+                            dark:text-slate-400
+                        "
+                    >
+                        <?= esc($phase) ?>
+                        <?= $isTenant ? ' • Tenant' : '' ?>
+                    </div>
+                </div>
+
+                <a
+                    href="logout.php"
+                    class="
+                        flex min-h-12
+                        items-center justify-center gap-2
+                        rounded-xl
+                        border border-slate-200
+                        bg-white
+                        px-3
+                        text-sm font-semibold text-slate-700
+                        transition
+                        hover:border-red-200
+                        hover:bg-red-50
+                        hover:text-red-700
+                        sm:px-4
+                        dark:border-slate-700
+                        dark:bg-slate-900
+                        dark:text-slate-300
+                        dark:hover:border-red-900
+                        dark:hover:bg-red-950/40
+                        dark:hover:text-red-300
+                    "
+                >
+                    <i class="bi bi-box-arrow-right text-lg"></i>
+                    <span class="hidden sm:inline">Logout</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main
+        class="
+            mx-auto max-w-7xl
+            px-4 py-6
+            sm:px-6 sm:py-8
+        "
+    >
+
+        <section class="mb-6">
+            <a
+                href="homeowner_parking.php"
+                class="
+                    inline-flex items-center gap-2
+                    text-sm font-semibold text-emerald-700
+                    hover:text-emerald-800
+                    dark:text-emerald-400
+                    dark:hover:text-emerald-300
+                "
+            >
+                <i class="bi bi-arrow-left"></i>
+                Parking Overview
+            </a>
+
+            <div
+                class="
+                    mt-3
+                    flex flex-col gap-3
+                    sm:flex-row
+                    sm:items-end
+                    sm:justify-between
+                "
+            >
+                <div>
+                    <p
+                        class="
+                            text-sm font-semibold text-emerald-700
+                            dark:text-emerald-400
+                        "
+                    >
+                        Vehicle & Permit Management
+                    </p>
+
+                    <h1
+                        class="
+                            mt-1
+                            text-2xl font-bold tracking-tight text-slate-900
+                            sm:text-3xl
+                            dark:text-slate-100
+                        "
+                    >
+                        Apply / Renew Parking Permit
+                    </h1>
+
+                    <p
+                        class="
+                            mt-2 max-w-2xl
+                            text-[15px] leading-6 text-slate-600
+                            dark:text-slate-400
+                        "
+                    >
+                        Submit a new parking permit application or renew
+                        an eligible active permit.
+                    </p>
+                </div>
+
+                <div
+                    class="
+                        inline-flex w-fit items-center gap-2
+                        rounded-xl
+                        bg-white
+                        px-3 py-2
+                        text-sm font-semibold text-slate-600
+                        ring-1 ring-slate-200
+                        dark:bg-slate-900
+                        dark:text-slate-300
+                        dark:ring-slate-700
+                    "
+                >
+                    <i class="bi bi-geo-alt-fill text-emerald-700 dark:text-emerald-400"></i>
+                    <?= esc($phase) ?> • <?= esc($houseLot) ?>
+                </div>
+            </div>
+        </section>
+
+        <?php if ($msg !== ''): ?>
+            <div
+                class="
+                    page-flash
+                    mb-5
+                    flex items-start gap-3
+                    rounded-2xl
+                    border
+                    p-4
+                    <?= $currentMsgUi['wrap'] ?>
+                "
+            >
+                <div
+                    class="
+                        flex h-10 w-10 shrink-0
+                        items-center justify-center
+                        rounded-xl
+                        text-lg
+                        <?= $currentMsgUi['iconWrap'] ?>
+                    "
+                >
+                    <i class="bi <?= esc($currentMsgUi['icon']) ?>"></i>
+                </div>
+
+                <div class="min-w-0 flex-1">
+                    <p class="font-bold <?= $currentMsgUi['title'] ?>">
+                        Parking Permit Update
+                    </p>
+                    <p class="mt-1 text-sm leading-6 <?= $currentMsgUi['text'] ?>">
+                        <?= esc($msg) ?>
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    class="
+                        btn-close-flash
+                        flex h-9 w-9 shrink-0
+                        items-center justify-center
+                        rounded-lg
+                        text-slate-500
+                        transition
+                        hover:bg-black/5
+                        dark:text-slate-400
+                        dark:hover:bg-white/10
+                    "
+                    aria-label="Close message"
+                >
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        <?php endif; ?>
+
+        <section
+            class="
+                mb-6
+                grid gap-4
+                sm:grid-cols-2
+                xl:grid-cols-4
+            "
+        >
+            <div
+                class="
+                    rounded-2xl border border-slate-200
+                    bg-white p-5 shadow-sm
+                    dark:border-slate-800 dark:bg-slate-900
+                "
+            >
+                <div
+                    class="
+                        flex h-11 w-11 items-center justify-center
+                        rounded-xl bg-emerald-100
+                        text-xl text-emerald-700
+                        dark:bg-emerald-950/60 dark:text-emerald-300
+                    "
+                >
+                    <i class="bi bi-calendar-check-fill"></i>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Sticker Year
+                </p>
+                <p class="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    <?= (int)$yearNow ?>
+                </p>
+            </div>
+
+            <div
+                class="
+                    rounded-2xl border border-slate-200
+                    bg-white p-5 shadow-sm
+                    dark:border-slate-800 dark:bg-slate-900
+                "
+            >
+                <div
+                    class="
+                        flex h-11 w-11 items-center justify-center
+                        rounded-xl bg-blue-100
+                        text-xl text-blue-700
+                        dark:bg-blue-950/60 dark:text-blue-300
+                    "
+                >
+                    <i class="bi bi-card-checklist"></i>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Active Permit
+                </p>
+                <p class="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    <?= $activePermit ? 'Yes' : 'None' ?>
+                </p>
+            </div>
+
+            <div
+                class="
+                    rounded-2xl border border-slate-200
+                    bg-white p-5 shadow-sm
+                    dark:border-slate-800 dark:bg-slate-900
+                "
+            >
+                <div
+                    class="
+                        flex h-11 w-11 items-center justify-center
+                        rounded-xl bg-amber-100
+                        text-xl text-amber-700
+                        dark:bg-amber-950/60 dark:text-amber-300
+                    "
+                >
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Open Request
+                </p>
+                <p class="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    <?= $hasOpenRequest ? 'Yes' : 'None' ?>
+                </p>
+            </div>
+
+            <div
+                class="
+                    rounded-2xl border border-slate-200
+                    bg-white p-5 shadow-sm
+                    dark:border-slate-800 dark:bg-slate-900
+                "
+            >
+                <div
+                    class="
+                        flex h-11 w-11 items-center justify-center
+                        rounded-xl bg-violet-100
+                        text-xl text-violet-700
+                        dark:bg-violet-950/60 dark:text-violet-300
+                    "
+                >
+                    <i class="bi bi-arrow-repeat"></i>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Renewal Window
+                </p>
+                <p class="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    <?= (int)$renewalWindowDays ?>
+                    <span class="text-base font-semibold text-slate-400 dark:text-slate-500">days</span>
+                </p>
+            </div>
+        </section>
+
+        <div
+            class="
+                grid gap-6
+                xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]
+            "
+        >
+            <div class="space-y-6">
+
+                <section
+                    class="
+                        overflow-hidden
+                        rounded-2xl
+                        border border-slate-200
+                        bg-white
+                        shadow-sm
+                        dark:border-slate-800
+                        dark:bg-slate-900
+                    "
+                >
+                    <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                        <h2 class="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-slate-100">
+                            <i class="bi bi-activity text-emerald-700 dark:text-emerald-400"></i>
+                            Current Status
+                        </h2>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            Track the latest parking permit request for this account.
+                        </p>
+                    </div>
+
+                    <div class="p-5">
+
+                        <?php if ($currentStatusPermit && $currStatus === 'pending' && $currPaymentStatus !== 'for payment'): ?>
+
+                            <div
+                                class="
+                                    rounded-2xl
+                                    border border-amber-200
+                                    bg-amber-50
+                                    p-4
+                                    dark:border-amber-900
+                                    dark:bg-amber-950/40
+                                "
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="
+                                            flex h-11 w-11 shrink-0
+                                            items-center justify-center
+                                            rounded-xl
+                                            bg-amber-100
+                                            text-lg text-amber-700
+                                            dark:bg-amber-950
+                                            dark:text-amber-300
+                                        "
+                                    >
+                                        <i class="bi bi-clock-fill"></i>
+                                    </div>
+
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="font-bold text-amber-900 dark:text-amber-200">
+                                            Application Submitted
+                                        </h3>
+                                        <p class="mt-1 text-sm leading-6 text-amber-800 dark:text-amber-300">
+                                            Your request is waiting for HOA admin approval.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="
+                                        mt-4 grid gap-3
+                                        rounded-xl bg-white/80 p-4
+                                        text-sm
+                                        sm:grid-cols-2
+                                        dark:bg-slate-900/60
+                                    "
+                                >
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Plate</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc($currentStatusPermit['plate_no'] ?? '—') ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Vehicle Type</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Status</p>
+                                        <span
+                                            class="
+                                                mt-1 inline-flex items-center gap-1.5
+                                                rounded-lg px-2.5 py-1
+                                                text-xs font-bold ring-1
+                                                <?= permit_status_tailwind(
+                                                    (string)($currentStatusPermit['status'] ?? 'pending'),
+                                                    (string)($currentStatusPermit['payment_status'] ?? 'unpaid')
+                                                ) ?>
+                                            "
+                                        >
+                                            <i class="bi <?= esc(permit_status_icon(
+                                                (string)($currentStatusPermit['status'] ?? 'pending'),
+                                                (string)($currentStatusPermit['payment_status'] ?? 'unpaid')
+                                            )) ?>"></i>
+                                            <?= esc(permit_status_text(
+                                                (string)($currentStatusPermit['status'] ?? 'pending'),
+                                                (string)($currentStatusPermit['payment_status'] ?? 'unpaid')
+                                            )) ?>
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Payment</p>
+                                        <span
+                                            class="
+                                                mt-1 inline-flex items-center
+                                                rounded-lg px-2.5 py-1
+                                                text-xs font-bold ring-1
+                                                <?= payment_status_tailwind(
+                                                    (string)($currentStatusPermit['payment_status'] ?? 'unpaid')
+                                                ) ?>
+                                            "
+                                        >
+                                            <?= esc(payment_status_label(
+                                                (string)($currentStatusPermit['payment_status'] ?? 'unpaid')
+                                            )) ?>
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Requested At</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc($currentStatusPermit['requested_at'] ?? '—') ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Sticker Year</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc($currentStatusPermit['sticker_year'] ?? '—') ?>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <?php if (!empty($currentStatusPermit['contract_path'])): ?>
+                                    <a
+                                        href="homeowner_contract.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>"
+                                        class="
+                                            mt-4 inline-flex min-h-11
+                                            items-center justify-center gap-2
+                                            rounded-xl
+                                            border border-emerald-200
+                                            bg-white px-4
+                                            text-sm font-semibold text-emerald-700
+                                            transition
+                                            hover:bg-emerald-50
+                                            dark:border-emerald-900
+                                            dark:bg-slate-900
+                                            dark:text-emerald-300
+                                            dark:hover:bg-emerald-950/40
+                                        "
+                                    >
+                                        <i class="bi bi-file-earmark-text-fill"></i>
+                                        Contract Copy
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+
+                        <?php elseif ($currentStatusPermit && $currStatus === 'pending' && $currPaymentStatus === 'for payment'): ?>
+
+                            <div
+                                class="
+                                    rounded-2xl
+                                    border border-blue-200
+                                    bg-blue-50
+                                    p-4
+                                    dark:border-blue-900
+                                    dark:bg-blue-950/40
+                                "
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="
+                                            flex h-11 w-11 shrink-0
+                                            items-center justify-center
+                                            rounded-xl
+                                            bg-blue-100
+                                            text-lg text-blue-700
+                                            dark:bg-blue-950
+                                            dark:text-blue-300
+                                        "
+                                    >
+                                        <i class="bi bi-credit-card-fill"></i>
+                                    </div>
+
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="font-bold text-blue-900 dark:text-blue-200">
+                                            Approved — Payment Required
+                                        </h3>
+                                        <p class="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
+                                            Your permit request was approved. Complete payment to activate it.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="
+                                        mt-4 grid gap-3
+                                        rounded-xl bg-white/80 p-4
+                                        text-sm
+                                        sm:grid-cols-2
+                                        dark:bg-slate-900/60
+                                    "
+                                >
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Plate</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc($currentStatusPermit['plate_no'] ?? '—') ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Vehicle Type</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Duration</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc(duration_label((string)($currentStatusPermit['permit_duration'] ?? ''))) ?>
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Payment Method</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc(payment_label((string)($currentStatusPermit['payment_method'] ?? ''))) ?>
+                                        </p>
+                                    </div>
+
+                                    <div class="sm:col-span-2">
+                                        <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Validity</p>
+                                        <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                            <?= esc($currentStatusPermit['valid_from'] ?? '—') ?>
+                                            →
+                                            <?= esc($currentStatusPermit['valid_until'] ?? '—') ?>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                    <?php if (!empty($currentStatusPermit['contract_path'])): ?>
+                                        <a
+                                            href="homeowner_contract.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>"
+                                            class="
+                                                inline-flex min-h-11
+                                                items-center justify-center gap-2
+                                                rounded-xl
+                                                border border-emerald-200
+                                                bg-white px-4
+                                                text-sm font-semibold text-emerald-700
+                                                transition
+                                                hover:bg-emerald-50
+                                                dark:border-emerald-900
+                                                dark:bg-slate-900
+                                                dark:text-emerald-300
+                                                dark:hover:bg-emerald-950/40
+                                            "
+                                        >
+                                            <i class="bi bi-file-earmark-text-fill"></i>
+                                            Contract Copy
+                                        </a>
+                                    <?php endif; ?>
+
+                                    <?php if (strtolower(trim((string)($currentStatusPermit['payment_method'] ?? ''))) === 'online'): ?>
+                                        <a
+                                            href="paymongo_parking_checkout.php?permit_id=<?= (int)$currentStatusPermit['id'] ?>"
+                                            class="
+                                                inline-flex min-h-11
+                                                items-center justify-center gap-2
+                                                rounded-xl
+                                                bg-blue-700 px-4
+                                                text-sm font-semibold text-white
+                                                transition
+                                                hover:bg-blue-800
+                                                dark:bg-blue-600
+                                                dark:hover:bg-blue-500
+                                            "
+                                        >
+                                            <i class="bi bi-credit-card-fill"></i>
+                                            Pay Online Now
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+
+                                <?php if (strtolower(trim((string)($currentStatusPermit['payment_method'] ?? ''))) === 'cash'): ?>
+                                    <div
+                                        class="
+                                            mt-4 flex items-start gap-3
+                                            rounded-xl
+                                            border border-blue-200
+                                            bg-white/70
+                                            p-3
+                                            text-sm leading-6 text-blue-800
+                                            dark:border-blue-900
+                                            dark:bg-slate-900/50
+                                            dark:text-blue-300
+                                        "
+                                    >
+                                        <i class="bi bi-building-fill mt-0.5 shrink-0"></i>
+                                        <span>
+                                            Please complete your cash / physical payment at the HOA office.
+                                            Your permit becomes active after the payment is recorded.
+                                        </span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
+                        <?php else: ?>
+
+                            <div
+                                class="
+                                    flex flex-col items-center justify-center
+                                    px-4 py-8
+                                    text-center
+                                "
+                            >
+                                <div
+                                    class="
+                                        flex h-14 w-14 items-center justify-center
+                                        rounded-2xl
+                                        bg-slate-100
+                                        text-2xl text-slate-400
+                                        dark:bg-slate-800
+                                        dark:text-slate-500
+                                    "
+                                >
+                                    <i class="bi bi-inbox"></i>
+                                </div>
+
+                                <h3 class="mt-4 font-bold text-slate-900 dark:text-slate-100">
+                                    No open permit request
+                                </h3>
+
+                                <p class="mt-2 max-w-sm text-sm leading-6 text-slate-500 dark:text-slate-400">
+                                    You may submit a new permit application, or renew an eligible active permit.
+                                </p>
+
+                                <?php if ($lastClosedPermit): ?>
+                                    <?php
+                                    $lastClosedStatus =
+                                      strtolower(
+                                        trim(
+                                          (string)(
+                                            $lastClosedPermit['status']
+                                            ?? ''
+                                          )
+                                        )
+                                      );
+
+                                    $lastClosedPaymentStatus =
+                                      strtolower(
+                                        trim(
+                                          (string)(
+                                            $lastClosedPermit['payment_status']
+                                            ?? ''
+                                          )
+                                        )
+                                      );
+
+                                    $lastClosedReason = '';
+
+                                    if ($lastClosedStatus === 'rejected') {
+                                      $lastClosedReason =
+                                        trim(
+                                          (string)(
+                                            $lastClosedPermit['rejected_reason']
+                                            ?? ''
+                                          )
+                                        );
+                                    } elseif ($lastClosedStatus === 'revoked') {
+                                      $lastClosedReason =
+                                        trim(
+                                          (string)(
+                                            $lastClosedPermit['revoked_reason']
+                                            ?? ''
+                                          )
+                                        );
+                                    }
+                                    ?>
+
+                                    <div
+                                        class="
+                                            mt-5 w-full max-w-lg
+                                            rounded-2xl
+                                            border border-slate-200
+                                            bg-white p-4
+                                            text-left
+                                            dark:border-slate-700
+                                            dark:bg-slate-900
+                                        "
+                                    >
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                                    Latest Closed Record
+                                                </p>
+
+                                                <p class="mt-1 font-bold text-slate-900 dark:text-slate-100">
+                                                    <?= esc($lastClosedPermit['plate_no'] ?? 'Vehicle') ?>
+                                                </p>
+                                            </div>
+
+                                            <span
+                                                class="
+                                                    inline-flex items-center gap-1.5
+                                                    rounded-lg px-2.5 py-1
+                                                    text-xs font-bold ring-1
+                                                    <?= permit_status_tailwind(
+                                                      $lastClosedStatus,
+                                                      $lastClosedPaymentStatus
+                                                    ) ?>
+                                                "
+                                            >
+                                                <i class="bi <?= esc(
+                                                  permit_status_icon(
+                                                    $lastClosedStatus,
+                                                    $lastClosedPaymentStatus
+                                                  )
+                                                ) ?>"></i>
+
+                                                <?= esc(
+                                                  permit_status_text(
+                                                    $lastClosedStatus,
+                                                    $lastClosedPaymentStatus
+                                                  )
+                                                ) ?>
+                                            </span>
+                                        </div>
+
+                                        <?php if ($lastClosedReason !== ''): ?>
+                                            <div
+                                                class="
+                                                    mt-3 rounded-xl
+                                                    border border-red-200
+                                                    bg-red-50 p-3
+                                                    text-sm leading-6 text-red-800
+                                                    dark:border-red-900
+                                                    dark:bg-red-950/40
+                                                    dark:text-red-300
+                                                "
+                                            >
+                                                <span class="font-bold">
+                                                    <?= $lastClosedStatus === 'rejected'
+                                                      ? 'Rejection reason:'
+                                                      : 'Revocation reason:' ?>
+                                                </span>
+
+                                                <?= esc($lastClosedReason) ?>
+                                            </div>
+                                        <?php elseif ($lastClosedStatus === 'expired'): ?>
+                                            <p class="mt-3 text-sm leading-6 text-amber-700 dark:text-amber-300">
+                                                This permit reached the end of its validity period.
+                                            </p>
+                                        <?php endif; ?>
+
+                                        <a
+                                            href="homeowner_parking.php#permitHistory"
+                                            class="
+                                                mt-3 inline-flex min-h-10
+                                                items-center justify-center gap-2
+                                                rounded-xl
+                                                border border-slate-200
+                                                bg-white px-3
+                                                text-sm font-semibold text-slate-700
+                                                transition hover:bg-slate-50
+                                                dark:border-slate-700
+                                                dark:bg-slate-800
+                                                dark:text-slate-200
+                                                dark:hover:bg-slate-700
+                                            "
+                                        >
+                                            <i class="bi bi-clock-history"></i>
+                                            View Permit History
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
+                        <?php endif; ?>
+
+                    </div>
+                </section>
+
+                <?php if ($activePermit): ?>
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            dark:border-slate-800
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                            <h2 class="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+                                <i class="bi bi-card-checklist text-blue-700 dark:text-blue-300"></i>
+                                Active Permit
+                            </h2>
+                        </div>
+
+                        <div class="p-5">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Permit No.</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($activePermit['permit_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Plate</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($activePermit['plate_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Valid Until</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($activePermit['valid_until'] ?? '—') ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Days Remaining</p>
+                                    <p
+                                        class="
+                                            mt-1 font-bold
+                                            <?= $activePermitDaysRemaining !== null && $activePermitDaysRemaining <= $renewalWindowDays
+                                                ? 'text-amber-700 dark:text-amber-300'
+                                                : 'text-slate-800 dark:text-slate-200'
+                                            ?>
+                                        "
+                                    >
+                                        <?= $activePermitDaysRemaining !== null
+                                            ? (int)$activePermitDaysRemaining . ' day' . ($activePermitDaysRemaining === 1 ? '' : 's')
+                                            : 'Expired'
+                                        ?>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <?php if ($activePermitHasScheduledRenewal): ?>
+                                <div
+                                    class="
+                                        mt-4 rounded-xl
+                                        border border-violet-200
+                                        bg-violet-50 p-3
+                                        text-sm leading-6 text-violet-800
+                                        dark:border-violet-900
+                                        dark:bg-violet-950/40
+                                        dark:text-violet-300
+                                    "
+                                >
+                                    <i class="bi bi-calendar-check-fill mr-1"></i>
+                                    A paid renewal is already scheduled to start on
+                                    <strong><?= esc($upcomingPermit['valid_from'] ?? '—') ?></strong>.
+                                </div>
+                            <?php elseif (can_renew_now($activePermit['valid_until'] ?? null, $renewalWindowDays)): ?>
+                                <a
+                                    href="homeowner_parking_permit.php?renew_id=<?= (int)$activePermit['id'] ?>"
+                                    class="
+                                        mt-4 inline-flex min-h-11
+                                        items-center justify-center gap-2
+                                        rounded-xl
+                                        bg-emerald-700 px-4
+                                        text-sm font-semibold text-white
+                                        transition hover:bg-emerald-800
+                                        dark:bg-emerald-600
+                                        dark:hover:bg-emerald-500
+                                    "
+                                >
+                                    <i class="bi bi-arrow-repeat"></i>
+                                    Renew This Permit
+                                </a>
+                            <?php else: ?>
+                                <div
+                                    class="
+                                        mt-4 rounded-xl
+                                        bg-slate-50 p-3
+                                        text-xs leading-5 text-slate-500
+                                        dark:bg-slate-800/60
+                                        dark:text-slate-400
+                                    "
+                                >
+                                    Renewal becomes available within
+                                    <?= (int)$renewalWindowDays ?> days before expiration.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </section>
+                <?php endif; ?>
+
+                <?php if ($upcomingPermit): ?>
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-violet-200
+                            bg-white
+                            shadow-sm
+                            dark:border-violet-900
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="border-b border-violet-200 px-5 py-4 dark:border-violet-900">
+                            <h2 class="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+                                <i class="bi bi-calendar-check-fill text-violet-700 dark:text-violet-300"></i>
+                                Upcoming Renewal
+                            </h2>
+                            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                Paid and scheduled. It becomes the current permit automatically on its valid-from date.
+                            </p>
+                        </div>
+
+                        <div class="p-5">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Permit No.</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($upcomingPermit['permit_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Plate</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($upcomingPermit['plate_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Starts On</p>
+                                    <p class="mt-1 font-semibold text-violet-700 dark:text-violet-300">
+                                        <?= esc($upcomingPermit['valid_from'] ?? '—') ?>
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Valid Until</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($upcomingPermit['valid_until'] ?? '—') ?>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($upcomingPermit['contract_path'])): ?>
+                                <a
+                                    href="homeowner_contract.php?permit_id=<?= (int)$upcomingPermit['id'] ?>"
+                                    class="
+                                        mt-4 inline-flex min-h-11
+                                        items-center justify-center gap-2
+                                        rounded-xl
+                                        border border-violet-200
+                                        bg-violet-50 px-4
+                                        text-sm font-semibold text-violet-700
+                                        transition hover:bg-violet-100
+                                        dark:border-violet-900
+                                        dark:bg-violet-950/40
+                                        dark:text-violet-300
+                                        dark:hover:bg-violet-950/60
+                                    "
+                                >
+                                    <i class="bi bi-file-earmark-text-fill"></i>
+                                    Contract Copy
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    </section>
+                <?php endif; ?>
+
+                <section
+                    class="
+                        overflow-hidden
+                        rounded-2xl
+                        border border-slate-200
+                        bg-white
+                        shadow-sm
+                        dark:border-slate-800
+                        dark:bg-slate-900
+                    "
+                >
+                    <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                        <h2 class="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+                            <i class="bi bi-clipboard-check-fill text-emerald-700 dark:text-emerald-400"></i>
+                            Requirements
+                        </h2>
+                    </div>
+
+                    <div class="p-5">
+                        <div class="space-y-3">
+                            <div class="flex items-start gap-3">
+                                <span
+                                    class="
+                                        flex h-9 w-9 shrink-0 items-center justify-center
+                                        rounded-xl bg-blue-100
+                                        text-blue-700
+                                        dark:bg-blue-950/60
+                                        dark:text-blue-300
+                                    "
+                                >
+                                    <i class="bi bi-camera-fill"></i>
+                                </span>
+                                <div>
+                                    <p class="font-semibold text-slate-800 dark:text-slate-200">
+                                        Vehicle front photo
+                                    </p>
+                                    <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        Clear JPG, JPEG, PNG, or PDF • Maximum 5 MB.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-start gap-3">
+                                <span
+                                    class="
+                                        flex h-9 w-9 shrink-0 items-center justify-center
+                                        rounded-xl bg-violet-100
+                                        text-violet-700
+                                        dark:bg-violet-950/60
+                                        dark:text-violet-300
+                                    "
+                                >
+                                    <i class="bi bi-camera-reels-fill"></i>
+                                </span>
+                                <div>
+                                    <p class="font-semibold text-slate-800 dark:text-slate-200">
+                                        Vehicle back photo
+                                    </p>
+                                    <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        Clear JPG, JPEG, PNG, or PDF • Maximum 5 MB.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-start gap-3">
+                                <span
+                                    class="
+                                        flex h-9 w-9 shrink-0 items-center justify-center
+                                        rounded-xl bg-emerald-100
+                                        text-emerald-700
+                                        dark:bg-emerald-950/60
+                                        dark:text-emerald-300
+                                    "
+                                >
+                                    <i class="bi bi-car-front-fill"></i>
+                                </span>
+                                <div>
+                                    <p class="font-semibold text-slate-800 dark:text-slate-200">
+                                        Vehicle and payment details
+                                    </p>
+                                    <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        Select vehicle type, permit duration, and payment method.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            class="
+                                mt-4 flex items-start gap-3
+                                rounded-xl bg-blue-50 p-3
+                                text-sm leading-6 text-blue-800
+                                dark:bg-blue-950/40
+                                dark:text-blue-300
+                            "
+                        >
+                            <i class="bi bi-lightbulb-fill mt-0.5 shrink-0"></i>
+                            <span>
+                                Use clear uploads to avoid delays during HOA review.
+                            </span>
+                        </div>
+                    </div>
+                </section>
+
+                <?php if ($renewPermit): ?>
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            dark:border-slate-800
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                            <h2 class="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100">
+                                <i class="bi bi-arrow-repeat text-violet-700 dark:text-violet-300"></i>
+                                Renewal Reference
+                            </h2>
+                        </div>
+
+                        <div class="p-5">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Permit No.</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($renewPermit['permit_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Plate</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($renewPermit['plate_no'] ?? '—') ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Vehicle Type</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc(vehicle_type_label((string)($renewPermit['vehicle_type'] ?? 'car'))) ?>
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Valid Until</p>
+                                    <p class="mt-1 font-semibold text-slate-800 dark:text-slate-200">
+                                        <?= esc($renewPermit['valid_until'] ?? '—') ?>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div
+                                class="
+                                    mt-4 rounded-xl
+                                    bg-violet-50 p-3
+                                    text-sm leading-6 text-violet-800
+                                    dark:bg-violet-950/40
+                                    dark:text-violet-300
+                                "
+                            >
+                                Renewal is available only within
+                                <?= (int)$renewalWindowDays ?> days before expiration.
+                                <?php if ($renewDaysRemaining !== null): ?>
+                                    This permit has
+                                    <strong><?= (int)$renewDaysRemaining ?></strong>
+                                    day<?= $renewDaysRemaining === 1 ? '' : 's' ?> remaining.
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </section>
+                <?php endif; ?>
+
+            </div>
+
+            <div>
+
+                <?php if ($hasOpenRequest): ?>
+                    <?php $lockPaymentStatus = strtolower(trim((string)($currentStatusPermit['payment_status'] ?? ''))); ?>
+
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            dark:border-slate-800
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                            <h2 class="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-slate-100">
+                                <i class="bi bi-lock-fill text-amber-700 dark:text-amber-300"></i>
+                                Application Temporarily Locked
+                            </h2>
+                        </div>
+
+                        <div class="p-5">
+                            <div
+                                class="
+                                    flex items-start gap-3
+                                    rounded-xl
+                                    border border-amber-200
+                                    bg-amber-50
+                                    p-4
+                                    text-sm leading-6 text-amber-800
+                                    dark:border-amber-900
+                                    dark:bg-amber-950/40
+                                    dark:text-amber-300
+                                "
+                            >
+                                <i class="bi bi-exclamation-triangle-fill mt-0.5 shrink-0"></i>
+
+                                <span>
+                                    <?php if ($lockPaymentStatus === 'for payment'): ?>
+                                        Your previous request is already approved and waiting for payment.
+                                        Finish that request before submitting another one.
+                                    <?php else: ?>
+                                        Your previous request is still waiting for admin approval.
+                                        Please wait before submitting another application.
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+
+                            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Plate Number
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc($currentStatusPermit['plate_no'] ?? '—') ?>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Vehicle Type
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc(vehicle_type_label((string)($currentStatusPermit['vehicle_type'] ?? 'car'))) ?>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Brand
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc($currentStatusPermit['vehicle_make'] ?? '—') ?>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Model
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc($currentStatusPermit['vehicle_model'] ?? '—') ?>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Color
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc($currentStatusPermit['vehicle_color'] ?? '—') ?>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Permit Duration
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc(duration_label((string)($currentStatusPermit['permit_duration'] ?? ''))) ?>
+                                    </div>
+                                </div>
+
+                                <div class="sm:col-span-2">
+                                    <label class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300">
+                                        Payment Method
+                                    </label>
+                                    <div class="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                        <?= esc(payment_label((string)($currentStatusPermit['payment_method'] ?? ''))) ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                disabled
+                                class="
+                                    mt-5 flex min-h-12 w-full
+                                    cursor-not-allowed
+                                    items-center justify-center gap-2
+                                    rounded-xl
+                                    bg-slate-100
+                                    px-5
+                                    text-sm font-bold text-slate-400
+                                    dark:bg-slate-800
+                                    dark:text-slate-500
+                                "
+                            >
+                                <i class="bi bi-lock-fill"></i>
+                                <?= $lockPaymentStatus === 'for payment'
+                                    ? 'Finish Payment First'
+                                    : 'Wait for Admin Approval'
+                                ?>
+                            </button>
+                        </div>
+                    </section>
+
+                <?php elseif ($renewPermitId > 0 && (!$renewPermit || !$renewAllowed)): ?>
+
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            dark:border-slate-800
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="p-6 text-center">
+                            <div
+                                class="
+                                    mx-auto flex h-16 w-16
+                                    items-center justify-center
+                                    rounded-2xl
+                                    bg-slate-100
+                                    text-2xl text-slate-400
+                                    dark:bg-slate-800
+                                    dark:text-slate-500
+                                "
+                            >
+                                <i class="bi bi-lock-fill"></i>
+                            </div>
+
+                            <h2 class="mt-4 text-lg font-bold text-slate-900 dark:text-slate-100">
+                                Renewal Not Yet Available
+                            </h2>
+
+                            <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
+                                Renewal requests are allowed only within
+                                <?= (int)$renewalWindowDays ?> days before an active permit expires.
+                            </p>
+
+                            <a
+                                href="homeowner_parking.php"
+                                class="
+                                    mt-5 inline-flex min-h-11
+                                    items-center justify-center gap-2
+                                    rounded-xl
+                                    border border-slate-200
+                                    bg-white px-4
+                                    text-sm font-semibold text-slate-700
+                                    transition hover:bg-slate-50
+                                    dark:border-slate-700
+                                    dark:bg-slate-800
+                                    dark:text-slate-200
+                                    dark:hover:bg-slate-700
+                                "
+                            >
+                                <i class="bi bi-arrow-left"></i>
+                                Back to Parking Overview
+                            </a>
+                        </div>
+                    </section>
+
+                <?php else: ?>
+
+                    <section
+                        class="
+                            overflow-hidden
+                            rounded-2xl
+                            border border-slate-200
+                            bg-white
+                            shadow-sm
+                            dark:border-slate-800
+                            dark:bg-slate-900
+                        "
+                    >
+                        <div class="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                            <h2 class="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-slate-100">
+                                <i class="bi bi-card-checklist text-emerald-700 dark:text-emerald-400"></i>
+                                <?= $renewAllowed && $renewPermit
+                                    ? 'Renew Permit'
+                                    : 'New Permit Application'
+                                ?>
+                            </h2>
+
+                            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                Complete the vehicle details and upload the required files.
+                            </p>
+                        </div>
+
+                        <form
+                            method="POST"
+                            enctype="multipart/form-data"
+                            class="p-5"
+                        >
+                            <input type="hidden" name="submit_permit" value="1">
+                            <input
+                                type="hidden"
+                                name="csrf_token"
+                                value="<?= esc($csrfParkingPermit) ?>"
+                            >
+                            <input
+                                type="hidden"
+                                name="renew_of_id"
+                                value="<?= $renewAllowed && $renewPermit ? (int)$renewPermit['id'] : 0 ?>"
+                            >
+
+                            <?php if ($renewAllowed && $renewPermit): ?>
+                                <div
+                                    class="
+                                        mb-5 flex items-start gap-3
+                                        rounded-xl
+                                        border border-violet-200
+                                        bg-violet-50
+                                        p-4
+                                        text-sm leading-6 text-violet-800
+                                        dark:border-violet-900
+                                        dark:bg-violet-950/40
+                                        dark:text-violet-300
+                                    "
+                                >
+                                    <i class="bi bi-arrow-repeat mt-0.5 shrink-0"></i>
+                                    <span>
+                                        You are renewing permit
+                                        <strong><?= esc($renewPermit['permit_no'] ?? '—') ?></strong>.
+                                        <?php if ($nextStartDate !== ''): ?>
+                                            The proposed new validity starts on
+                                            <strong><?= esc($nextStartDate) ?></strong>,
+                                            the day after the current permit expires.
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                            <?php else: ?>
+                                <div
+                                    class="
+                                        mb-5 flex items-start gap-3
+                                        rounded-xl
+                                        border border-blue-200
+                                        bg-blue-50
+                                        p-4
+                                        text-sm leading-6 text-blue-800
+                                        dark:border-blue-900
+                                        dark:bg-blue-950/40
+                                        dark:text-blue-300
+                                    "
+                                >
+                                    <i class="bi bi-info-circle-fill mt-0.5 shrink-0"></i>
+                                    <span>
+                                        Your proposed validity period is computed automatically
+                                        from the selected duration. Payment becomes available
+                                        only after HOA admin approval.
+                                    </span>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="grid gap-4 md:grid-cols-2">
+
+                                <div class="md:col-span-2">
+                                    <label
+                                        for="plate_no"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Plate Number
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="plate_no"
+                                        name="plate_no"
+                                        required
+                                        maxlength="30"
+                                        value="<?= esc($prefillPlate) ?>"
+                                        placeholder="e.g. ABC 1234"
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            placeholder:text-slate-400
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:placeholder:text-slate-500
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="vehicle_type"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Vehicle Type
+                                    </label>
+
+                                    <select
+                                        id="vehicle_type"
+                                        name="vehicle_type"
+                                        required
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                        <option value="">Select Vehicle Type</option>
+                                        <option value="car" <?= $prefillVehicleType === 'car' ? 'selected' : '' ?>>Car</option>
+                                        <option value="motorcycle" <?= $prefillVehicleType === 'motorcycle' ? 'selected' : '' ?>>Motorcycle</option>
+                                        <option value="ebike" <?= $prefillVehicleType === 'ebike' ? 'selected' : '' ?>>E-Bike</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="vehicle_make"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Brand
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="vehicle_make"
+                                        name="vehicle_make"
+                                        maxlength="80"
+                                        value="<?= esc($prefillMake) ?>"
+                                        placeholder="e.g. Toyota"
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            placeholder:text-slate-400
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:placeholder:text-slate-500
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="vehicle_model"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Model
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="vehicle_model"
+                                        name="vehicle_model"
+                                        maxlength="80"
+                                        value="<?= esc($prefillModel) ?>"
+                                        placeholder="e.g. Vios"
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            placeholder:text-slate-400
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:placeholder:text-slate-500
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="vehicle_color"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Color
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="vehicle_color"
+                                        name="vehicle_color"
+                                        maxlength="50"
+                                        value="<?= esc($prefillColor) ?>"
+                                        placeholder="e.g. White"
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            placeholder:text-slate-400
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:placeholder:text-slate-500
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="permit_duration"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Permit Duration
+                                    </label>
+
+                                    <select
+                                        id="permit_duration"
+                                        name="permit_duration"
+                                        required
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                        <option value="">Select Duration</option>
+                                        <option value="1_month">1 Month</option>
+                                        <option value="3_months">3 Months</option>
+                                        <option value="6_months">6 Months</option>
+                                        <option value="1_year">1 Year</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label
+                                        for="payment_method"
+                                        class="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-300"
+                                    >
+                                        Payment Method
+                                    </label>
+
+                                    <select
+                                        id="payment_method"
+                                        name="payment_method"
+                                        required
+                                        class="
+                                            min-h-12 w-full
+                                            rounded-xl
+                                            border border-slate-300
+                                            bg-white
+                                            px-3
+                                            text-base text-slate-800
+                                            outline-none transition
+                                            focus:border-emerald-500
+                                            focus:ring-4 focus:ring-emerald-100
+                                            dark:border-slate-700
+                                            dark:bg-slate-800
+                                            dark:text-slate-100
+                                            dark:focus:ring-emerald-950
+                                        "
+                                    >
+                                        <option value="">Select Payment</option>
+                                        <option value="online">Online Payment</option>
+                                        <option value="cash">Cash / Physical Payment</option>
+                                    </select>
+                                </div>
+
+                            </div>
+
+                            <div class="my-6 border-t border-slate-200 dark:border-slate-800"></div>
+
+                            <div>
+                                <h3 class="font-bold text-slate-900 dark:text-slate-100">
+                                    Upload Requirements
+                                </h3>
+                                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                    Upload the front and back of the vehicle.
+                                </p>
+                            </div>
+
+                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+
+                                <label
+                                    class="
+                                        block cursor-pointer
+                                        rounded-2xl
+                                        border border-dashed border-slate-300
+                                        bg-slate-50
+                                        p-4
+                                        transition
+                                        hover:border-emerald-400
+                                        hover:bg-emerald-50/50
+                                        dark:border-slate-700
+                                        dark:bg-slate-800/50
+                                        dark:hover:border-emerald-700
+                                        dark:hover:bg-emerald-950/20
+                                    "
+                                >
+                                    <span
+                                        class="
+                                            flex h-11 w-11 items-center justify-center
+                                            rounded-xl
+                                            bg-blue-100
+                                            text-lg text-blue-700
+                                            dark:bg-blue-950/60
+                                            dark:text-blue-300
+                                        "
+                                    >
+                                        <i class="bi bi-camera-fill"></i>
+                                    </span>
+
+                                    <span class="mt-3 block font-bold text-slate-900 dark:text-slate-100">
+                                        Vehicle Front
+                                    </span>
+
+                                    <span class="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                        JPG, JPEG, PNG, or PDF
+                                    </span>
+
+                                    <span
+                                        id="vehicleFrontName"
+                                        class="
+                                            mt-3 block
+                                            truncate
+                                            rounded-lg
+                                            bg-white
+                                            px-3 py-2
+                                            text-xs font-medium text-slate-500
+                                            ring-1 ring-slate-200
+                                            dark:bg-slate-900
+                                            dark:text-slate-400
+                                            dark:ring-slate-700
+                                        "
+                                    >
+                                        No file selected
+                                    </span>
+
+                                    <input
+                                        type="file"
+                                        name="vehicle_front"
+                                        id="vehicle_front"
+                                        required
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        class="sr-only"
+                                    >
+                                </label>
+
+                                <label
+                                    class="
+                                        block cursor-pointer
+                                        rounded-2xl
+                                        border border-dashed border-slate-300
+                                        bg-slate-50
+                                        p-4
+                                        transition
+                                        hover:border-emerald-400
+                                        hover:bg-emerald-50/50
+                                        dark:border-slate-700
+                                        dark:bg-slate-800/50
+                                        dark:hover:border-emerald-700
+                                        dark:hover:bg-emerald-950/20
+                                    "
+                                >
+                                    <span
+                                        class="
+                                            flex h-11 w-11 items-center justify-center
+                                            rounded-xl
+                                            bg-violet-100
+                                            text-lg text-violet-700
+                                            dark:bg-violet-950/60
+                                            dark:text-violet-300
+                                        "
+                                    >
+                                        <i class="bi bi-camera-reels-fill"></i>
+                                    </span>
+
+                                    <span class="mt-3 block font-bold text-slate-900 dark:text-slate-100">
+                                        Vehicle Back
+                                    </span>
+
+                                    <span class="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                        JPG, JPEG, PNG, or PDF
+                                    </span>
+
+                                    <span
+                                        id="vehicleBackName"
+                                        class="
+                                            mt-3 block
+                                            truncate
+                                            rounded-lg
+                                            bg-white
+                                            px-3 py-2
+                                            text-xs font-medium text-slate-500
+                                            ring-1 ring-slate-200
+                                            dark:bg-slate-900
+                                            dark:text-slate-400
+                                            dark:ring-slate-700
+                                        "
+                                    >
+                                        No file selected
+                                    </span>
+
+                                    <input
+                                        type="file"
+                                        name="vehicle_back"
+                                        id="vehicle_back"
+                                        required
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        class="sr-only"
+                                    >
+                                </label>
+
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="
+                                    mt-6
+                                    flex min-h-12 w-full
+                                    items-center justify-center gap-2
+                                    rounded-xl
+                                    bg-emerald-700
+                                    px-5
+                                    text-base font-semibold text-white
+                                    shadow-sm transition
+                                    hover:bg-emerald-800
+                                    focus:outline-none
+                                    focus:ring-4 focus:ring-emerald-100
+                                    dark:bg-emerald-600
+                                    dark:hover:bg-emerald-500
+                                    dark:focus:ring-emerald-950
+                                "
+                            >
+                                <i class="bi bi-send-fill"></i>
+                                <?= $renewAllowed && $renewPermit
+                                    ? 'Submit Renewal Request'
+                                    : 'Submit Permit Request'
+                                ?>
+                            </button>
+
+                            <p class="mt-3 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                Previous application details remain visible in the Current Status section.
+                            </p>
+                        </form>
+                    </section>
+
+                <?php endif; ?>
+
+            </div>
+        </div>
+
+        <footer
+            class="
+                mt-8
+                border-t border-slate-200
+                py-6
+                text-center text-sm text-slate-500
+                dark:border-slate-800
+                dark:text-slate-500
+            "
+        >
+            © South Meridian Homes Salitran
+        </footer>
+
+    </main>
+</div>
+
+<script>
+function initSidebarDropdown(buttonId, menuId, caretId) {
+    const button = document.getElementById(buttonId);
+    const menu = document.getElementById(menuId);
+    const caret = document.getElementById(caretId);
+
+    if (!button || !menu) return;
+
+    button.addEventListener('click', function () {
+        const willOpen = menu.classList.contains('hidden');
+
+        menu.classList.toggle('hidden');
+        button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+
+        if (caret) {
+            caret.classList.toggle('rotate-180', willOpen);
+        }
+    });
+}
+
+initSidebarDropdown('sbParkingToggle', 'sbParkingMenu', 'sbParkingCaret');
+initSidebarDropdown('sbTenantToggle', 'sbTenantMenu', 'sbTenantCaret');
+
+(function () {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const openButton = document.getElementById('sidebarToggle');
+    const closeButton = document.getElementById('sidebarClose');
+
+    if (!sidebar || !overlay || !openButton) return;
+
+    function openSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+    }
+
+    function closeSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+    }
+
+    openButton.addEventListener('click', openSidebar);
+    closeButton?.addEventListener('click', closeSidebar);
+    overlay.addEventListener('click', closeSidebar);
+
+    sidebar.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () {
+            if (window.innerWidth < 1024) {
+                closeSidebar();
+            }
+        });
+    });
+
+    window.addEventListener('resize', function () {
+        if (window.innerWidth >= 1024) {
+            overlay.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+    });
+})();
+
+(function () {
+    const toggle = document.getElementById('themeToggle');
+    const icon = document.getElementById('themeIcon');
+
+    if (!toggle || !icon) return;
+
+    function updateThemeIcon() {
+        const dark = document.documentElement.classList.contains('dark');
+
+        icon.className = dark
+            ? 'bi bi-sun-fill'
+            : 'bi bi-moon-stars-fill';
+
+        toggle.setAttribute(
+            'aria-label',
+            dark ? 'Switch to light mode' : 'Switch to dark mode'
+        );
+
+        toggle.setAttribute(
+            'title',
+            dark ? 'Switch to light mode' : 'Switch to dark mode'
+        );
+    }
+
+    toggle.addEventListener('click', function () {
+        const dark = document.documentElement.classList.toggle('dark');
+
+        localStorage.setItem(
+            'hoa-theme',
+            dark ? 'dark' : 'light'
+        );
+
+        updateThemeIcon();
+    });
+
+    updateThemeIcon();
+})();
+
+document
+    .querySelectorAll('.btn-close-flash')
+    .forEach(function (button) {
+        button.addEventListener('click', function () {
+            button.closest('.page-flash')?.remove();
+        });
+    });
+
+function bindFileName(inputId, labelId) {
+    const input = document.getElementById(inputId);
+    const label = document.getElementById(labelId);
+
+    if (!input || !label) return;
+
+    input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+
+        label.textContent = file
+            ? file.name
+            : 'No file selected';
+    });
+}
+
+bindFileName('vehicle_front', 'vehicleFrontName');
+bindFileName('vehicle_back', 'vehicleBackName');
+</script>
+
 </body>
 </html>

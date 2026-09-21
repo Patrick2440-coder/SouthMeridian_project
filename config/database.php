@@ -2,7 +2,7 @@
 $db_host = "localhost";
 $db_user = "root";
 $db_pass = "";
-$db_name = "u972459197_south_meridian.sql"; 
+$db_name = "u972459197_south_meridian"; 
 
 $conn = new mysqli(
     $db_host,

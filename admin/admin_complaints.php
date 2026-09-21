@@ -290,6 +290,26 @@ if ($selectedComplaintId > 0) {
   <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <!-- ADMIN DARK MODE -->
+<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+<script>
+(function () {
+    try {
+        const savedTheme = localStorage.getItem('hoa-theme');
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+
+        document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+})();
+</script>
 
   <style>
     .badge-soft { padding: .35rem .6rem; border-radius: 999px; font-weight: 800; font-size: 12px; }
@@ -408,51 +428,95 @@ if ($selectedComplaintId > 0) {
         grid-template-columns:1fr;
       }
     }
-    /* ACCESS TOAST */
+/* ACCESS TOAST */
 .access-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-  z-index: 99999;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: all .3s ease;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+
+    background: #ef4444;
+    color: #fff;
+
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
 }
 
 .access-toast.show {
-  opacity: 1;
-  transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
   </style>
 </head>
 <body>
 
-  <div class="header">
+<div class="header">
+
     <div class="header-left">
-      <div class="menu-icon dw dw-menu"></div>
-      <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
+        <div class="menu-icon dw dw-menu"></div>
+        <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
     </div>
 
     <div class="header-right">
-      <div class="user-info-dropdown">
-        <div class="dropdown">
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-            <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
 
-          </a>
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-          </div>
+        <!-- DARK MODE TOGGLE -->
+        <div class="admin-theme-switch">
+            <button type="button"
+                    id="themeToggle"
+                    class="admin-theme-toggle"
+                    aria-label="Switch theme"
+                    title="Switch theme">
+                <span id="themeIcon">☾</span>
+            </button>
         </div>
-      </div>
+
+        <!-- USER PROFILE -->
+        <div class="user-info-dropdown">
+            <div class="dropdown">
+
+                <a class="dropdown-toggle"
+                   href="#"
+                   role="button"
+                   data-toggle="dropdown">
+
+                    <span class="user-icon">
+                        <img src="vendors/images/photo1.jpg" alt="">
+                    </span>
+
+                </a>
+
+                <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
+
+                    <a class="dropdown-item" href="logout.php">
+                        <i class="dw dw-logout"></i>
+                        Log Out
+                    </a>
+
+                </div>
+
+            </div>
+        </div>
+
     </div>
-  </div>
+
+</div>
 
 <?php include 'sidebar.php'; ?>
 
@@ -710,6 +774,9 @@ if ($selectedComplaintId > 0) {
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+
+  <!-- ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
 
 <div id="accessToast" class="access-toast">
   🚫 You do not have access to that part.

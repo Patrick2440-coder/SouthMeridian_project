@@ -194,6 +194,20 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
 
   [$homeownerBlock, $homeownerLot] = subdivision_block_lot($homeowner);
   $mapLocation = $southMeridianLocations[$homeownerBlock . ':' . $homeownerLot] ?? null;
+  /*
+|--------------------------------------------------------------------------
+| South Meridian Map Cache Version
+|--------------------------------------------------------------------------
+*/
+
+$mapImageFile =
+    dirname(__DIR__) .
+    '/assets/img/south_meridian_block_lot_map.png';
+
+$mapImageVersion =
+    is_file($mapImageFile)
+        ? (int)filemtime($mapImageFile)
+        : time();
   $blockLotAddress = ($homeownerBlock > 0 && $homeownerLot > 0)
     ? ('Block ' . $homeownerBlock . ', Lot ' . $homeownerLot)
     : '';
@@ -343,7 +357,7 @@ if (($_GET['ajax'] ?? '') === 'homeowner_profile') {
                    data-block="<?= (int)$homeownerBlock ?>"
                    data-lot="<?= (int)$homeownerLot ?>"
                    data-street="<?= esc($mapLocation['street'] ?? '') ?>"
-                   data-map-image="../assets/img/south_meridian_block_lot_map.png"
+                   data-map-image="../assets/img/south_meridian_block_lot_map.png?v=<?= $mapImageVersion ?>"
                    class="rounded"></div>
             </div>
           </div>
@@ -592,26 +606,54 @@ $resultHO = $sqlHO->get_result();
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
 		
-		.access-toast {
-		  position: fixed;
-		  top: 20px;
-		  right: 20px;
-		  background: #ef4444;
-		  color: #fff;
-		  padding: 12px 18px;
-		  border-radius: 8px;
-		  font-weight: 600;
-		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-		  z-index: 99999;
-		  opacity: 0;
-		  transform: translateY(-10px);
-		  transition: all .3s ease;
-		}
+/* ACCESS TOAST */
+.access-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 
-		.access-toast.show {
-		  opacity: 1;
-		  transform: translateY(0);
-		}
+    background: #ef4444;
+    color: #fff;
+
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
+}
+
+.access-toast.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/*
+ * Bootstrap application toast is also in the top-right.
+ * Don't let an invisible toast block header buttons.
+ */
+#appToast {
+    pointer-events: none;
+}
+
+#appToast.show,
+#appToast.showing {
+    pointer-events: auto;
+}
 		
 		#viewHomeownerModal #coverMap{
 			min-height:320px;
@@ -648,7 +690,29 @@ $resultHO = $sqlHO->get_result();
 		.modal-backdrop.confirm-top{
 			z-index: 1070 !important;
 		}
-	</style>
+</style>
+
+<!-- ADMIN DARK MODE - keep this after all page CSS -->
+<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+<script>
+(function () {
+    try {
+        const savedTheme = localStorage.getItem('hoa-theme');
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+
+        document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+})();
+</script>
+
 </head>
 
 <body>
@@ -659,8 +723,20 @@ $resultHO = $sqlHO->get_result();
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
 
-		<div class="header-right">
-			<div class="user-notification">
+<div class="header-right">
+
+    <!-- DARK MODE TOGGLE -->
+    <div class="admin-theme-switch">
+        <button type="button"
+                id="themeToggle"
+                class="admin-theme-toggle"
+                aria-label="Switch theme"
+                title="Switch theme">
+            <span id="themeIcon">☾</span>
+        </button>
+    </div>
+
+    <div class="user-notification">
 				<div class="dropdown">
 					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
 						<i class="icon-copy dw dw-notification"></i>
@@ -1183,6 +1259,7 @@ $resultHO = $sqlHO->get_result();
 
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="vendors/scripts/admin_theme.js"></script>
 
 <script>
 function showToast(
