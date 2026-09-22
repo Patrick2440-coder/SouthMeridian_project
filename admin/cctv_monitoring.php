@@ -80,7 +80,7 @@ $cameras = [
         'name'      => 'Main Gate',
         'location'  => 'South Meridian Entrance',
         'phase'     => 'Common Area',
-        'video_id'  => 'a2iTBNqJoLk',
+        'video_id'  => 'FWvIPfxK5Jo',
         'enabled'   => true,
     ],
     [
@@ -88,7 +88,7 @@ $cameras = [
         'name'      => 'Phase Entrance',
         'location'  => $phase . ' Entrance',
         'phase'     => $phase,
-        'video_id'  => 'FWvIPfxK5Jo',
+        'video_id'  => 'Far_aDIwAyw',
         'enabled'   => true,
     ],
     [
@@ -96,7 +96,7 @@ $cameras = [
         'name'      => 'Basketball Court',
         'location'  => 'Community Court',
         'phase'     => 'Common Area',
-        'video_id'  => '',
+        'video_id'  => '2iENQ0dDmqI',
         'enabled'   => true,
     ],
     [
@@ -104,7 +104,7 @@ $cameras = [
         'name'      => 'Clubhouse',
         'location'  => 'Community Clubhouse',
         'phase'     => 'Common Area',
-        'video_id'  => '',
+        'video_id'  => '8ALC939509U',
         'enabled'   => true,
     ],
 ];
@@ -179,7 +179,12 @@ foreach ($cameras as $camera) {
         type="text/css"
         href="vendors/styles/style.css"
     >
-
+<!-- SHARED ADMIN LIGHT / DARK THEME -->
+<link
+    rel="stylesheet"
+    type="text/css"
+    href="vendors/styles/admin_theme.css"
+>
     <style>
         .cctv-kpi-card {
             height: 100%;
@@ -322,27 +327,113 @@ foreach ($cameras as $camera) {
             min-height: 38px;
         }
 
-        .access-toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #ef4444;
-            color: #fff;
-            padding: 12px 18px;
-            border-radius: 8px;
-            font-weight: 600;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-            z-index: 99999;
-            opacity: 0;
-            transform: translateY(-10px);
-            transition: all .3s ease;
-        }
+.access-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 
-        .access-toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    </style>
+    padding: 12px 18px;
+    border-radius: 8px;
+
+    font-weight: 600;
+
+    z-index: 99999;
+
+    opacity: 0;
+    visibility: hidden;
+
+    /*
+     * IMPORTANT:
+     * Invisible toast must not block
+     * the dark-mode button.
+     */
+    pointer-events: none;
+
+    transform: translateY(-10px);
+
+    transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
+}
+
+.access-toast.show {
+    opacity: 1;
+    visibility: visible;
+
+    pointer-events: auto;
+
+    transform: translateY(0);
+}
+/* =========================================================
+   CCTV-SPECIFIC DARK MODE
+   Base theme comes from admin_theme.css
+   ========================================================= */
+
+html.dark .cctv-kpi-label,
+html.dark .camera-meta {
+    color: var(--admin-muted) !important;
+}
+
+html.dark .cctv-kpi-value,
+html.dark .camera-card h5 {
+    color: var(--admin-text) !important;
+}
+
+
+/* Camera ID badge */
+html.dark .camera-id {
+    background: rgba(37, 99, 235, .15) !important;
+    color: #93c5fd !important;
+    border-color: rgba(59, 130, 246, .35) !important;
+}
+
+
+/* Online badge */
+html.dark .camera-online {
+    background: rgba(22, 163, 74, .14) !important;
+    color: #86efac !important;
+    border-color: rgba(34, 197, 94, .30) !important;
+}
+
+
+/* Camera video area */
+html.dark .camera-screen {
+    background: #020617 !important;
+}
+    </style>    
+<script>
+(function () {
+    try {
+
+        const savedTheme =
+            localStorage.getItem(
+                'hoa-theme'
+            );
+
+        const dark =
+            savedTheme === 'dark' ||
+            (
+                !savedTheme &&
+                window.matchMedia &&
+                window
+                    .matchMedia(
+                        '(prefers-color-scheme: dark)'
+                    )
+                    .matches
+            );
+
+        document
+            .documentElement
+            .classList
+            .toggle(
+                'dark',
+                dark
+            );
+
+    } catch (e) {}
+})();
+</script>
 </head>
 
 <body>
@@ -358,8 +449,24 @@ foreach ($cameras as $camera) {
         ></div>
     </div>
 
-    <div class="header-right">
-        <div class="user-info-dropdown">
+<div class="header-right">
+
+<div class="admin-theme-switch">
+
+    <button
+        type="button"
+        id="themeToggle"
+        class="admin-theme-toggle"
+        aria-label="Switch theme"
+        title="Switch theme"
+    >
+        <span id="themeIcon">☾</span>
+    </button>
+
+</div>
+
+
+    <div class="user-info-dropdown">
             <div class="dropdown">
                 <a
                     class="dropdown-toggle"
@@ -720,6 +827,8 @@ foreach ($cameras as $camera) {
 <script src="vendors/scripts/script.min.js"></script>
 <script src="vendors/scripts/process.js"></script>
 <script src="vendors/scripts/layout-settings.js"></script>
+<!-- SHARED ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
 
 <script>
 function reloadCamera(frameId) {

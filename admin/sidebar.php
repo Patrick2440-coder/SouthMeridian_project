@@ -193,11 +193,13 @@ $showSettings             = canAccess('settings', $allowedModules);
         <?php if ($showUserManagement): ?>
           <li class="dropdown">
             <a href="javascript:;"
-               class="dropdown-toggle <?= isMenuActive(['users-management.php', 'staff_management.php'], ['homeowners', 'officers']) ? 'active' : '' ?>">
+               class="dropdown-toggle <?= isMenuActive(    ['users-management.php', 'staff_management.php', 'login_security.php'],
+    ['homeowners', 'officers']) ? 'active' : '' ?>">
               <span class="micon dw dw-user"></span>
               <span class="mtext">User Management</span>
             </a>
-            <ul class="submenu" style="<?= isMenuActive(['users-management.php', 'staff_management.php'], ['homeowners', 'officers']) ? 'display:block;' : '' ?>">
+            <ul class="submenu" style="<?= isMenuActive(    ['users-management.php', 'staff_management.php', 'login_security.php'],
+    ['homeowners', 'officers']) ? 'display:block;' : '' ?>">
               <li>
                 <a href="users-management.php?view=homeowners"
                    class="menu-access-link <?= ($currentPage === 'users-management.php' && $view === 'homeowners') ? 'active' : '' ?>"
@@ -219,6 +221,16 @@ $showSettings             = canAccess('settings', $allowedModules);
                   Staff
                 </a>
               </li>
+
+              <li>
+  <a
+    href="login_security.php"
+    class="menu-access-link <?= $currentPage === 'login_security.php' ? 'active' : '' ?>"
+    data-module="user_management"
+  >
+    Login Security
+  </a>
+</li>
             </ul>
           </li>
         <?php endif; ?>

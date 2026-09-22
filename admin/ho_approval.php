@@ -584,7 +584,6 @@ $resultHO = $sqlHO->get_result();
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -690,6 +689,155 @@ $resultHO = $sqlHO->get_result();
 		.modal-backdrop.confirm-top{
 			z-index: 1070 !important;
 		}
+        /* =========================================================
+   BOOTSTRAP 5 + DATATABLES DARK TABLE FIX
+   ========================================================= */
+
+html.dark .table {
+    --bs-table-color: var(--admin-text);
+    --bs-table-bg: var(--admin-surface);
+
+    --bs-table-border-color:
+        var(--admin-border);
+
+    --bs-table-striped-color:
+        var(--admin-text);
+
+    --bs-table-striped-bg:
+        rgba(148, 163, 184, .055);
+
+    --bs-table-active-color:
+        var(--admin-text);
+
+    --bs-table-active-bg:
+        var(--admin-surface-3);
+
+    --bs-table-hover-color:
+        #ffffff;
+
+    --bs-table-hover-bg:
+        var(--admin-hover);
+
+    color:
+        var(--admin-text) !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+/*
+ * Bootstrap 5 paints the actual TD/TH cells,
+ * not only the TR.
+ */
+html.dark .table > :not(caption) > * > * {
+    color:
+        var(--admin-text) !important;
+
+    border-color:
+        var(--admin-border) !important;
+
+    box-shadow:
+        inset 0 0 0 9999px
+        var(--bs-table-bg-state,
+            var(--bs-table-bg-type,
+                var(--bs-table-accent-bg,
+                    var(--bs-table-bg)
+                )
+            )
+        ) !important;
+}
+
+
+/* Normal DataTables rows */
+html.dark table.dataTable tbody tr,
+html.dark table.dataTable tbody td {
+    color:
+        var(--admin-text) !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+/* Even rows */
+html.dark table.dataTable tbody tr.even > *,
+html.dark table.dataTable tbody tr:nth-child(even) > * {
+    background-color:
+        var(--admin-surface) !important;
+
+    color:
+        var(--admin-text) !important;
+}
+
+
+/* Odd / striped rows */
+html.dark table.dataTable tbody tr.odd > *,
+html.dark table.dataTable.table-striped
+    tbody
+    tr:nth-of-type(odd) > * {
+
+    background-color:
+        var(--admin-surface-2) !important;
+
+    color:
+        var(--admin-text) !important;
+}
+
+
+/* Header */
+html.dark table.dataTable thead th,
+html.dark table.dataTable thead td,
+html.dark .table thead th {
+    background:
+        var(--admin-surface-2) !important;
+
+    color:
+        #f8fafc !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+/* Hover */
+html.dark table.dataTable tbody tr:hover > *,
+html.dark .table-hover tbody tr:hover > * {
+    background:
+        var(--admin-hover) !important;
+
+    color:
+        #ffffff !important;
+}
+
+
+/* DataTables controls */
+html.dark .dataTables_wrapper
+    .dataTables_length,
+html.dark .dataTables_wrapper
+    .dataTables_filter,
+html.dark .dataTables_wrapper
+    .dataTables_info {
+    color:
+        var(--admin-muted) !important;
+}
+
+
+html.dark .dataTables_wrapper
+    .dataTables_filter input,
+html.dark .dataTables_wrapper
+    .dataTables_length select {
+
+    background:
+        var(--admin-input) !important;
+
+    color:
+        var(--admin-text) !important;
+
+    border:
+        1px solid
+        var(--admin-border) !important;
+}
 </style>
 
 <!-- ADMIN DARK MODE - keep this after all page CSS -->
@@ -842,9 +990,6 @@ $resultHO = $sqlHO->get_result();
         <?php elseif ($resultImportQueue && $resultImportQueue->num_rows > 0): ?>
           <div class="mb-4">
             <h6 class="fw-bold mb-2">Excel Imported Residents</h6>
-            <small class="text-muted d-block mb-3">
-              All nonblank Excel imports are listed here. Duplicates stay in the duplicate queue; valid imports come from homeowner records.
-            </small>
             <div class="table-responsive">
               <table id="importQueueTable" class="table table-bordered table-striped align-middle" style="width:100%">
                 <thead>
@@ -975,7 +1120,7 @@ $resultHO = $sqlHO->get_result();
           </div>
         <?php endif; ?>
 
-        <h6 class="fw-bold mb-2">Homeowners Awaiting Final Approval</h6>
+        <h6 class="fw-bold mb-2">Homeowners Awaiting for Approval</h6>
 
 				<div class="table-responsive">
 					<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">

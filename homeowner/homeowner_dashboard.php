@@ -1306,36 +1306,126 @@ usort($notifItems, function($a,$b){
 $notifItems = array_slice($notifItems, 0, 8);
 
 $commentsByAnn = [];
-if (!empty($annFeed)) {
-  $ids = array_map(fn($a)=>(int)$a['id'], $annFeed);
-  $in  = implode(',', array_fill(0, count($ids), '?'));
-  $types = str_repeat('i', count($ids));
+$attachmentsByAnn = [];
 
-$sql = "
+if (!empty($annFeed)) {
+  $ids = array_map(
+    fn($a) => (int)$a['id'],
+    $annFeed
+  );
+
+  $in = implode(
+    ',',
+    array_fill(
+      0,
+      count($ids),
+      '?'
+    )
+  );
+
+  $types = str_repeat(
+    'i',
+    count($ids)
+  );
+
+  /*
+  |--------------------------------------------------------------------------
+  | Load comments for visible announcements
+  |--------------------------------------------------------------------------
+  */
+  $sql = "
     SELECT
-        ac.id,
-        ac.announcement_id,
-        ac.homeowner_id,
-        ac.comment,
-        ac.created_at,
-        h.first_name,
-        h.last_name,
-        h.profile_picture_path
+      ac.id,
+      ac.announcement_id,
+      ac.homeowner_id,
+      ac.comment,
+      ac.created_at,
+      h.first_name,
+      h.last_name,
+      h.profile_picture_path
     FROM announcement_comments ac
     JOIN homeowners h
-        ON h.id = ac.homeowner_id
+      ON h.id = ac.homeowner_id
     WHERE ac.announcement_id IN ($in)
     ORDER BY ac.created_at ASC
-";
+  ";
+
   $stmt = $conn->prepare($sql);
   $stmt->bind_param($types, ...$ids);
   $stmt->execute();
   $res = $stmt->get_result();
-  while($r = $res->fetch_assoc()){
-    $aid = (int)$r['announcement_id'];
-    if (!isset($commentsByAnn[$aid])) $commentsByAnn[$aid] = [];
+
+  while ($r = $res->fetch_assoc()) {
+    $aid =
+      (int)$r['announcement_id'];
+
+    if (!isset($commentsByAnn[$aid])) {
+      $commentsByAnn[$aid] = [];
+    }
+
     $commentsByAnn[$aid][] = $r;
   }
+
+  $stmt->close();
+
+  /*
+  |--------------------------------------------------------------------------
+  | Load attachments for visible announcements
+  |--------------------------------------------------------------------------
+  */
+  $attachmentSql = "
+    SELECT
+      id,
+      announcement_id,
+      original_name,
+      stored_name,
+      file_path,
+      mime_type,
+      file_size
+    FROM announcement_attachments
+    WHERE announcement_id IN ($in)
+    ORDER BY id ASC
+  ";
+
+  $stmt =
+    $conn->prepare(
+      $attachmentSql
+    );
+
+  $stmt->bind_param(
+    $types,
+    ...$ids
+  );
+
+  $stmt->execute();
+
+  $attachmentResult =
+    $stmt->get_result();
+
+  while (
+    $attachment =
+      $attachmentResult->fetch_assoc()
+  ) {
+    $announcementId =
+      (int)$attachment['announcement_id'];
+
+    if (
+      !isset(
+        $attachmentsByAnn[
+          $announcementId
+        ]
+      )
+    ) {
+      $attachmentsByAnn[
+        $announcementId
+      ] = [];
+    }
+
+    $attachmentsByAnn[
+      $announcementId
+    ][] = $attachment;
+  }
+
   $stmt->close();
 }
 
@@ -2553,31 +2643,37 @@ dark:bg-slate-800/70
              HOME LOCATION
              ================================================= -->
 
-        <section
-            class="
-                overflow-hidden
-                rounded-3xl
-                border border-slate-200
-                bg-white
-                shadow-sm
-                
-                dark:bg-slate-900 dark:border-slate-800
-"
-        >
+<section
+    class="
+        relative
+        isolate
+        z-0
 
-            <div
-                class="
-                    relative
-                    h-[220px]
-                    overflow-hidden
-                    bg-slate-200
+        overflow-hidden
+        rounded-3xl
+        border border-slate-200
+        bg-white
+        shadow-sm
 
-                    sm:h-[260px]
-                    lg:h-[300px]
-                    
-                    dark:bg-slate-800
-"
-            >
+        dark:bg-slate-900
+        dark:border-slate-800
+    "
+>
+
+<div
+    class="
+        relative
+        isolate
+        h-[220px]
+        overflow-hidden
+        bg-slate-200
+
+        sm:h-[260px]
+        lg:h-[300px]
+
+        dark:bg-slate-800
+    "
+>
 
 <?php if ($hasSubdivisionMap): ?>
 
@@ -4159,6 +4255,10 @@ dark:bg-slate-800/70
                                 $iLiked =
                                     ((int)$a['i_liked'] > 0);
 
+                                $announcementAttachments =
+                                    $attachmentsByAnn[$aid]
+                                    ?? [];
+
                                 $prio =
                                     (string)$a['priority'];
 
@@ -4359,6 +4459,312 @@ class="
                                     >
                                         <?= esc($a['message']) ?>
                                     </div>
+
+
+                                    <?php if (!empty($announcementAttachments)): ?>
+
+                                        <div class="mt-4 space-y-3">
+
+                                            <?php foreach ($announcementAttachments as $attachment): ?>
+
+                                                <?php
+                                                    $storedName =
+                                                        basename(
+                                                            (string)(
+                                                                $attachment['stored_name']
+                                                                ?? ''
+                                                            )
+                                                        );
+
+                                                    $originalName =
+                                                        trim(
+                                                            (string)(
+                                                                $attachment['original_name']
+                                                                ?? 'Attachment'
+                                                            )
+                                                        );
+
+                                                    $mimeType =
+                                                        strtolower(
+                                                            trim(
+                                                                (string)(
+                                                                    $attachment['mime_type']
+                                                                    ?? ''
+                                                                )
+                                                            )
+                                                        );
+
+                                                    $fileSize =
+                                                        (int)(
+                                                            $attachment['file_size']
+                                                            ?? 0
+                                                        );
+
+                                                    $extension =
+                                                        strtolower(
+                                                            pathinfo(
+                                                                $storedName !== ''
+                                                                    ? $storedName
+                                                                    : $originalName,
+                                                                PATHINFO_EXTENSION
+                                                            )
+                                                        );
+
+                                                    $imageExtensions = [
+                                                        'jpg',
+                                                        'jpeg',
+                                                        'png',
+                                                        'gif',
+                                                        'webp'
+                                                    ];
+
+                                                    $videoExtensions = [
+                                                        'mp4',
+                                                        'webm',
+                                                        'mov',
+                                                        'm4v'
+                                                    ];
+
+                                                    $isImageAttachment =
+                                                        str_starts_with(
+                                                            $mimeType,
+                                                            'image/'
+                                                        ) ||
+                                                        in_array(
+                                                            $extension,
+                                                            $imageExtensions,
+                                                            true
+                                                        );
+
+                                                    $isVideoAttachment =
+                                                        str_starts_with(
+                                                            $mimeType,
+                                                            'video/'
+                                                        ) ||
+                                                        in_array(
+                                                            $extension,
+                                                            $videoExtensions,
+                                                            true
+                                                        );
+
+                                                    /*
+                                                     * Always construct the public URL from the
+                                                     * stored filename instead of trusting an
+                                                     * arbitrary database path.
+                                                     */
+                                                    $attachmentUrl =
+                                                        $storedName !== ''
+                                                            ? '../admin/uploads/announcements/' .
+                                                              rawurlencode($storedName)
+                                                            : '';
+
+                                                    if ($fileSize >= 1048576) {
+                                                        $fileSizeLabel =
+                                                            number_format(
+                                                                $fileSize / 1048576,
+                                                                1
+                                                            ) .
+                                                            ' MB';
+
+                                                    } elseif ($fileSize >= 1024) {
+                                                        $fileSizeLabel =
+                                                            number_format(
+                                                                $fileSize / 1024,
+                                                                1
+                                                            ) .
+                                                            ' KB';
+
+                                                    } else {
+                                                        $fileSizeLabel =
+                                                            $fileSize .
+                                                            ' B';
+                                                    }
+
+                                                    $videoMime =
+                                                        $mimeType;
+
+                                                    if (
+                                                        !str_starts_with(
+                                                            $videoMime,
+                                                            'video/'
+                                                        )
+                                                    ) {
+                                                        $videoMime =
+                                                            match ($extension) {
+                                                                'webm' =>
+                                                                    'video/webm',
+
+                                                                'mov' =>
+                                                                    'video/quicktime',
+
+                                                                default =>
+                                                                    'video/mp4'
+                                                            };
+                                                    }
+                                                ?>
+
+
+                                                <?php if (
+                                                    $attachmentUrl !== '' &&
+                                                    $isImageAttachment
+                                                ): ?>
+
+                                                    <a
+                                                        href="<?= esc($attachmentUrl) ?>"
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        class="
+                                                            block
+                                                            overflow-hidden
+                                                            rounded-2xl
+                                                            border border-slate-200
+                                                            bg-slate-100
+
+                                                            dark:border-slate-700
+                                                            dark:bg-slate-800
+                                                        "
+                                                        title="Open image"
+                                                    >
+                                                        <img
+                                                            src="<?= esc($attachmentUrl) ?>"
+                                                            alt="<?= esc($originalName) ?>"
+                                                            class="
+                                                                max-h-[560px]
+                                                                w-full
+                                                                object-contain
+                                                            "
+                                                            loading="lazy"
+                                                        >
+                                                    </a>
+
+
+                                                <?php elseif (
+                                                    $attachmentUrl !== '' &&
+                                                    $isVideoAttachment
+                                                ): ?>
+
+                                                    <div
+                                                        class="
+                                                            overflow-hidden
+                                                            rounded-2xl
+                                                            border border-slate-200
+                                                            bg-black
+
+                                                            dark:border-slate-700
+                                                        "
+                                                    >
+                                                        <video
+                                                            controls
+                                                            playsinline
+                                                            preload="metadata"
+                                                            class="
+                                                                max-h-[560px]
+                                                                w-full
+                                                                bg-black
+                                                                object-contain
+                                                            "
+                                                        >
+                                                            <source
+                                                                src="<?= esc($attachmentUrl) ?>"
+                                                                type="<?= esc($videoMime) ?>"
+                                                            >
+
+                                                            Your browser does not support video playback.
+                                                        </video>
+                                                    </div>
+
+
+                                                <?php elseif ($attachmentUrl !== ''): ?>
+
+                                                    <a
+                                                        href="<?= esc($attachmentUrl) ?>"
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        class="
+                                                            flex
+                                                            items-center
+                                                            gap-3
+                                                            rounded-xl
+                                                            border border-slate-200
+                                                            bg-slate-50
+                                                            p-3
+                                                            transition
+
+                                                            hover:border-emerald-300
+                                                            hover:bg-emerald-50
+
+                                                            dark:border-slate-700
+                                                            dark:bg-slate-800
+                                                            dark:hover:border-emerald-800
+                                                            dark:hover:bg-emerald-950/30
+                                                        "
+                                                    >
+                                                        <div
+                                                            class="
+                                                                flex h-11 w-11
+                                                                shrink-0
+                                                                items-center
+                                                                justify-center
+                                                                rounded-xl
+                                                                bg-white
+                                                                text-lg
+                                                                text-emerald-700
+                                                                shadow-sm
+
+                                                                dark:bg-slate-900
+                                                                dark:text-emerald-400
+                                                            "
+                                                        >
+                                                            <i class="bi bi-paperclip"></i>
+                                                        </div>
+
+                                                        <div class="min-w-0 flex-1">
+
+                                                            <div
+                                                                class="
+                                                                    truncate
+                                                                    text-sm
+                                                                    font-semibold
+                                                                    text-slate-800
+
+                                                                    dark:text-slate-200
+                                                                "
+                                                            >
+                                                                <?= esc($originalName) ?>
+                                                            </div>
+
+                                                            <div
+                                                                class="
+                                                                    mt-0.5
+                                                                    text-xs
+                                                                    text-slate-500
+
+                                                                    dark:text-slate-400
+                                                                "
+                                                            >
+                                                                <?= esc($fileSizeLabel) ?>
+                                                                •
+                                                                Open attachment
+                                                            </div>
+
+                                                        </div>
+
+                                                        <i
+                                                            class="
+                                                                bi
+                                                                bi-box-arrow-up-right
+                                                                text-slate-400
+                                                            "
+                                                        ></i>
+                                                    </a>
+
+                                                <?php endif; ?>
+
+                                            <?php endforeach; ?>
+
+                                        </div>
+
+                                    <?php endif; ?>
 
                                 </div>
 
@@ -5217,30 +5623,40 @@ class="
             3300 - y;
 
 
-        const map =
-            L.map(
-                mapEl,
-                {
-                    crs: L.CRS.Simple,
+ const map =
+    L.map(
+        mapEl,
+        {
+            crs: L.CRS.Simple,
 
-                    center: [
-                        leafletY,
-                        x
-                    ],
+            center: [
+                leafletY,
+                x
+            ],
 
-                    zoom: -1,
+            zoom: -1,
 
-                    minZoom: -3,
-                    maxZoom: 3,
+            /*
+             * Static homeowner map.
+             * The resident should only see the
+             * exact property location.
+             */
+            zoomControl: false,
+            attributionControl: false,
 
-                    zoomSnap: 0.25,
+            dragging: false,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            touchZoom: false,
+            boxZoom: false,
+            keyboard: false,
 
-                    zoomControl: true,
-
-                    attributionControl: false
-                }
-            );
-
+            /*
+             * Prevent mobile tap/drag behaviour.
+             */
+            tap: false
+        }
+    );
 
         const mapBounds = [
             [0, 0],
@@ -5259,17 +5675,24 @@ class="
         /*
          * Exact homeowner property marker
          */
-        const marker =
-            L.marker(
-                [
-                    leafletY,
-                    x
-                ]
-            )
-            .addTo(
-                map
-            );
-
+ const marker =
+    L.marker(
+        [
+            leafletY,
+            x
+        ],
+        {
+            /*
+             * The pin is only a location indicator.
+             * It cannot be moved.
+             */
+            draggable: false,
+            keyboard: false
+        }
+    )
+    .addTo(
+        map
+    );
 
         /*
          * Safe popup content
@@ -5399,21 +5822,29 @@ class="
         }
 
 
-        const map =
-            L.map(
-                mapEl,
-                {
-                    zoomControl: false,
-                    attributionControl: false
-                }
-            )
-            .setView(
-                [
-                    lat,
-                    lng
-                ],
-                18
-            );
+const map =
+    L.map(
+        mapEl,
+        {
+            zoomControl: false,
+            attributionControl: false,
+
+            dragging: false,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            touchZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            tap: false
+        }
+    )
+    .setView(
+        [
+            lat,
+            lng
+        ],
+        18
+    );
 
 
         L.tileLayer(

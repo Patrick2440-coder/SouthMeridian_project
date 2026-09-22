@@ -3,125 +3,476 @@ session_start();
 
 // ===================== DB CONNECTION =====================
 require_once 'config/database.php';
+require_once 'login_security_helper.php';
 
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+function esc($v){
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+function login_json(array $payload, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+
+    echo json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE |
+        JSON_UNESCAPED_SLASHES
+    );
+
+    exit;
+}
+
+function login_admin_password_ok(string $entered, string $stored): bool
+{
+    $info = password_get_info($stored);
+
+    if (!empty($info['algo'])) {
+        return password_verify(
+            $entered,
+            $stored
+        );
+    }
+
+    return hash_equals(
+        $stored,
+        $entered
+    );
+}
 
 // ===================== AJAX LOGIN PROCESS =====================
 if (isset($_POST['action']) && $_POST['action'] === 'login') {
-    $email    = trim($_POST['email'] ?? '');
-    $password = (string)($_POST['password'] ?? '');
+    $email =
+        strtolower(
+            trim(
+                (string)($_POST['email'] ?? '')
+            )
+        );
 
-    if ($email === '' || $password === '') {
-        echo "Email and password are required";
-        exit;
+    $password =
+        (string)($_POST['password'] ?? '');
+
+    if (
+        $email === '' ||
+        $password === ''
+    ) {
+        login_json([
+            'success' => false,
+            'code' => 'validation',
+            'message' =>
+                'Email and password are required.'
+        ], 422);
     }
 
-    // ----------------- CLEAR PREVIOUS LOGIN KEYS (prevents conflicts) -----------------
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        login_json([
+            'success' => false,
+            'code' => 'validation',
+            'message' =>
+                'Please enter a valid email address.'
+        ], 422);
+    }
+
+    // ----------------- CLEAR PREVIOUS LOGIN KEYS -----------------
     unset(
-        $_SESSION['admin_id'], $_SESSION['admin_role'], $_SESSION['admin_phase'],
-        $_SESSION['homeowner_id'], $_SESSION['homeowner_role'], $_SESSION['homeowner_phase'],
-        $_SESSION['tenant_id'], $_SESSION['tenant_homeowner_id'], $_SESSION['tenant_role'], $_SESSION['tenant_phase'],
-        $_SESSION['user_id'], $_SESSION['role'], $_SESSION['phase']
+        $_SESSION['admin_id'],
+        $_SESSION['admin_role'],
+        $_SESSION['admin_phase'],
+        $_SESSION['homeowner_id'],
+        $_SESSION['homeowner_role'],
+        $_SESSION['homeowner_phase'],
+        $_SESSION['tenant_id'],
+        $_SESSION['tenant_homeowner_id'],
+        $_SESSION['tenant_role'],
+        $_SESSION['tenant_phase'],
+        $_SESSION['user_id'],
+        $_SESSION['role'],
+        $_SESSION['phase']
     );
 
-    // 1) Try admins first
-    $stmt = $conn->prepare("SELECT id, email, password, role, phase FROM admins WHERE email=? LIMIT 1");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $admin = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+    $account = null;
 
-    if ($admin) {
-        if ($password === $admin['password']) {
-            $_SESSION['admin_id']    = (int)$admin['id'];
-            $_SESSION['admin_role']  = (string)$admin['role'];
-            $_SESSION['admin_phase'] = (string)$admin['phase'];
-            $_SESSION['role']    = $_SESSION['admin_role'];
-            $_SESSION['phase']   = $_SESSION['admin_phase'];
-            $_SESSION['user_id'] = $_SESSION['admin_id'];
- 
-            echo ($_SESSION['admin_role'] === 'superadmin')
-                ? "superadmin/dashboard.php"
-                : "admin/dashboard.php";
-            exit;
-        } else {
-            echo "Incorrect password";
-            exit;
-        }
-    }
-
-   // 2) If not admin, try homeowners
+    // 1) Admins first - same priority as the original login flow.
     $stmt = $conn->prepare("
-        SELECT id, email, password, status, phase, IFNULL(must_change_password, 1) AS must_change_password
-        FROM homeowners
-        WHERE email=?
-        LIMIT 1
-    ");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $home = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if ($home) {
-        if ($home['status'] !== 'approved') {
-            echo "Your account is not approved yet.";
-            exit;
-        }
-
-        if (!password_verify($password, $home['password'])) {
-            echo "Incorrect password";
-            exit;
-        }
-
-        $_SESSION['homeowner_id']    = (int)$home['id'];
-        $_SESSION['homeowner_role']  = 'homeowner';
-        $_SESSION['homeowner_phase'] = (string)$home['phase'];
-        $_SESSION['role']            = 'homeowner';
-        $_SESSION['phase']           = $_SESSION['homeowner_phase'];
-        $_SESSION['user_id']         = $_SESSION['homeowner_id'];
-
-        echo "homeowner/homeowner_dashboard.php";
-        exit;
-    }
-
-    // 3) If not homeowner, try tenants
-    $stmt = $conn->prepare("
-        SELECT id, homeowner_id, email, password, status, phase
-        FROM tenants
+        SELECT
+            id,
+            email,
+            full_name,
+            password,
+            role,
+            phase,
+            position
+        FROM admins
         WHERE email = ?
         LIMIT 1
     ");
-    $stmt->bind_param("s", $email);
+
+    $stmt->bind_param(
+        's',
+        $email
+    );
+
     $stmt->execute();
-    $tenant = $stmt->get_result()->fetch_assoc();
+
+    $admin =
+        $stmt
+            ->get_result()
+            ->fetch_assoc();
+
     $stmt->close();
 
-    if (!$tenant) {
-        echo "Email not found";
-        exit;
+    if ($admin) {
+        $account = [
+            'type' => 'admin',
+            'id' => (int)$admin['id'],
+            'email' => (string)$admin['email'],
+            'name' =>
+                trim(
+                    (string)($admin['full_name'] ?? '')
+                ) ?: 'Administrator',
+            'phase' => (string)($admin['phase'] ?? ''),
+            'record' => $admin
+        ];
     }
 
-    if ($tenant['status'] !== 'active') {
-        echo "Your tenant account is inactive.";
-        exit;
+    // 2) Homeowners
+    if (!$account) {
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                email,
+                first_name,
+                last_name,
+                password,
+                status,
+                phase,
+                IFNULL(
+                    must_change_password,
+                    1
+                ) AS must_change_password
+            FROM homeowners
+            WHERE email = ?
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            's',
+            $email
+        );
+
+        $stmt->execute();
+
+        $home =
+            $stmt
+                ->get_result()
+                ->fetch_assoc();
+
+        $stmt->close();
+
+        if ($home) {
+            $account = [
+                'type' => 'homeowner',
+                'id' => (int)$home['id'],
+                'email' => (string)$home['email'],
+                'name' =>
+                    trim(
+                        (string)($home['first_name'] ?? '') .
+                        ' ' .
+                        (string)($home['last_name'] ?? '')
+                    ),
+                'phase' => (string)($home['phase'] ?? ''),
+                'record' => $home
+            ];
+        }
     }
 
-    if (!password_verify($password, $tenant['password'])) {
-        echo "Incorrect password";
-        exit;
+    // 3) Tenants
+    if (!$account) {
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                homeowner_id,
+                email,
+                first_name,
+                last_name,
+                password,
+                status,
+                phase
+            FROM tenants
+            WHERE email = ?
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            's',
+            $email
+        );
+
+        $stmt->execute();
+
+        $tenant =
+            $stmt
+                ->get_result()
+                ->fetch_assoc();
+
+        $stmt->close();
+
+        if ($tenant) {
+            $account = [
+                'type' => 'tenant',
+                'id' => (int)$tenant['id'],
+                'email' => (string)$tenant['email'],
+                'name' =>
+                    trim(
+                        (string)($tenant['first_name'] ?? '') .
+                        ' ' .
+                        (string)($tenant['last_name'] ?? '')
+                    ),
+                'phase' => (string)($tenant['phase'] ?? ''),
+                'record' => $tenant
+            ];
+        }
     }
 
-    $_SESSION['tenant_id']           = (int)$tenant['id'];
-    $_SESSION['tenant_homeowner_id'] = (int)$tenant['homeowner_id'];
-    $_SESSION['tenant_role']         = 'tenant';
-    $_SESSION['tenant_phase']        = (string)$tenant['phase'];
-    $_SESSION['role']                = 'tenant';
-    $_SESSION['phase']               = $_SESSION['tenant_phase'];
-    $_SESSION['user_id']             = $_SESSION['tenant_id'];
+    if (!$account) {
+        login_json([
+            'success' => false,
+            'code' => 'not_found',
+            'message' =>
+                'Email not found.'
+        ], 404);
+    }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Check existing cooldown / hard lock BEFORE password verification.
+    |--------------------------------------------------------------------------
+    */
+    try {
+        $block =
+            security_current_block(
+                $conn,
+                $account
+            );
+    } catch (\mysqli_sql_exception $e) {
+        error_log(
+            'Login security tables missing/error: ' .
+            $e->getMessage()
+        );
 
-    echo "homeowner/homeowner_dashboard.php";
-    exit;
+        login_json([
+            'success' => false,
+            'code' => 'security_setup_required',
+            'message' =>
+                'Login security is not initialized yet. Run login_security_tables.sql in phpMyAdmin.'
+        ], 500);
+    }
+
+    if (!empty($block['blocked'])) {
+        login_json([
+            'success' => false,
+            'code' =>
+                (string)($block['code'] ?? 'blocked'),
+            'seconds' =>
+                (int)($block['seconds'] ?? 0),
+            'message' =>
+                (string)($block['message'] ?? 'Login temporarily unavailable.')
+        ], 423);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Account-status checks
+    |--------------------------------------------------------------------------
+    */
+    if (
+        $account['type'] === 'homeowner' &&
+        (string)$account['record']['status'] !== 'approved'
+    ) {
+        login_json([
+            'success' => false,
+            'code' => 'not_approved',
+            'message' =>
+                'Your account is not approved yet.'
+        ], 403);
+    }
+
+    if (
+        $account['type'] === 'tenant' &&
+        (string)$account['record']['status'] !== 'active'
+    ) {
+        login_json([
+            'success' => false,
+            'code' => 'inactive',
+            'message' =>
+                'Your tenant account is inactive.'
+        ], 403);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Verify password
+    |--------------------------------------------------------------------------
+    */
+    $passwordOk = false;
+
+    if ($account['type'] === 'admin') {
+        $passwordOk =
+            login_admin_password_ok(
+                $password,
+                (string)$account['record']['password']
+            );
+    } else {
+        $passwordOk =
+            password_verify(
+                $password,
+                (string)$account['record']['password']
+            );
+    }
+
+    if (!$passwordOk) {
+        try {
+            $failure =
+                security_register_failure(
+                    $conn,
+                    $account
+                );
+        } catch (\mysqli_sql_exception $e) {
+            error_log(
+                'Login security failure error: ' .
+                $e->getMessage()
+            );
+
+            login_json([
+                'success' => false,
+                'code' => 'security_error',
+                'message' =>
+                    'Unable to process login security. Please try again.'
+            ], 500);
+        }
+
+        login_json([
+            'success' => false,
+            'code' =>
+                (string)($failure['code'] ?? 'incorrect'),
+            'seconds' =>
+                (int)($failure['seconds'] ?? 0),
+            'remaining_attempts' =>
+                (int)($failure['remaining_attempts'] ?? 0),
+            'mail_sent' =>
+                (bool)($failure['mail_sent'] ?? false),
+            'appeal_url' =>
+                (string)($failure['appeal_url'] ?? ''),
+            'message' =>
+                (string)($failure['message'] ?? 'Incorrect password.')
+        ], 401);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Successful password resets the failed-attempt cycle
+    |--------------------------------------------------------------------------
+    */
+    security_reset_after_success(
+        $conn,
+        $account
+    );
+
+    session_regenerate_id(true);
+
+    if ($account['type'] === 'admin') {
+        $admin = $account['record'];
+
+        $_SESSION['admin_id'] =
+            (int)$admin['id'];
+
+        $_SESSION['admin_role'] =
+            (string)$admin['role'];
+
+        $_SESSION['admin_phase'] =
+            (string)$admin['phase'];
+
+        $_SESSION['role'] =
+            $_SESSION['admin_role'];
+
+        $_SESSION['phase'] =
+            $_SESSION['admin_phase'];
+
+        $_SESSION['user_id'] =
+            $_SESSION['admin_id'];
+
+        if (!empty($admin['position'])) {
+            $_SESSION['position'] =
+                (string)$admin['position'];
+        }
+
+        login_json([
+            'success' => true,
+            'redirect' =>
+                $_SESSION['admin_role'] === 'superadmin'
+                    ? 'superadmin/dashboard.php'
+                    : 'admin/dashboard.php'
+        ]);
+    }
+
+    if ($account['type'] === 'homeowner') {
+        $home = $account['record'];
+
+        $_SESSION['homeowner_id'] =
+            (int)$home['id'];
+
+        $_SESSION['homeowner_role'] =
+            'homeowner';
+
+        $_SESSION['homeowner_phase'] =
+            (string)$home['phase'];
+
+        $_SESSION['role'] =
+            'homeowner';
+
+        $_SESSION['phase'] =
+            $_SESSION['homeowner_phase'];
+
+        $_SESSION['user_id'] =
+            $_SESSION['homeowner_id'];
+
+        login_json([
+            'success' => true,
+            'redirect' =>
+                'homeowner/homeowner_dashboard.php'
+        ]);
+    }
+
+    $tenant = $account['record'];
+
+    $_SESSION['tenant_id'] =
+        (int)$tenant['id'];
+
+    $_SESSION['tenant_homeowner_id'] =
+        (int)$tenant['homeowner_id'];
+
+    $_SESSION['tenant_role'] =
+        'tenant';
+
+    $_SESSION['tenant_phase'] =
+        (string)$tenant['phase'];
+
+    $_SESSION['role'] =
+        'tenant';
+
+    $_SESSION['phase'] =
+        $_SESSION['tenant_phase'];
+
+    $_SESSION['user_id'] =
+        $_SESSION['tenant_id'];
+
+    login_json([
+        'success' => true,
+        'redirect' =>
+            'homeowner/homeowner_dashboard.php'
+    ]);
 }
 ?>
 
@@ -149,6 +500,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
   <link href="assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
 
   <link href="assets/css/main.css" rel="stylesheet">
+
+  <!-- LANDING PAGE THEME: use the same hoa-theme preference as the rest of the system -->
+  <script>
+  (function () {
+    try {
+      const savedTheme = localStorage.getItem('hoa-theme');
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+
+      document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+  })();
+  </script>
 
   <!-- Landing-page-only refinements. main.css is NOT modified. -->
   <style>
@@ -863,6 +1232,372 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
         height:160px;
       }
     }
+
+
+    /* =========================================================
+       LANDING PAGE DARK MODE
+       Uses html.dark + localStorage key: hoa-theme
+       ========================================================= */
+
+    html.dark{
+      color-scheme:dark;
+
+      --smh-green:#2fc27b;
+      --smh-green-dark:#20a866;
+      --smh-deep:#d7f5e5;
+      --smh-soft:#111b17;
+      --smh-line:#263a31;
+      --smh-text:#e6f2ec;
+      --smh-muted:#9fb0a7;
+    }
+
+    html.dark body.index-page{
+      background:#0b1210;
+      color:#e6f2ec;
+    }
+
+    html.dark .main{
+      background:#0b1210;
+    }
+
+    /* Header stays green, but the dropdown/mobile surfaces follow dark mode */
+    html.dark #header{
+      background:#075f38;
+      border-bottom-color:rgba(255,255,255,.10);
+      box-shadow:0 8px 28px rgba(0,0,0,.24);
+    }
+
+    /* Theme toggle */
+    .landing-theme-toggle{
+      width:42px;
+      height:42px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:0;
+      border:1px solid rgba(255,255,255,.28);
+      border-radius:50%;
+      background:rgba(255,255,255,.10);
+      color:#fff;
+      font-size:18px;
+      line-height:1;
+      transition:.22s ease;
+      cursor:pointer;
+    }
+
+    .landing-theme-toggle:hover,
+    .landing-theme-toggle:focus{
+      color:#fff;
+      background:rgba(255,255,255,.18);
+      border-color:rgba(255,255,255,.45);
+      transform:translateY(-1px);
+      outline:none;
+    }
+
+    @media(min-width:1200px){
+      #navmenu .theme-toggle-item{
+        display:flex;
+        align-items:center;
+        margin-left:5px;
+      }
+    }
+
+    /* Hero */
+    html.dark #hero{
+      background:
+        radial-gradient(circle at 85% 20%, rgba(47,194,123,.10), transparent 28%),
+        linear-gradient(135deg,#0b1210 0%,#0e1713 55%,#101d17 100%);
+    }
+
+    html.dark .landing-eyebrow{
+      color:#7ee2ad;
+      background:rgba(47,194,123,.10);
+      border-color:rgba(47,194,123,.24);
+    }
+
+    html.dark .landing-hero-title{
+      color:#eef8f3;
+    }
+
+    html.dark .landing-hero-title span{
+      color:#55d794;
+    }
+
+    html.dark .landing-hero-text{
+      color:#a7b8af;
+    }
+
+    html.dark .landing-secondary-btn{
+      color:#9ce8bd;
+      background:#121d18;
+      border-color:#2a4035;
+    }
+
+    html.dark .landing-secondary-btn:hover{
+      color:#c9f7dc;
+      background:#17251e;
+      border-color:#3a5a49;
+    }
+
+    html.dark .landing-stats{
+      background:#101915;
+      border-color:#263a31;
+      box-shadow:0 16px 35px rgba(0,0,0,.22);
+    }
+
+    html.dark .landing-stat{
+      border-color:#263a31;
+    }
+
+    html.dark .landing-stat strong{
+      color:#55d794;
+    }
+
+    html.dark .landing-stat span{
+      color:#9eb0a7;
+    }
+
+    html.dark .landing-hero-image-main{
+      border-color:#17241d;
+      box-shadow:0 28px 65px rgba(0,0,0,.34);
+    }
+
+    html.dark .landing-community-card{
+      background:rgba(16,25,21,.96);
+      border-color:#2a4035;
+      box-shadow:0 18px 42px rgba(0,0,0,.30);
+    }
+
+    html.dark .landing-community-card span{
+      color:#8ea198;
+    }
+
+    html.dark .landing-community-card strong{
+      color:#e5f4ec;
+    }
+
+    /* Shared section typography */
+    html.dark .landing-section-label{
+      color:#55d794;
+    }
+
+    html.dark .landing-section-title{
+      color:#ecf7f1;
+    }
+
+    html.dark .landing-section-text{
+      color:#9fb0a7;
+    }
+
+    /* About */
+    html.dark #about{
+      background:#0b1210;
+    }
+
+    html.dark .landing-about-image{
+      box-shadow:0 24px 55px rgba(0,0,0,.30);
+    }
+
+    html.dark .landing-about-point{
+      background:#101915;
+      border-color:#263a31;
+    }
+
+    html.dark .landing-about-point i{
+      color:#62dda0;
+      background:rgba(47,194,123,.10);
+    }
+
+    html.dark .landing-about-point strong{
+      color:#e0f0e8;
+    }
+
+    html.dark .landing-about-point span{
+      color:#96a99f;
+    }
+
+    /* Features */
+    html.dark #features{
+      background:#0f1814 !important;
+    }
+
+    html.dark .landing-feature-card{
+      background:#121d18;
+      border-color:#263a31;
+    }
+
+    html.dark .landing-feature-card:hover{
+      border-color:#365545;
+      box-shadow:0 18px 38px rgba(0,0,0,.28);
+    }
+
+    html.dark .landing-feature-icon{
+      color:#62dda0;
+      background:rgba(47,194,123,.10);
+    }
+
+    html.dark .landing-feature-card h5{
+      color:#e8f5ee;
+    }
+
+    html.dark .landing-feature-card p{
+      color:#98aaa0;
+    }
+
+    /* App section */
+    html.dark #download-app{
+      background:#0b1210 !important;
+    }
+
+    html.dark .landing-app-wrap{
+      background:linear-gradient(135deg,#092c1f 0%,#075f38 100%);
+      box-shadow:0 25px 60px rgba(0,0,0,.32);
+    }
+
+    html.dark .landing-download-btn{
+      background:#f4f8f6;
+      color:#173d2b;
+    }
+
+    html.dark .landing-download-btn:hover{
+      background:#fff;
+      color:#173d2b;
+    }
+
+    /* Login + Android notice modals */
+    html.dark .modal-backdrop.show{
+      opacity:.72;
+    }
+
+    html.dark #loginModal .modal-content,
+    html.dark #androidNoticeModal .modal-content{
+      background:#111a16;
+      color:#e7f1eb;
+      border:1px solid #2a4035 !important;
+      box-shadow:0 28px 75px rgba(0,0,0,.50);
+    }
+
+    html.dark #loginModal .modal-body,
+    html.dark #androidNoticeModal .modal-body,
+    html.dark #androidNoticeModal .modal-footer{
+      background:#111a16;
+      color:#e7f1eb;
+    }
+
+    html.dark #loginModal .modal-header,
+    html.dark #androidNoticeModal .modal-header{
+      background:#075f38 !important;
+      border-bottom-color:#2a4035;
+    }
+
+    html.dark #loginModal .text-muted,
+    html.dark #androidNoticeModal .text-muted{
+      color:#9aaca2 !important;
+    }
+
+    html.dark #loginModal .text-success{
+      color:#6ce0a5 !important;
+    }
+
+    html.dark #loginModal .form-control{
+      background:#0c1410;
+      color:#e7f1eb;
+      border-color:#31483c;
+    }
+
+    html.dark #loginModal .form-control:focus{
+      background:#0c1410;
+      color:#fff;
+      border-color:#3ecb83;
+      box-shadow:0 0 0 .2rem rgba(62,203,131,.13);
+    }
+
+    html.dark #loginModal .form-floating > label{
+      color:#8fa197;
+    }
+
+    html.dark #loginModal .form-floating > .form-control:focus ~ label,
+    html.dark #loginModal .form-floating > .form-control:not(:placeholder-shown) ~ label{
+      color:#8fa197;
+    }
+
+    html.dark #loginModal .form-floating > label::after{
+      background:transparent !important;
+    }
+
+    html.dark #androidNoticeModal .modal-footer{
+      border-top-color:#2a4035 !important;
+    }
+
+    html.dark #androidNoticeModal .btn-outline-secondary{
+      color:#cbd7d0;
+      border-color:#52665b;
+    }
+
+    html.dark #androidNoticeModal .btn-outline-secondary:hover{
+      color:#fff;
+      background:#26372f;
+      border-color:#52665b;
+    }
+
+    /* Footer */
+    html.dark #footer{
+      background:#064f30;
+    }
+
+    html.dark #footer .copyright{
+      background:rgba(0,0,0,.14);
+    }
+
+    /* Bootstrap/mobile navigation */
+    html.dark .mobile-nav-active .navmenu{
+      background:rgba(3,10,7,.62);
+    }
+
+    html.dark .mobile-nav-active .navmenu > ul{
+      background:#111a16;
+      border:1px solid #293d33;
+      box-shadow:0 16px 42px rgba(0,0,0,.34);
+    }
+
+    html.dark .mobile-nav-active .navmenu a,
+    html.dark .mobile-nav-active .navmenu a:focus{
+      color:#dcebe3;
+    }
+
+    html.dark .mobile-nav-active .navmenu a:hover,
+    html.dark .mobile-nav-active .navmenu .active{
+      color:#72dfa8;
+    }
+
+    /* Scroll to top / preloader */
+    html.dark #scroll-top{
+      background:#15965a;
+      color:#fff;
+    }
+
+    html.dark #preloader{
+      background:#0b1210;
+    }
+
+    @media(max-width:1199px){
+      .theme-toggle-item{
+        padding:10px 20px;
+      }
+
+      .theme-toggle-item .landing-theme-toggle{
+        width:100%;
+        height:44px;
+        border-radius:12px;
+        background:#0f6f42;
+        border-color:#0f6f42;
+      }
+
+      html.dark .theme-toggle-item .landing-theme-toggle{
+        background:#173225;
+        border-color:#315340;
+      }
+    }
   </style>
 </head>
 
@@ -882,6 +1617,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
           <li><a href="#about">About</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#download-app">Download App</a></li>
+
+          <li class="theme-toggle-item">
+            <button
+              type="button"
+              id="landingThemeToggle"
+              class="landing-theme-toggle"
+              aria-label="Switch to dark mode"
+              title="Switch theme"
+            >
+              <i id="landingThemeIcon" class="bi bi-moon-stars-fill"></i>
+            </button>
+          </li>
+
           <li>
             <a href="#" class="landing-login" data-bs-toggle="modal" data-bs-target="#loginModal">
               Log in
@@ -925,6 +1673,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
             <div class="loading text-primary mb-2" style="display:none;">Checking credentials...</div>
             <div class="error-message text-danger mb-2" style="display:none;"></div>
+            <div class="security-actions mb-2" style="display:none;"></div>
 
             <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
               Log in
@@ -1404,41 +2153,267 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
   <script src="assets/js/main.js"></script>
 
+
   <script>
-    document.getElementById("loginForm").addEventListener("submit", function(e) {
-      e.preventDefault();
+  (function () {
+    const root = document.documentElement;
+    const toggle = document.getElementById('landingThemeToggle');
+    const icon = document.getElementById('landingThemeIcon');
 
-      const form = this;
-      const loading = form.querySelector('.loading');
-      const error = form.querySelector('.error-message');
+    if (!toggle || !icon) return;
 
-      loading.style.display = 'block';
-      error.style.display = 'none';
+    function isDark() {
+      return root.classList.contains('dark');
+    }
 
-      const formData = new FormData(form);
-      formData.append('action', 'login');
+    function syncThemeButton() {
+      const dark = isDark();
 
-      fetch('index.php', {
-        method: 'POST',
-        body: formData
-      })
-      .then(res => res.text())
-      .then(data => {
-        loading.style.display = 'none';
+      icon.className = dark
+        ? 'bi bi-sun-fill'
+        : 'bi bi-moon-stars-fill';
 
-        if (data.includes('.php')) {
-          window.location.href = data.trim();
-        } else {
-          error.innerText = data;
-          error.style.display = 'block';
-        }
-      })
-      .catch(() => {
-        loading.style.display = 'none';
-        error.innerText = "An error occurred. Try again.";
-        error.style.display = 'block';
-      });
+      toggle.setAttribute(
+        'aria-label',
+        dark
+          ? 'Switch to light mode'
+          : 'Switch to dark mode'
+      );
+
+      toggle.setAttribute(
+        'title',
+        dark
+          ? 'Switch to light mode'
+          : 'Switch to dark mode'
+      );
+    }
+
+    toggle.addEventListener('click', function () {
+      const nextDark = !isDark();
+
+      root.classList.toggle('dark', nextDark);
+
+      try {
+        localStorage.setItem(
+          'hoa-theme',
+          nextDark ? 'dark' : 'light'
+        );
+      } catch (e) {}
+
+      syncThemeButton();
     });
+
+    syncThemeButton();
+  })();
+  </script>
+
+  <script>
+  (function () {
+    const form = document.getElementById('loginForm');
+
+    if (!form) return;
+
+    const loading =
+      form.querySelector('.loading');
+
+    const errorBox =
+      form.querySelector('.error-message');
+
+    const securityActions =
+      form.querySelector('.security-actions');
+
+    const submitButton =
+      form.querySelector('button[type="submit"]');
+
+    let cooldownTimer = null;
+
+    function clearCooldownTimer() {
+      if (cooldownTimer) {
+        clearInterval(cooldownTimer);
+        cooldownTimer = null;
+      }
+    }
+
+    function resetSecurityActions() {
+      if (!securityActions) return;
+
+      securityActions.innerHTML = '';
+      securityActions.style.display = 'none';
+    }
+
+    function showError(message) {
+      errorBox.textContent =
+        message || 'Unable to sign in.';
+
+      errorBox.style.display =
+        'block';
+    }
+
+    function startCooldown(seconds) {
+      clearCooldownTimer();
+
+      let remaining =
+        Math.max(
+          1,
+          Number(seconds || 10)
+        );
+
+      submitButton.disabled = true;
+
+      function paint() {
+        showError(
+          `Too many incorrect passwords. Try again in ${remaining} second${remaining === 1 ? '' : 's'}.`
+        );
+
+        submitButton.textContent =
+          `Locked (${remaining}s)`;
+      }
+
+      paint();
+
+      cooldownTimer =
+        setInterval(
+          function () {
+            remaining--;
+
+            if (remaining <= 0) {
+              clearCooldownTimer();
+              submitButton.disabled = false;
+              submitButton.textContent = 'Log in';
+
+              showError(
+                'You may try again. Three more incorrect passwords will lock the account until an administrator unlocks it.'
+              );
+
+              return;
+            }
+
+            paint();
+          },
+          1000
+        );
+    }
+
+    function showAppeal(data) {
+      if (!securityActions) return;
+
+      const url =
+        String(data.appeal_url || '');
+
+      const emailMessage =
+        data.mail_sent
+          ? '<div class="small text-muted mb-2">A security notification and appeal link were sent to your account email.</div>'
+          : '<div class="small text-warning mb-2">The security email could not be delivered. You can still submit the appeal using the button below.</div>';
+
+      securityActions.innerHTML =
+        emailMessage +
+        (
+          url
+            ? `<a class="btn btn-outline-danger btn-sm w-100 fw-semibold" href="${url}">
+                 <i class="bi bi-shield-exclamation me-1"></i>
+                 Submit Unlock Appeal
+               </a>`
+            : `<div class="small text-muted">
+                 Use the appeal link sent to your email. An administrator must unlock the account.
+               </div>`
+        );
+
+      securityActions.style.display =
+        'block';
+    }
+
+    form.addEventListener(
+      'submit',
+      async function (event) {
+        event.preventDefault();
+
+        if (submitButton.disabled) {
+          return;
+        }
+
+        clearCooldownTimer();
+        resetSecurityActions();
+
+        loading.style.display = 'block';
+        errorBox.style.display = 'none';
+
+        const originalButtonText =
+          submitButton.textContent;
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Checking...';
+
+        try {
+          const formData =
+            new FormData(form);
+
+          formData.append(
+            'action',
+            'login'
+          );
+
+          const response =
+            await fetch(
+              'index.php',
+              {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+              }
+            );
+
+          const data =
+            await response.json();
+
+          loading.style.display =
+            'none';
+
+          if (
+            data.success &&
+            data.redirect
+          ) {
+            window.location.href =
+              data.redirect;
+
+            return;
+          }
+
+          showError(
+            data.message ||
+            'Unable to sign in.'
+          );
+
+          if (data.code === 'cooldown') {
+            startCooldown(
+              data.seconds || 10
+            );
+            return;
+          }
+
+          if (data.code === 'hard_locked') {
+            showAppeal(data);
+          }
+
+        } catch (error) {
+          loading.style.display =
+            'none';
+
+          showError(
+            'An error occurred. Try again.'
+          );
+
+        } finally {
+          if (!cooldownTimer) {
+            submitButton.disabled =
+              false;
+
+            submitButton.textContent =
+              'Log in';
+          }
+        }
+      }
+    );
+  })();
   </script>
 
 </body>

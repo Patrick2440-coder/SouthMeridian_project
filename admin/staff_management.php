@@ -549,12 +549,19 @@ $stmt->close();
       box-shadow: 0 6px 18px rgba(0,0,0,0.2);
       z-index: 99999;
       opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
       transform: translateY(-10px);
-      transition: all .3s ease;
+      transition:
+        opacity .3s ease,
+        transform .3s ease,
+        visibility .3s ease;
     }
 
     .access-toast.show {
       opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
       transform: translateY(0);
     }
 
@@ -633,6 +640,236 @@ $stmt->close();
       }
     }
   </style>
+
+  <!-- SHARED ADMIN LIGHT / DARK THEME -->
+  <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+  <style>
+    /* =========================================================
+       STAFF MANAGEMENT - DARK MODE EXTENSIONS
+       Base Admin theme comes from admin_theme.css
+       ========================================================= */
+
+    html.dark .kpi-label,
+    html.dark .mini-muted {
+      color: var(--admin-muted) !important;
+    }
+
+    html.dark .kpi-value,
+    html.dark .staff-card,
+    html.dark .modalx .box {
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .text-secondary,
+    html.dark .text-muted {
+      color: var(--admin-muted) !important;
+    }
+
+    html.dark .text-blue {
+      color: #93c5fd !important;
+    }
+
+    /* Custom Staff Management modals */
+    html.dark .modalx {
+      background: rgba(2, 6, 23, .72) !important;
+    }
+
+    html.dark .modalx .box {
+      background: var(--admin-surface) !important;
+      border: 1px solid var(--admin-border) !important;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .45) !important;
+    }
+
+    html.dark .modalx .boxhead {
+      background: var(--admin-surface) !important;
+      color: var(--admin-text) !important;
+      border-bottom-color: var(--admin-border) !important;
+    }
+
+    html.dark .modalx .closebtn {
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .staff-card {
+      background: var(--admin-surface-2) !important;
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .photo-preview {
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark hr {
+      border-top-color: var(--admin-border) !important;
+    }
+
+    /* Soft badges */
+    html.dark .badge-soft-warning {
+      background: rgba(217, 119, 6, .16) !important;
+      border-color: rgba(245, 158, 11, .35) !important;
+      color: #fcd34d !important;
+    }
+
+    html.dark .badge-soft-success {
+      background: rgba(22, 163, 74, .16) !important;
+      border-color: rgba(34, 197, 94, .35) !important;
+      color: #86efac !important;
+    }
+
+    html.dark .badge-soft-info {
+      background: rgba(37, 99, 235, .16) !important;
+      border-color: rgba(59, 130, 246, .35) !important;
+      color: #93c5fd !important;
+    }
+
+    html.dark .badge-soft-secondary {
+      background: var(--admin-surface-3) !important;
+      border-color: var(--admin-border) !important;
+      color: #cbd5e1 !important;
+    }
+
+    html.dark .badge-soft-danger {
+      background: rgba(220, 38, 38, .16) !important;
+      border-color: rgba(239, 68, 68, .35) !important;
+      color: #fca5a5 !important;
+    }
+
+    /* Bootstrap / DataTables tables */
+    html.dark .table,
+    html.dark table.dataTable {
+      color: var(--admin-text) !important;
+      background: var(--admin-surface) !important;
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .table thead th,
+    html.dark .table-light th,
+    html.dark table.dataTable thead th,
+    html.dark table.dataTable thead td {
+      background: var(--admin-surface-2) !important;
+      color: #f8fafc !important;
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .table tbody td,
+    html.dark .table tbody th,
+    html.dark table.dataTable tbody td {
+      color: var(--admin-text) !important;
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .table-striped tbody tr:nth-of-type(odd),
+    html.dark .table-striped tbody tr:nth-of-type(odd) > *,
+    html.dark table.dataTable.stripe tbody tr.odd,
+    html.dark table.dataTable.display tbody tr.odd {
+      background: var(--admin-surface-2) !important;
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .table-striped tbody tr:nth-of-type(even),
+    html.dark .table-striped tbody tr:nth-of-type(even) > *,
+    html.dark table.dataTable tbody tr.even {
+      background: var(--admin-surface) !important;
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .table-hover tbody tr:hover,
+    html.dark .table-hover tbody tr:hover > *,
+    html.dark table.dataTable tbody tr:hover {
+      background: var(--admin-hover) !important;
+      color: #ffffff !important;
+    }
+
+    /* DataTables controls */
+    html.dark .dataTables_wrapper,
+    html.dark .dataTables_wrapper .dataTables_length,
+    html.dark .dataTables_wrapper .dataTables_filter,
+    html.dark .dataTables_wrapper .dataTables_info,
+    html.dark .dataTables_wrapper .dataTables_paginate {
+      color: var(--admin-muted) !important;
+    }
+
+    html.dark .dataTables_wrapper .dataTables_filter input,
+    html.dark .dataTables_wrapper .dataTables_length select {
+      background: var(--admin-input) !important;
+      color: var(--admin-text) !important;
+      border: 1px solid var(--admin-border) !important;
+    }
+
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+      color: var(--admin-text) !important;
+      border-color: var(--admin-border) !important;
+      background: var(--admin-surface-2) !important;
+    }
+
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover,
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+      color: #ffffff !important;
+      border-color: #2563eb !important;
+      background: #2563eb !important;
+    }
+
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+      color: #64748b !important;
+      background: transparent !important;
+      border-color: transparent !important;
+    }
+
+    /* Form elements inside the custom modals */
+    html.dark .modalx label,
+    html.dark .modalx b,
+    html.dark .modalx .font-weight-bold {
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .modalx .form-control {
+      background: var(--admin-input) !important;
+      color: var(--admin-text) !important;
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .modalx .form-control:focus {
+      background: var(--admin-input) !important;
+      color: var(--admin-text) !important;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 .2rem rgba(59, 130, 246, .18) !important;
+    }
+
+    html.dark .modalx .form-control::placeholder {
+      color: #64748b !important;
+    }
+
+    html.dark .modalx .form-control[readonly] {
+      background: var(--admin-surface-3) !important;
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .doc-link {
+      color: #93c5fd !important;
+    }
+  </style>
+
+  <!-- Apply the saved theme before the page is painted -->
+  <script>
+  (function () {
+    try {
+      const savedTheme = localStorage.getItem('hoa-theme');
+
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+
+      document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+  })();
+  </script>
+
 </head>
 <body>
 
@@ -643,6 +880,20 @@ $stmt->close();
     </div>
 
     <div class="header-right">
+
+      <!-- SHARED ADMIN DARK MODE TOGGLE -->
+      <div class="admin-theme-switch">
+        <button
+          type="button"
+          id="themeToggle"
+          class="admin-theme-toggle"
+          aria-label="Switch theme"
+          title="Switch theme"
+        >
+          <span id="themeIcon">☾</span>
+        </button>
+      </div>
+
       <div class="user-info-dropdown">
         <div class="dropdown">
           <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
@@ -1158,6 +1409,9 @@ $stmt->close();
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+
+  <!-- SHARED ADMIN DARK MODE -->
+  <script src="vendors/scripts/admin_theme.js"></script>
 
   <script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
   <script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>

@@ -1,166 +1,623 @@
 <?php
 require_once __DIR__ . "/finance_helpers.php";
 require_once 'admin_access.php';
+
 requireAccess('finance');
-require_admin();    
+require_admin();
+
 $conn = db_conn();
+
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
+
+date_default_timezone_set('Asia/Manila');
 
 $myPhase = admin_phase($conn);
 [$phase, $canPickPhase] = phase_scope_clause($myPhase);
 $adminId = admin_id();
 
-// Save monthly dues setting
+function financeDuesRedirect(bool $canPickPhase, string $phase): void {
+  $url = 'finance_dues.php';
+
+  if ($canPickPhase) {
+    $url .= '?phase=' . urlencode($phase);
+  }
+
+  header('Location: ' . $url);
+  exit;
+}
+
+function financeDuesFlash(string $type, string $message): void {
+  $_SESSION['finance_dues_flash'] = [
+    'type' => $type,
+    'message' => $message
+  ];
+}
+
+/* =========================
+   ADMIN POSITION / WRITE ACCESS
+   ========================= */
+$stmt = $conn->prepare("
+  SELECT role, position
+  FROM admins
+  WHERE id = ?
+  LIMIT 1
+");
+$stmt->bind_param("i", $adminId);
+$stmt->execute();
+$adminRow = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$adminRole = trim((string)($adminRow['role'] ?? ''));
+$adminPosition = trim((string)($adminRow['position'] ?? ''));
+
+/*
+|--------------------------------------------------------------------------
+| Finance write ownership
+|--------------------------------------------------------------------------
+| Treasurer manages dues and manual/cash payments.
+| Other officers with Finance permission can still view the page.
+| President approval is handled later in finance_reports.php.
+*/
+$canManageDues = ($adminPosition === 'Treasurer');
+
+/* =========================
+   CSRF
+   ========================= */
+if (empty($_SESSION['csrf_finance_dues'])) {
+  $_SESSION['csrf_finance_dues'] = bin2hex(random_bytes(32));
+}
+$csrfToken = (string)$_SESSION['csrf_finance_dues'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $postedCsrf = (string)($_POST['csrf'] ?? '');
+
+  if (
+    $postedCsrf === '' ||
+    !hash_equals($csrfToken, $postedCsrf)
+  ) {
+    financeDuesFlash(
+      'danger',
+      'Your session token is no longer valid. Please refresh the page and try again.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+}
+
+/* =========================
+   CURRENT DUES SETTING
+   ========================= */
+$stmt = $conn->prepare("
+  SELECT monthly_dues
+  FROM finance_dues_settings
+  WHERE phase = ?
+  LIMIT 1
+");
+$stmt->bind_param("s", $phase);
+$stmt->execute();
+$monthly_dues = (float)(
+  $stmt->get_result()->fetch_assoc()['monthly_dues']
+  ?? 0
+);
+$stmt->close();
+
+$currentYear = (int)date('Y');
+$currentMonth = (int)date('n');
+$currentPeriodKey = ($currentYear * 100) + $currentMonth;
+
+/* =========================
+   SAVE MONTHLY DUES SETTING
+   ========================= */
 if (isset($_POST['save_dues'])) {
+  if (!$canManageDues) {
+    financeDuesFlash(
+      'danger',
+      'Only the Treasurer can change the monthly dues amount.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
   $dues = (float)($_POST['monthly_dues'] ?? 0);
-  if ($dues < 0) $dues = 0;
+
+  if ($dues < 0 || $dues > 1000000) {
+    financeDuesFlash(
+      'danger',
+      'Please enter a valid monthly dues amount.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
 
   $stmt = $conn->prepare("
-    INSERT INTO finance_dues_settings (phase, monthly_dues, updated_by_admin_id)
+    INSERT INTO finance_dues_settings
+      (phase, monthly_dues, updated_by_admin_id)
     VALUES (?,?,?)
     ON DUPLICATE KEY UPDATE
-      monthly_dues=VALUES(monthly_dues),
-      updated_by_admin_id=VALUES(updated_by_admin_id)
+      monthly_dues = VALUES(monthly_dues),
+      updated_by_admin_id = VALUES(updated_by_admin_id)
   ");
-  $stmt->bind_param("sdi", $phase, $dues, $adminId);
+  $stmt->bind_param(
+    "sdi",
+    $phase,
+    $dues,
+    $adminId
+  );
   $stmt->execute();
   $stmt->close();
 
-  header("Location: finance_dues.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
-  exit;
+  financeDuesFlash(
+    'success',
+    'Monthly dues amount updated successfully.'
+  );
+  financeDuesRedirect($canPickPhase, $phase);
 }
 
-// Record payment
+/* =========================
+   RECORD MANUAL / CASH PAYMENT
+   ========================= */
 if (isset($_POST['record_payment'])) {
-  $homeowner_id = (int)($_POST['homeowner_id'] ?? 0);
-  $year  = (int)($_POST['pay_year'] ?? (int)date('Y'));
-  $month = (int)($_POST['pay_month'] ?? (int)date('n'));
-  $amount = (float)($_POST['amount'] ?? 0);
-  $ref = trim($_POST['reference_no'] ?? '');
-  $notes = trim($_POST['notes'] ?? '');
-
-  if ($homeowner_id > 0 && $month >= 1 && $month <= 12 && $year >= 2000 && $amount > 0) {
-    $stmt = $conn->prepare("
-      INSERT INTO finance_payments
-        (homeowner_id, phase, pay_year, pay_month, amount, status, reference_no, notes, created_by_admin_id)
-      VALUES (?,?,?,?,?,'paid',?,?,?)
-      ON DUPLICATE KEY UPDATE
-        amount=VALUES(amount),
-        status='paid',
-        reference_no=VALUES(reference_no),
-        notes=VALUES(notes)
-    ");
-    $stmt->bind_param("isiidssi", $homeowner_id, $phase, $year, $month, $amount, $ref, $notes, $adminId);
-    $stmt->execute();
-    $stmt->close();
+  if (!$canManageDues) {
+    financeDuesFlash(
+      'danger',
+      'Only the Treasurer can record manual monthly dues payments.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
   }
 
-  header("Location: finance_dues.php" . ($canPickPhase ? ("?phase=" . urlencode($phase)) : ""));
-  exit;
+  $homeownerId = (int)($_POST['homeowner_id'] ?? 0);
+  $year = (int)($_POST['pay_year'] ?? $currentYear);
+  $month = (int)($_POST['pay_month'] ?? $currentMonth);
+
+  $referenceNo = mb_substr(
+    trim((string)($_POST['reference_no'] ?? '')),
+    0,
+    100
+  );
+
+  $notes = mb_substr(
+    trim((string)($_POST['notes'] ?? '')),
+    0,
+    255
+  );
+
+  if ($monthly_dues <= 0) {
+    financeDuesFlash(
+      'danger',
+      'Set the monthly dues amount first before recording a payment.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  if (
+    $homeownerId <= 0 ||
+    $year < 2000 ||
+    $year > $currentYear ||
+    $month < 1 ||
+    $month > 12
+  ) {
+    financeDuesFlash(
+      'danger',
+      'Please select a valid homeowner and payment period.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  $paymentPeriodKey = ($year * 100) + $month;
+
+  if ($paymentPeriodKey > $currentPeriodKey) {
+    financeDuesFlash(
+      'danger',
+      'Future monthly dues cannot be marked as paid.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  $stmt = $conn->prepare("
+    SELECT
+      id,
+      first_name,
+      last_name,
+      created_at
+    FROM homeowners
+    WHERE id = ?
+      AND phase = ?
+      AND status = 'approved'
+    LIMIT 1
+  ");
+  $stmt->bind_param(
+    "is",
+    $homeownerId,
+    $phase
+  );
+  $stmt->execute();
+  $homeowner = $stmt->get_result()->fetch_assoc();
+  $stmt->close();
+
+  if (!$homeowner) {
+    financeDuesFlash(
+      'danger',
+      'The selected homeowner is not an approved homeowner in this phase.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  $accountStartTs = strtotime(
+    (string)($homeowner['created_at'] ?? '')
+  );
+
+  if (!$accountStartTs) {
+    financeDuesFlash(
+      'danger',
+      'The homeowner account start date could not be verified.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  $accountStartKey =
+    ((int)date('Y', $accountStartTs) * 100) +
+    (int)date('n', $accountStartTs);
+
+  if ($paymentPeriodKey < $accountStartKey) {
+    financeDuesFlash(
+      'danger',
+      'This homeowner was not yet subject to monthly dues for the selected period.'
+    );
+    financeDuesRedirect($canPickPhase, $phase);
+  }
+
+  try {
+    $conn->begin_transaction();
+
+    $stmt = $conn->prepare("
+      SELECT id, status
+      FROM finance_payments
+      WHERE homeowner_id = ?
+        AND pay_year = ?
+        AND pay_month = ?
+      LIMIT 1
+      FOR UPDATE
+    ");
+    $stmt->bind_param(
+      "iii",
+      $homeownerId,
+      $year,
+      $month
+    );
+    $stmt->execute();
+    $existingPayment = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (
+      $existingPayment &&
+      (string)$existingPayment['status'] === 'paid'
+    ) {
+      $conn->rollback();
+
+      financeDuesFlash(
+        'warning',
+        'This homeowner already has a paid record for the selected month. No existing payment was changed.'
+      );
+      financeDuesRedirect($canPickPhase, $phase);
+    }
+
+    $amount = $monthly_dues;
+
+    if ($existingPayment) {
+      $paymentId = (int)$existingPayment['id'];
+
+      $stmt = $conn->prepare("
+        UPDATE finance_payments
+        SET
+          phase = ?,
+          amount = ?,
+          status = 'paid',
+          paid_at = NOW(),
+          reference_no = ?,
+          notes = ?,
+          created_by_admin_id = ?
+        WHERE id = ?
+          AND homeowner_id = ?
+      ");
+      $stmt->bind_param(
+        "sdssiii",
+        $phase,
+        $amount,
+        $referenceNo,
+        $notes,
+        $adminId,
+        $paymentId,
+        $homeownerId
+      );
+      $stmt->execute();
+      $stmt->close();
+    } else {
+      $stmt = $conn->prepare("
+        INSERT INTO finance_payments
+        (
+          homeowner_id,
+          phase,
+          pay_year,
+          pay_month,
+          amount,
+          status,
+          paid_at,
+          reference_no,
+          notes,
+          created_by_admin_id
+        )
+        VALUES (
+          ?,?,?,?,?,
+          'paid',
+          NOW(),
+          ?,?,?
+        )
+      ");
+      $stmt->bind_param(
+        "isiidssi",
+        $homeownerId,
+        $phase,
+        $year,
+        $month,
+        $amount,
+        $referenceNo,
+        $notes,
+        $adminId
+      );
+      $stmt->execute();
+      $stmt->close();
+    }
+
+    $conn->commit();
+
+    $homeownerName = trim(
+      (string)($homeowner['first_name'] ?? '') .
+      ' ' .
+      (string)($homeowner['last_name'] ?? '')
+    );
+
+    financeDuesFlash(
+      'success',
+      'Payment recorded for ' .
+      $homeownerName .
+      ' — ' .
+      date('F', mktime(0, 0, 0, $month, 1)) .
+      ' ' .
+      $year .
+      '.'
+    );
+
+  } catch (Throwable $e) {
+    try {
+      $conn->rollback();
+    } catch (Throwable $ignored) {
+    }
+
+    error_log(
+      'Finance dues manual payment failed: ' .
+      $e->getMessage()
+    );
+
+    financeDuesFlash(
+      'danger',
+      'The payment could not be recorded. Please try again.'
+    );
+  }
+
+  financeDuesRedirect($canPickPhase, $phase);
 }
 
-// ---- Unpaid list filter ----
-$selYear  = (int)($_GET['year'] ?? (int)date('Y'));
-$selMonth = (int)($_GET['month'] ?? (int)date('n'));
-if ($selMonth < 1 || $selMonth > 12) $selMonth = (int)date('n');
+/* =========================
+   UNPAID LIST FILTER
+   ========================= */
+$selYear = (int)($_GET['year'] ?? $currentYear);
+$selMonth = (int)($_GET['month'] ?? $currentMonth);
 
-// Unpaid = approved homeowners in phase with NO payment record for selected year/month
+if (
+  $selYear < 2000 ||
+  $selYear > $currentYear
+) {
+  $selYear = $currentYear;
+}
+
+if (
+  $selMonth < 1 ||
+  $selMonth > 12
+) {
+  $selMonth = $currentMonth;
+}
+
+$selectedPeriodKey =
+  ($selYear * 100) +
+  $selMonth;
+
+if ($selectedPeriodKey > $currentPeriodKey) {
+  $selYear = $currentYear;
+  $selMonth = $currentMonth;
+}
+
+$periodEnd = date(
+  'Y-m-t',
+  strtotime(
+    sprintf(
+      '%04d-%02d-01',
+      $selYear,
+      $selMonth
+    )
+  )
+);
+
 $stmt = $conn->prepare("
-  SELECT h.id, h.first_name, h.last_name, h.house_lot_number, h.email
+  SELECT
+    h.id,
+    h.first_name,
+    h.last_name,
+    h.house_lot_number,
+    h.email,
+    h.created_at
   FROM homeowners h
   LEFT JOIN finance_payments p
     ON p.homeowner_id = h.id
+   AND p.phase = h.phase
    AND p.pay_year = ?
    AND p.pay_month = ?
+   AND p.status = 'paid'
   WHERE h.phase = ?
     AND h.status = 'approved'
+    AND DATE(h.created_at) <= ?
     AND p.id IS NULL
-  ORDER BY h.last_name, h.first_name
+  ORDER BY
+    h.last_name,
+    h.first_name
 ");
-$stmt->bind_param("iis", $selYear, $selMonth, $phase);
+$stmt->bind_param(
+  "iiss",
+  $selYear,
+  $selMonth,
+  $phase,
+  $periodEnd
+);
 $stmt->execute();
 $unpaid = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Fetch dues setting
-$stmt = $conn->prepare("SELECT monthly_dues FROM finance_dues_settings WHERE phase=? LIMIT 1");
-$stmt->bind_param("s", $phase);
-$stmt->execute();
-$monthly_dues = (float)($stmt->get_result()->fetch_assoc()['monthly_dues'] ?? 0);
-$stmt->close();
-
-// Homeowners list in this phase
+/* =========================
+   HOMEOWNER LIST
+   ========================= */
 $stmt = $conn->prepare("
-  SELECT id, first_name, last_name, house_lot_number, status, email
+  SELECT
+    id,
+    first_name,
+    last_name,
+    house_lot_number,
+    status,
+    email,
+    created_at
   FROM homeowners
-  WHERE phase=? AND status='approved'
-  ORDER BY last_name, first_name
+  WHERE phase = ?
+    AND status = 'approved'
+  ORDER BY
+    last_name,
+    first_name
 ");
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $homeowners = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Defaults
-$defYear = (int)date('Y');
-$defMonth = (int)date('n');
+$defYear = $currentYear;
+$defMonth = $currentMonth;
 
-// Payment history (recent)
+/* =========================
+   PAYMENT HISTORY
+   ========================= */
 $stmt = $conn->prepare("
-  SELECT p.*, h.first_name, h.last_name, h.house_lot_number
+  SELECT
+    p.*,
+    h.first_name,
+    h.last_name,
+    h.house_lot_number
   FROM finance_payments p
-  JOIN homeowners h ON h.id = p.homeowner_id
-  WHERE p.phase=?
-  ORDER BY p.paid_at DESC
+  JOIN homeowners h
+    ON h.id = p.homeowner_id
+  WHERE p.phase = ?
+    AND h.phase = ?
+  ORDER BY
+    COALESCE(p.paid_at, p.created_at) DESC,
+    p.id DESC
   LIMIT 200
 ");
-$stmt->bind_param("s", $phase);
+$stmt->bind_param(
+  "ss",
+  $phase,
+  $phase
+);
 $stmt->execute();
 $payments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Build modal transaction data for unpaid homeowners
+/* =========================
+   MODAL TRANSACTION DATA
+   ========================= */
 $txData = [];
 
 foreach ($unpaid as $u) {
-  $hid   = (int)$u['id'];
+  $hid = (int)$u['id'];
   $email = trim((string)($u['email'] ?? ''));
-  $name  = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+
+  $name = trim(
+    (string)($u['first_name'] ?? '') .
+    ' ' .
+    (string)($u['last_name'] ?? '')
+  );
 
   $txData[$hid] = [
     'id' => $hid,
     'name' => $name,
     'email' => $email,
-    'house_lot_number' => (string)($u['house_lot_number'] ?? ''),
+    'house_lot_number' =>
+      (string)($u['house_lot_number'] ?? ''),
     'dues' => [],
     'donations' => []
   ];
 }
 
-// Dues for modal
 $stmt = $conn->prepare("
-  SELECT p.homeowner_id, p.pay_year, p.pay_month, p.amount, p.status, p.paid_at, p.reference_no, p.notes
+  SELECT
+    p.homeowner_id,
+    p.pay_year,
+    p.pay_month,
+    p.amount,
+    p.status,
+    p.paid_at,
+    p.reference_no,
+    p.notes
   FROM finance_payments p
-  JOIN homeowners h ON h.id = p.homeowner_id
+  JOIN homeowners h
+    ON h.id = p.homeowner_id
   WHERE h.phase = ?
-  ORDER BY p.pay_year DESC, p.pay_month DESC, p.paid_at DESC
+    AND p.phase = ?
+  ORDER BY
+    p.pay_year DESC,
+    p.pay_month DESC,
+    p.paid_at DESC
 ");
-$stmt->bind_param("s", $phase);
+$stmt->bind_param(
+  "ss",
+  $phase,
+  $phase
+);
 $stmt->execute();
 $res = $stmt->get_result();
+
 while ($r = $res->fetch_assoc()) {
   $hid = (int)$r['homeowner_id'];
+
   if (isset($txData[$hid])) {
     $txData[$hid]['dues'][] = $r;
   }
 }
 $stmt->close();
 
-// Donations for modal, matched by donor_email or donor_name
+/*
+|--------------------------------------------------------------------------
+| Existing donation matching kept unchanged for now
+|--------------------------------------------------------------------------
+| We will normalize donations separately when finance_donations.php is fixed.
+*/
 $stmt = $conn->prepare("
-  SELECT donor_name, donor_email, amount, donation_date, receipt_no, message, created_at
+  SELECT
+    donor_name,
+    donor_email,
+    amount,
+    donation_date,
+    receipt_no,
+    message,
+    created_at
   FROM finance_donations
   WHERE phase = ?
-  ORDER BY donation_date DESC, created_at DESC
+  ORDER BY
+    donation_date DESC,
+    created_at DESC
 ");
 $stmt->bind_param("s", $phase);
 $stmt->execute();
@@ -168,18 +625,44 @@ $donRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
 foreach ($donRows as $d) {
-  $dEmail = strtolower(trim((string)($d['donor_email'] ?? '')));
-  $dName  = strtolower(trim((string)($d['donor_name'] ?? '')));
+  $dEmail = strtolower(
+    trim((string)($d['donor_email'] ?? ''))
+  );
+
+  $dName = strtolower(
+    trim((string)($d['donor_name'] ?? ''))
+  );
 
   foreach ($txData as $hid => $info) {
-    $hEmail = strtolower(trim((string)$info['email']));
-    $hName  = strtolower(trim((string)$info['name']));
+    $hEmail = strtolower(
+      trim((string)$info['email'])
+    );
 
-    if (($dEmail !== '' && $hEmail !== '' && $dEmail === $hEmail) || ($dName !== '' && $dName === $hName)) {
+    $hName = strtolower(
+      trim((string)$info['name'])
+    );
+
+    if (
+      (
+        $dEmail !== '' &&
+        $hEmail !== '' &&
+        $dEmail === $hEmail
+      ) ||
+      (
+        $dName !== '' &&
+        $dName === $hName
+      )
+    ) {
       $txData[$hid]['donations'][] = $d;
     }
   }
 }
+
+$financeFlash =
+  $_SESSION['finance_dues_flash']
+  ?? null;
+
+unset($_SESSION['finance_dues_flash']);
 ?>
 <!DOCTYPE html>
 <html>
@@ -269,15 +752,285 @@ foreach ($donRows as $d) {
   box-shadow: 0 6px 18px rgba(0,0,0,0.2);
   z-index: 99999;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
   transform: translateY(-10px);
-  transition: all .3s ease;
+  transition:
+    opacity .3s ease,
+    transform .3s ease,
+    visibility .3s ease;
 }
 
 .access-toast.show {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: translateY(0);
 }
-	</style>
+  </style>
+
+  <!-- SHARED ADMIN LIGHT / DARK THEME -->
+  <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+  <style>
+  /* =========================================================
+     FINANCE DUES - DARK MODE EXTENSIONS
+     ========================================================= */
+
+  html.dark .page-header,
+  html.dark .card-box,
+  html.dark .footer-wrap {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .page-header .title h4,
+  html.dark .card-box h5,
+  html.dark .card-box h6,
+  html.dark .card-box label,
+  html.dark .card-box strong,
+  html.dark .card-box b,
+  html.dark .footer-wrap {
+    color: var(--admin-text) !important;
+  }
+
+  html.dark .text-secondary,
+  html.dark .text-muted,
+  html.dark small.text-secondary {
+    color: var(--admin-muted) !important;
+  }
+
+  html.dark hr {
+    border-top-color: var(--admin-border) !important;
+  }
+
+  /* Badges */
+  html.dark .badge-light,
+  html.dark .badge.badge-light {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .badge-secondary {
+    background: var(--admin-surface-3) !important;
+    color: #cbd5e1 !important;
+  }
+
+  /* Forms */
+  html.dark .form-control,
+  html.dark select.form-control,
+  html.dark input.form-control,
+  html.dark textarea.form-control {
+    background: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .form-control:focus,
+  html.dark select.form-control:focus,
+  html.dark input.form-control:focus,
+  html.dark textarea.form-control:focus {
+    background: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 .2rem rgba(59,130,246,.16) !important;
+  }
+
+  html.dark .form-control::placeholder {
+    color: #64748b !important;
+  }
+
+  html.dark .form-control[readonly],
+  html.dark input[readonly].form-control {
+    background: var(--admin-surface-3) !important;
+    color: var(--admin-text) !important;
+  }
+
+  /* Alerts */
+  html.dark .alert-light {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .alert-info {
+    background: rgba(14,165,233,.12) !important;
+    color: #bae6fd !important;
+    border-color: rgba(14,165,233,.28) !important;
+  }
+
+  html.dark .alert-success {
+    background: rgba(22,163,74,.12) !important;
+    color: #bbf7d0 !important;
+    border-color: rgba(34,197,94,.28) !important;
+  }
+
+  html.dark .alert-warning {
+    background: rgba(217,119,6,.12) !important;
+    color: #fde68a !important;
+    border-color: rgba(245,158,11,.28) !important;
+  }
+
+  html.dark .alert-danger {
+    background: rgba(220,38,38,.12) !important;
+    color: #fecaca !important;
+    border-color: rgba(239,68,68,.28) !important;
+  }
+
+  /* Tables */
+  html.dark .table,
+  html.dark table.dataTable {
+    color: var(--admin-text) !important;
+    background: var(--admin-surface) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .table thead th,
+  html.dark table.dataTable thead th,
+  html.dark table.dataTable thead td {
+    background: var(--admin-surface-2) !important;
+    color: #f8fafc !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .table tbody td,
+  html.dark .table tbody th,
+  html.dark table.dataTable tbody td {
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .table-striped tbody tr:nth-of-type(odd),
+  html.dark .table-striped tbody tr:nth-of-type(odd) > *,
+  html.dark table.dataTable.stripe tbody tr.odd,
+  html.dark table.dataTable.display tbody tr.odd {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+  }
+
+  html.dark .table-striped tbody tr:nth-of-type(even),
+  html.dark .table-striped tbody tr:nth-of-type(even) > * {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+  }
+
+  html.dark .table-hover tbody tr:hover,
+  html.dark .table-hover tbody tr:hover > *,
+  html.dark table.dataTable tbody tr:hover,
+  html.dark table.dataTable tbody tr:hover > * {
+    background: var(--admin-hover) !important;
+    color: #fff !important;
+  }
+
+  /* DataTables controls */
+  html.dark .dataTables_wrapper,
+  html.dark .dataTables_wrapper .dataTables_length,
+  html.dark .dataTables_wrapper .dataTables_filter,
+  html.dark .dataTables_wrapper .dataTables_info,
+  html.dark .dataTables_wrapper .dataTables_paginate {
+    color: var(--admin-muted) !important;
+  }
+
+  html.dark .dataTables_wrapper .dataTables_filter input,
+  html.dark .dataTables_wrapper .dataTables_length select {
+    background: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border: 1px solid var(--admin-border) !important;
+  }
+
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+    color: var(--admin-text) !important;
+  }
+
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover,
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    color: #fff !important;
+    border-color: #2563eb !important;
+    background: #2563eb !important;
+  }
+
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+  html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+    color: #64748b !important;
+    background: transparent !important;
+    border-color: transparent !important;
+  }
+
+  /* Custom transaction-history modal */
+  html.dark .custom-modal-backdrop {
+    background: rgba(2,6,23,.72) !important;
+  }
+
+  html.dark .custom-modal-content {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border: 1px solid var(--admin-border) !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,.48) !important;
+  }
+
+  html.dark .custom-modal-header,
+  html.dark .custom-modal-footer {
+    background: var(--admin-surface) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .custom-modal-header h5,
+  html.dark .custom-modal-body h6,
+  html.dark .custom-modal-body strong,
+  html.dark .custom-modal-body {
+    color: var(--admin-text) !important;
+  }
+
+  html.dark .custom-modal-header .close {
+    color: #e5e7eb !important;
+    text-shadow: none !important;
+    opacity: .9 !important;
+  }
+
+  html.dark .modal-empty {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-muted) !important;
+    border-color: var(--admin-border) !important;
+  }
+
+  html.dark .modal-history-table {
+    background: var(--admin-surface-2) !important;
+  }
+
+  /* Buttons used on this page */
+  html.dark .btn-outline-primary {
+    color: #93c5fd !important;
+    border-color: #3b82f6 !important;
+  }
+
+  html.dark .btn-outline-primary:hover {
+    color: #fff !important;
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+  }
+  </style>
+
+  <!-- Apply saved theme before body paint -->
+  <script>
+  (function () {
+    try {
+      const savedTheme = localStorage.getItem('hoa-theme');
+
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+
+      document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+  })();
+  </script>
 </head>
 <body>
 	
@@ -287,6 +1040,19 @@ foreach ($donRows as $d) {
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
 		<div class="header-right">
+
+			<!-- SHARED ADMIN DARK MODE TOGGLE -->
+			<div class="admin-theme-switch">
+				<button
+					type="button"
+					id="themeToggle"
+					class="admin-theme-toggle"
+					aria-label="Switch theme"
+					title="Switch theme"
+				>
+					<span id="themeIcon">☾</span>
+				</button>
+			</div>
 	
 			<div class="user-notification">
 				<div class="dropdown">
@@ -463,55 +1229,202 @@ foreach ($donRows as $d) {
       </div>
     </div>
 
+    <?php if ($financeFlash): ?>
+      <div class="alert alert-<?= esc($financeFlash['type'] ?? 'info') ?> mb-20" role="alert">
+        <?= esc($financeFlash['message'] ?? '') ?>
+      </div>
+    <?php endif; ?>
+
     <div class="card-box mb-20 p-3">
-      <h5 class="mb-3">Set Monthly Dues</h5>
-      <form method="post" class="form-inline">
-        <label class="mr-2">Monthly Dues (₱)</label>
-        <input type="number" step="0.01" min="0" name="monthly_dues" class="form-control mr-2" value="<?=esc(number_format($monthly_dues,2,'.',''))?>" required>
-        <button class="btn btn-primary" name="save_dues">Save</button>
-      </form>
+      <div class="d-flex flex-wrap justify-content-between align-items-center">
+        <div>
+          <h5 class="mb-1">Finance Access</h5>
+          <div class="text-secondary">
+            Signed in as:
+            <b><?= esc($adminPosition !== '' ? $adminPosition : $adminRole) ?></b>
+          </div>
+        </div>
+
+        <?php if ($canManageDues): ?>
+          <span class="badge badge-success p-2">Treasurer • Manage</span>
+        <?php else: ?>
+          <span class="badge badge-secondary p-2">View Only</span>
+        <?php endif; ?>
+      </div>
+
+      <?php if (!$canManageDues): ?>
+        <div class="alert alert-info mt-3 mb-0">
+          Monthly dues settings and manual payment recording are managed by the Treasurer.
+          You can still review payment history and unpaid homeowners for your permitted phase.
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="card-box mb-20 p-3">
-      <h5 class="mb-3">Record Payment</h5>
-      <form method="post">
-        <div class="row">
-          <div class="col-md-4">
-            <label>Homeowner</label>
-            <select name="homeowner_id" class="form-control" required>
-              <option value="">-- Select Homeowner --</option>
-              <?php foreach($homeowners as $h): ?>
-                <option value="<?=$h['id']?>"><?=esc($h['last_name'].", ".$h['first_name']." (".$h['house_lot_number'].")")?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <label>Year</label>
-            <input type="number" name="pay_year" class="form-control" value="<?=$defYear?>" required>
-          </div>
-          <div class="col-md-2">
-            <label>Month</label>
-            <select name="pay_month" class="form-control" required>
-              <?php for($m=1;$m<=12;$m++): ?>
-                <option value="<?=$m?>" <?= $m===$defMonth?'selected':'' ?>><?=$m?></option>
-              <?php endfor; ?>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <label>Amount</label>
-            <input type="number" step="0.01" min="0" name="amount" class="form-control" value="<?=esc(number_format($monthly_dues,2,'.',''))?>" required>
-          </div>
-          <div class="col-md-2">
-            <label>Reference #</label>
-            <input type="text" name="reference_no" class="form-control" placeholder="OR/Ref #">
-          </div>
-          <div class="col-md-12 mt-2">
-            <label>Notes</label>
-            <input type="text" name="notes" class="form-control" placeholder="Optional notes">
-          </div>
+      <h5 class="mb-3">Set Monthly Dues</h5>
+      <?php if ($canManageDues): ?>
+        <form method="post" class="form-inline">
+          <input type="hidden" name="csrf" value="<?= esc($csrfToken) ?>">
+
+          <label class="mr-2">Monthly Dues (₱)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            max="1000000"
+            name="monthly_dues"
+            class="form-control mr-2"
+            value="<?= esc(number_format($monthly_dues, 2, '.', '')) ?>"
+            required
+          >
+
+          <button class="btn btn-primary" name="save_dues">
+            Save
+          </button>
+        </form>
+      <?php else: ?>
+        <div class="d-flex align-items-center">
+          <span class="badge badge-primary p-2 mr-2">
+            ₱ <?= number_format($monthly_dues, 2) ?> / month
+          </span>
+          <span class="text-secondary">Read-only</span>
         </div>
-        <button class="btn btn-success mt-3" name="record_payment">Save Payment</button>
-      </form>
+      <?php endif; ?>
+    </div>
+
+    <div class="card-box mb-20 p-3">
+      <h5 class="mb-3">Record Manual / Cash Payment</h5>
+
+      <?php if ($canManageDues): ?>
+        <?php if ($monthly_dues <= 0): ?>
+          <div class="alert alert-warning mb-0">
+            Set the monthly dues amount first before recording payments.
+          </div>
+        <?php else: ?>
+          <form method="post" id="recordPaymentForm">
+            <input type="hidden" name="csrf" value="<?= esc($csrfToken) ?>">
+
+            <div class="row">
+              <div class="col-md-4">
+                <label>Homeowner</label>
+                <select
+                  name="homeowner_id"
+                  id="paymentHomeowner"
+                  class="form-control"
+                  required
+                >
+                  <option value="">-- Select Homeowner --</option>
+
+                  <?php foreach ($homeowners as $h): ?>
+                    <?php
+                      $createdTs = strtotime((string)($h['created_at'] ?? ''));
+                      $startLabel = $createdTs
+                        ? date('F Y', $createdTs)
+                        : 'Unknown';
+                    ?>
+                    <option value="<?= (int)$h['id'] ?>">
+                      <?= esc(
+                        ($h['last_name'] ?? '') .
+                        ', ' .
+                        ($h['first_name'] ?? '') .
+                        ' (' .
+                        ($h['house_lot_number'] ?? '') .
+                        ') — starts ' .
+                        $startLabel
+                      ) ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+
+              <div class="col-md-2">
+                <label>Year</label>
+                <input
+                  type="number"
+                  name="pay_year"
+                  id="paymentYear"
+                  class="form-control"
+                  min="2000"
+                  max="<?= (int)$currentYear ?>"
+                  value="<?= (int)$defYear ?>"
+                  required
+                >
+              </div>
+
+              <div class="col-md-2">
+                <label>Month</label>
+                <select
+                  name="pay_month"
+                  id="paymentMonth"
+                  class="form-control"
+                  required
+                >
+                  <?php for ($m = 1; $m <= 12; $m++): ?>
+                    <option
+                      value="<?= $m ?>"
+                      <?= $m === $defMonth ? 'selected' : '' ?>
+                    >
+                      <?= esc(date('F', mktime(0, 0, 0, $m, 1))) ?>
+                    </option>
+                  <?php endfor; ?>
+                </select>
+              </div>
+
+              <div class="col-md-2">
+                <label>Amount</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  value="₱ <?= esc(number_format($monthly_dues, 2)) ?>"
+                  readonly
+                >
+                <small class="text-secondary">
+                  Uses the configured monthly dues amount.
+                </small>
+              </div>
+
+              <div class="col-md-2">
+                <label>Reference #</label>
+                <input
+                  type="text"
+                  name="reference_no"
+                  maxlength="100"
+                  class="form-control"
+                  placeholder="OR / Receipt #"
+                >
+              </div>
+
+              <div class="col-md-12 mt-2">
+                <label>Notes</label>
+                <input
+                  type="text"
+                  name="notes"
+                  maxlength="255"
+                  class="form-control"
+                  placeholder="Optional notes, e.g. Cash payment"
+                >
+              </div>
+            </div>
+
+            <button
+              class="btn btn-success mt-3"
+              name="record_payment"
+              value="1"
+            >
+              Save Payment
+            </button>
+
+            <small class="text-secondary d-block mt-2">
+              Existing paid records are protected and will not be overwritten.
+              Future months and months before the homeowner account start date are rejected.
+            </small>
+          </form>
+        <?php endif; ?>
+      <?php else: ?>
+        <div class="alert alert-light border mb-0">
+          Manual payment recording is available to the Treasurer only.
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="card-box mb-20 p-3">
@@ -525,6 +1438,7 @@ foreach ($donRows as $d) {
               <th>Blk/Lot</th>
               <th>Period</th>
               <th>Amount</th>
+              <th>Status</th>
               <th>Ref</th>
               <th>Notes</th>
             </tr>
@@ -537,6 +1451,17 @@ foreach ($donRows as $d) {
                 <td><?=esc($p['house_lot_number'] ?? '')?></td>
                 <td><?=esc($p['pay_year']."-".str_pad((string)$p['pay_month'],2,'0',STR_PAD_LEFT))?></td>
                 <td>₱ <?=number_format((float)$p['amount'],2)?></td>
+                <td>
+                  <?php
+                    $paymentStatus = (string)($p['status'] ?? 'unpaid');
+                    $statusBadge = $paymentStatus === 'paid'
+                      ? 'badge-success'
+                      : 'badge-danger';
+                  ?>
+                  <span class="badge <?= $statusBadge ?>">
+                    <?= esc(strtoupper($paymentStatus)) ?>
+                  </span>
+                </td>
                 <td><?=esc($p['reference_no'] ?? '')?></td>
                 <td><?=esc($p['notes'] ?? '')?></td>
               </tr>
@@ -555,11 +1480,21 @@ foreach ($donRows as $d) {
             <input type="hidden" name="phase" value="<?=esc($phase)?>">
           <?php endif; ?>
           <label class="mr-2">Year</label>
-          <input type="number" name="year" class="form-control mr-3" value="<?= (int)$selYear ?>" style="width:120px">
+          <input
+            type="number"
+            name="year"
+            min="2000"
+            max="<?= (int)$currentYear ?>"
+            class="form-control mr-3"
+            value="<?= (int)$selYear ?>"
+            style="width:120px"
+          >
           <label class="mr-2">Month</label>
           <select name="month" class="form-control mr-3" style="width:120px">
             <?php for($m=1;$m<=12;$m++): ?>
-              <option value="<?=$m?>" <?= $m===$selMonth?'selected':'' ?>><?=$m?></option>
+              <option value="<?=$m?>" <?= $m===$selMonth?'selected':'' ?>>
+                <?= esc(date('F', mktime(0,0,0,$m,1))) ?>
+              </option>
             <?php endfor; ?>
           </select>
           <button class="btn btn-outline-primary">Filter</button>
@@ -567,7 +1502,13 @@ foreach ($donRows as $d) {
       </div>
 
       <div class="mt-3">
-        <span class="badge badge-danger">Unpaid count: <?=count($unpaid)?></span>
+        <span class="badge badge-danger">
+          Unpaid count: <?= count($unpaid) ?>
+        </span>
+        <span class="badge badge-light border ml-2">
+          <?= esc(date('F', mktime(0, 0, 0, $selMonth, 1))) ?>
+          <?= (int)$selYear ?>
+        </span>
       </div>
 
       <div class="table-responsive mt-2">
@@ -576,18 +1517,29 @@ foreach ($donRows as $d) {
             <tr>
               <th>Name</th>
               <th>Blk/Lot</th>
+              <th>Dues Start</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$unpaid): ?>
-              <tr><td colspan="3" class="text-center text-secondary">No unpaid homeowners for this period.</td></tr>
+              <tr>
+                <td colspan="4" class="text-center text-secondary">
+                  No unpaid homeowners for this period.
+                </td>
+              </tr>
             <?php else: ?>
               <?php foreach($unpaid as $u): ?>
                 <?php $hid = (int)$u['id']; ?>
                 <tr>
                   <td><?=esc($u['last_name'].", ".$u['first_name'])?></td>
                   <td><?=esc($u['house_lot_number'])?></td>
+                  <td>
+                    <?php
+                      $uStart = strtotime((string)($u['created_at'] ?? ''));
+                    ?>
+                    <?= $uStart ? esc(date('F Y', $uStart)) : '-' ?>
+                  </td>
                   <td>
                     <button
                       type="button"
@@ -739,7 +1691,16 @@ $(function(){
 function openHistoryModal(homeownerId) {
   var box = document.getElementById('history-data-' + homeownerId);
   if (!box) {
-    alert('No transaction data found.');
+    document.getElementById('hmName').textContent = '-';
+    document.getElementById('hmEmail').textContent = '-';
+    document.getElementById('hmLot').textContent = '-';
+    document.getElementById('hmDuesWrap').innerHTML =
+      '<div class="modal-empty">No monthly dues payments found.</div>';
+    document.getElementById('hmDonationWrap').innerHTML =
+      '<div class="modal-empty">No donation records found.</div>';
+
+    document.getElementById('historyModal').style.display = 'block';
+    document.body.classList.add('modal-open-manual');
     return;
   }
 
@@ -770,12 +1731,51 @@ document.addEventListener('keydown', function(e){
     closeHistoryModal();
   }
 });
+
+(function () {
+  const yearInput = document.getElementById('paymentYear');
+  const monthSelect = document.getElementById('paymentMonth');
+
+  if (!yearInput || !monthSelect) return;
+
+  const currentYear = <?= (int)$currentYear ?>;
+  const currentMonth = <?= (int)$currentMonth ?>;
+
+  function syncPaymentMonths() {
+    const selectedYear = Number(yearInput.value || currentYear);
+
+    Array.from(monthSelect.options).forEach(function (option) {
+      const month = Number(option.value || 0);
+
+      option.disabled =
+        selectedYear > currentYear ||
+        (
+          selectedYear === currentYear &&
+          month > currentMonth
+        );
+    });
+
+    const selectedOption = monthSelect.selectedOptions[0];
+
+    if (selectedOption && selectedOption.disabled) {
+      monthSelect.value = String(currentMonth);
+    }
+  }
+
+  yearInput.addEventListener('input', syncPaymentMonths);
+  yearInput.addEventListener('change', syncPaymentMonths);
+
+  syncPaymentMonths();
+})();
 </script>
 
 <script src="vendors/scripts/core.js"></script>
 <script src="vendors/scripts/script.min.js"></script>
 <script src="vendors/scripts/process.js"></script>
 <script src="vendors/scripts/layout-settings.js"></script>
+
+<!-- SHARED ADMIN DARK MODE -->
+<script src="vendors/scripts/admin_theme.js"></script>
 <div id="accessToast" class="access-toast">
   🚫 You do not have access to that part.
 </div>

@@ -1,12 +1,28 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
+
+if (
+  empty($_SESSION['admin_id']) &&
+  !empty($_SESSION['user_id'])
+) {
+  $_SESSION['admin_id'] =
+    (int)$_SESSION['user_id'];
+}
+
 require_once 'admin_access.php';
 require_once '../config/database.php';
+
 requireAccess('announcements');
-/* =========================
-   1) SESSION CHECK
-   ========================= */
-if (!isset($_SESSION['user_id'])) {
+
+$sessionAdminId =
+  (int)(
+    $_SESSION['admin_id']
+    ?? 0
+  );
+
+if ($sessionAdminId <= 0) {
   header("Location: index.php");
   exit;
 }
@@ -31,9 +47,24 @@ function esc($v) {
 /* =========================
    4) ADMIN INFO (who is logged in)
    ========================= */
-$admin_id    = (int)($_SESSION['user_id'] ?? 0);
-$admin_name  = (string)($_SESSION['full_name'] ?? "HOA Admin");
-$admin_phase = (string)($_SESSION['phase'] ?? "Superadmin");
+$admin_id =
+  (int)(
+    $_SESSION['admin_id']
+    ?? 0
+  );
+
+$admin_name =
+  (string)(
+    $_SESSION['full_name']
+    ?? "HOA Admin"
+  );
+
+$admin_phase =
+  (string)(
+    $_SESSION['admin_phase']
+    ?? $_SESSION['phase']
+    ?? "Superadmin"
+  );
 
 /* Check admin record (para sure legit) */
 $stmt = $conn->prepare("SELECT full_name, email, phase, role FROM admins WHERE id=? LIMIT 1");
@@ -179,13 +210,23 @@ $flash_err = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_announcement'])) {
   $csrf = (string)($_POST['csrf'] ?? '');
-  if (!$csrf || !hash_equals($_SESSION['csrf_ann'], $csrf)) {
+
+  if (
+    !$csrf ||
+    !hash_equals($_SESSION['csrf_ann'], $csrf)
+  ) {
     $flash_ok = false;
     $flash_err = "Invalid request (CSRF).";
+
   } else {
     $aid = (int)($_POST['announcement_id'] ?? 0);
 
-    $stmt = $conn->prepare("SELECT id, phase FROM announcements WHERE id=? LIMIT 1");
+    $stmt = $conn->prepare("
+      SELECT id, phase
+      FROM announcements
+      WHERE id = ?
+      LIMIT 1
+    ");
     $stmt->bind_param("i", $aid);
     $stmt->execute();
     $ann = $stmt->get_result()->fetch_assoc();
@@ -194,29 +235,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_announcement']
     if (!$ann) {
       $flash_ok = false;
       $flash_err = "Announcement not found.";
-    } elseif (!can_manage_announcement($is_superadmin, $ui_phase, $ann)) {
+
+    } elseif (
+      !can_manage_announcement(
+        $is_superadmin,
+        $ui_phase,
+        $ann
+      )
+    ) {
       $flash_ok = false;
       $flash_err = "You are not allowed to delete this announcement.";
+
     } else {
-      // delete children first (para walang error sa foreign key)
-      $d1 = $conn->prepare("DELETE FROM announcement_attachments WHERE announcement_id=?");
-      $d1->bind_param("i", $aid);
-      $d1->execute();
-      $d1->close();
+      $attachmentFiles = [];
 
-      $d2 = $conn->prepare("DELETE FROM announcement_recipients WHERE announcement_id=?");
-      $d2->bind_param("i", $aid);
-      $d2->execute();
-      $d2->close();
+      $stmt = $conn->prepare("
+        SELECT file_path
+        FROM announcement_attachments
+        WHERE announcement_id = ?
+      ");
+      $stmt->bind_param("i", $aid);
+      $stmt->execute();
+      $attachmentResult = $stmt->get_result();
 
-      $d3 = $conn->prepare("DELETE FROM announcements WHERE id=?");
-      $d3->bind_param("i", $aid);
-      $ok = $d3->execute();
-      $d3->close();
+      while ($attachment = $attachmentResult->fetch_assoc()) {
+        $relative = trim((string)($attachment['file_path'] ?? ''));
 
-      if ($ok) {
+        if ($relative !== '') {
+          $attachmentFiles[] = $relative;
+        }
+      }
+
+      $stmt->close();
+
+      try {
+        $conn->begin_transaction();
+
+        foreach (
+          [
+            'announcement_comments',
+            'announcement_likes',
+            'announcement_recipients',
+            'announcement_attachments'
+          ] as $childTable
+        ) {
+          $deleteChild = $conn->prepare(
+            "DELETE FROM {$childTable} WHERE announcement_id = ?"
+          );
+          $deleteChild->bind_param("i", $aid);
+          $deleteChild->execute();
+          $deleteChild->close();
+        }
+
+        $deleteAnnouncement = $conn->prepare("
+          DELETE FROM announcements
+          WHERE id = ?
+        ");
+        $deleteAnnouncement->bind_param("i", $aid);
+        $deleteAnnouncement->execute();
+
+        if ($deleteAnnouncement->affected_rows !== 1) {
+          throw new RuntimeException(
+            'Announcement delete did not affect exactly one row.'
+          );
+        }
+
+        $deleteAnnouncement->close();
+        $conn->commit();
+
+        $uploadRoot = realpath(
+          __DIR__ . '/uploads/announcements'
+        );
+
+        if ($uploadRoot !== false) {
+          foreach ($attachmentFiles as $relative) {
+            $candidate =
+              __DIR__ .
+              '/' .
+              ltrim(
+                str_replace('\\', '/', $relative),
+                '/'
+              );
+
+            $realCandidate = realpath($candidate);
+
+            if (
+              $realCandidate !== false &&
+              str_starts_with(
+                $realCandidate,
+                $uploadRoot . DIRECTORY_SEPARATOR
+              ) &&
+              is_file($realCandidate)
+            ) {
+              @unlink($realCandidate);
+            }
+          }
+        }
+
         $flash_ok = true;
-      } else {
+
+      } catch (Throwable $e) {
+        try {
+          $conn->rollback();
+        } catch (Throwable $ignored) {
+        }
+
+        error_log(
+          'Announcement delete failed: ' .
+          $e->getMessage()
+        );
+
         $flash_ok = false;
         $flash_err = "Failed to delete announcement.";
       }
@@ -237,13 +365,38 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'announcement_detail') {
     exit;
   }
 
-  $stmt = $conn->prepare("
-    SELECT a.*, ad.full_name AS posted_by_name, ad.email AS posted_by_email
-    FROM announcements a
-    LEFT JOIN admins ad ON ad.id=a.admin_id
-    WHERE a.id=? LIMIT 1
-  ");
-  $stmt->bind_param("i", $id);
+  if ($is_superadmin) {
+    $stmt = $conn->prepare("
+      SELECT
+        a.*,
+        ad.full_name AS posted_by_name,
+        ad.email AS posted_by_email
+      FROM announcements a
+      LEFT JOIN admins ad
+        ON ad.id = a.admin_id
+      WHERE a.id = ?
+      LIMIT 1
+    ");
+    $stmt->bind_param("i", $id);
+  } else {
+    $stmt = $conn->prepare("
+      SELECT
+        a.*,
+        ad.full_name AS posted_by_name,
+        ad.email AS posted_by_email
+      FROM announcements a
+      LEFT JOIN admins ad
+        ON ad.id = a.admin_id
+      WHERE a.id = ?
+        AND a.phase = ?
+      LIMIT 1
+    ");
+    $stmt->bind_param(
+      "is",
+      $id,
+      $ui_phase
+    );
+  }
   $stmt->execute();
   $a = $stmt->get_result()->fetch_assoc();
   $stmt->close();
@@ -418,13 +571,161 @@ function guess_mime(string $tmpPath): string {
   return 'application/octet-stream';
 }
 
+
+function ini_size_to_bytes(string $value): int {
+  $value = trim($value);
+
+  if ($value === '') {
+    return 0;
+  }
+
+  $last = strtolower(
+    substr(
+      $value,
+      -1
+    )
+  );
+
+  $number = (float)$value;
+
+  switch ($last) {
+    case 'g':
+      $number *= 1024;
+      // no break
+    case 'm':
+      $number *= 1024;
+      // no break
+    case 'k':
+      $number *= 1024;
+      break;
+  }
+
+  return (int)round($number);
+}
+
+function format_bytes_short(int $bytes): string {
+  if ($bytes <= 0) {
+    return 'Unlimited';
+  }
+
+  if ($bytes >= 1024 * 1024 * 1024) {
+    return
+      rtrim(
+        rtrim(
+          number_format(
+            $bytes / (1024 * 1024 * 1024),
+            1,
+            '.',
+            ''
+          ),
+          '0'
+        ),
+        '.'
+      ) .
+      ' GB';
+  }
+
+  if ($bytes >= 1024 * 1024) {
+    return
+      rtrim(
+        rtrim(
+          number_format(
+            $bytes / (1024 * 1024),
+            1,
+            '.',
+            ''
+          ),
+          '0'
+        ),
+        '.'
+      ) .
+      ' MB';
+  }
+
+  if ($bytes >= 1024) {
+    return
+      rtrim(
+        rtrim(
+          number_format(
+            $bytes / 1024,
+            1,
+            '.',
+            ''
+          ),
+          '0'
+        ),
+        '.'
+      ) .
+      ' KB';
+  }
+
+  return $bytes . ' B';
+}
+
 /* =========================
    13) SAVE ANNOUNCEMENT
    ========================= */
 $save_ok = null;
 $save_err = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement'])) {
+$appNormalMaxSize =
+  10 * 1024 * 1024;
+
+$appVideoMaxSize =
+  50 * 1024 * 1024;
+
+$phpUploadMaxBytes =
+  ini_size_to_bytes(
+    (string)ini_get(
+      'upload_max_filesize'
+    )
+  );
+
+$phpPostMaxBytes =
+  ini_size_to_bytes(
+    (string)ini_get(
+      'post_max_size'
+    )
+  );
+
+$requestContentLength =
+  (int)(
+    $_SERVER['CONTENT_LENGTH']
+    ?? 0
+  );
+
+$requestTooLarge =
+  $_SERVER['REQUEST_METHOD'] === 'POST' &&
+  $phpPostMaxBytes > 0 &&
+  $requestContentLength >
+    $phpPostMaxBytes;
+
+/*
+|--------------------------------------------------------------------------
+| Important:
+| When a multipart POST exceeds post_max_size PHP can discard BOTH $_POST
+| and $_FILES. Without this check, clicking Publish appears to do nothing.
+|--------------------------------------------------------------------------
+*/
+if ($requestTooLarge) {
+  $save_ok = false;
+  $save_err =
+    'Upload too large. The request is ' .
+    format_bytes_short(
+      $requestContentLength
+    ) .
+    ', but PHP post_max_size is only ' .
+    format_bytes_short(
+      $phpPostMaxBytes
+    ) .
+    '. Increase post_max_size/upload_max_filesize in php.ini or choose a smaller video.';
+}
+
+if (
+  !$requestTooLarge &&
+  $_SERVER['REQUEST_METHOD'] === 'POST' &&
+  isset($_POST['save_announcement'])
+) {
   $csrf = (string)($_POST['csrf'] ?? '');
   if (!$csrf || !hash_equals($_SESSION['csrf_ann'], $csrf)) {
     $save_ok = false;
@@ -463,6 +764,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
       $save_err = "Invalid priority.";
     } elseif ($startDate === '') {
       $save_err = "Start date is required.";
+    } else {
+      $startObj = DateTime::createFromFormat('Y-m-d', $startDate);
+
+      $validStart =
+        $startObj &&
+        $startObj->format('Y-m-d') === $startDate;
+
+      if (!$validStart) {
+        $save_err = "Invalid start date.";
+      }
+
+      if (
+        $save_err === '' &&
+        $endDate !== null &&
+        $endDate !== ''
+      ) {
+        $endDate = (string)$endDate;
+        $endObj = DateTime::createFromFormat('Y-m-d', $endDate);
+
+        $validEnd =
+          $endObj &&
+          $endObj->format('Y-m-d') === $endDate;
+
+        if (!$validEnd) {
+          $save_err = "Invalid end date.";
+        } elseif ($endDate < $startDate) {
+          $save_err =
+            "End date cannot be earlier than start date.";
+        }
+      }
     }
 
     if ($save_err === '') {
@@ -471,6 +802,179 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
       }
       if ($audience === 'block' && trim((string)$audience_value) === '') {
         $save_err = "Please enter a block value (e.g. blk 7).";
+      }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate attachments BEFORE saving the announcement
+    |--------------------------------------------------------------------------
+    | This prevents the announcement from being published without the video
+    | when PHP rejects the selected upload.
+    */
+    if (
+      $save_err === '' &&
+      isset($_FILES['attachments']) &&
+      is_array(
+        $_FILES['attachments']['name']
+        ?? null
+      )
+    ) {
+      $imageExt = [
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'webp'
+      ];
+
+      $videoExt = [
+        'mp4',
+        'webm',
+        'mov',
+        'm4v'
+      ];
+
+      $documentExt = [
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'txt',
+        'zip',
+        'rar'
+      ];
+
+      $allowedExt =
+        array_merge(
+          $imageExt,
+          $videoExt,
+          $documentExt
+        );
+
+      $fileCount =
+        count(
+          $_FILES['attachments']['name']
+        );
+
+      for (
+        $i = 0;
+        $i < $fileCount;
+        $i++
+      ) {
+        $originalName =
+          (string)(
+            $_FILES['attachments']['name'][$i]
+            ?? ''
+          );
+
+        $uploadError =
+          (int)(
+            $_FILES['attachments']['error'][$i]
+            ?? UPLOAD_ERR_NO_FILE
+          );
+
+        $fileSize =
+          (int)(
+            $_FILES['attachments']['size'][$i]
+            ?? 0
+          );
+
+        if (
+          $uploadError === UPLOAD_ERR_NO_FILE ||
+          $originalName === ''
+        ) {
+          continue;
+        }
+
+        if (
+          $uploadError === UPLOAD_ERR_INI_SIZE ||
+          $uploadError === UPLOAD_ERR_FORM_SIZE
+        ) {
+          $save_err =
+            'The attachment "' .
+            $originalName .
+            '" is larger than the PHP upload limit (' .
+            format_bytes_short(
+              $phpUploadMaxBytes
+            ) .
+            ').';
+          break;
+        }
+
+        if ($uploadError !== UPLOAD_ERR_OK) {
+          $save_err =
+            'The attachment "' .
+            $originalName .
+            '" could not be uploaded. Please select it again.';
+          break;
+        }
+
+        $safeOriginal =
+          sanitize_filename(
+            $originalName
+          );
+
+        $extension =
+          strtolower(
+            pathinfo(
+              $safeOriginal,
+              PATHINFO_EXTENSION
+            )
+          );
+
+        if (
+          !in_array(
+            $extension,
+            $allowedExt,
+            true
+          )
+        ) {
+          $save_err =
+            'Unsupported attachment type: ' .
+            $originalName;
+          break;
+        }
+
+        $appLimit =
+          in_array(
+            $extension,
+            $videoExt,
+            true
+          )
+            ? $appVideoMaxSize
+            : $appNormalMaxSize;
+
+        $effectiveFileLimit =
+          $appLimit;
+
+        if (
+          $phpUploadMaxBytes > 0 &&
+          $phpUploadMaxBytes <
+            $effectiveFileLimit
+        ) {
+          $effectiveFileLimit =
+            $phpUploadMaxBytes;
+        }
+
+        if (
+          $fileSize <= 0 ||
+          $fileSize >
+            $effectiveFileLimit
+        ) {
+          $save_err =
+            'The attachment "' .
+            $originalName .
+            '" is too large. Maximum allowed for this file is ' .
+            format_bytes_short(
+              $effectiveFileLimit
+            ) .
+            '.';
+          break;
+        }
       }
     }
 
@@ -522,12 +1026,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
             $hid = (int)$hid;
 
             $q = $conn->prepare("
-              SELECT first_name, middle_name, last_name, email
+              SELECT
+                first_name,
+                middle_name,
+                last_name,
+                email
               FROM homeowners
-              WHERE id=? AND status='approved'
+              WHERE id = ?
+                AND status = 'approved'
+                AND phase = ?
               LIMIT 1
             ");
-            $q->bind_param("i", $hid);
+            $q->bind_param(
+              "is",
+              $hid,
+              $phase_for_announcement
+            );
             $q->execute();
             $rr = $q->get_result();
 
@@ -557,8 +1071,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
             $save_ok = false;
             $save_err = "Announcement saved, but failed to create upload folder.";
           } else {
-            $max_size = 10 * 1024 * 1024; // 10MB
-            $allowed_ext = ['jpg','jpeg','png','gif','webp','pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip','rar'];
+            /*
+             * Normal files/images: up to 10 MB
+             * Videos: up to 50 MB
+             *
+             * Note: PHP upload_max_filesize/post_max_size must also allow
+             * the selected file size.
+             */
+            $normal_max_size =
+              $appNormalMaxSize;
+
+            $video_max_size =
+              $appVideoMaxSize;
+
+            $image_ext = [
+              'jpg',
+              'jpeg',
+              'png',
+              'gif',
+              'webp'
+            ];
+
+            $video_ext = [
+              'mp4',
+              'webm',
+              'mov',
+              'm4v'
+            ];
+
+            $document_ext = [
+              'pdf',
+              'doc',
+              'docx',
+              'xls',
+              'xlsx',
+              'ppt',
+              'pptx',
+              'txt',
+              'zip',
+              'rar'
+            ];
+
+            $allowed_ext = array_merge(
+              $image_ext,
+              $video_ext,
+              $document_ext
+            );
 
             $insA = $conn->prepare("
               INSERT INTO announcement_attachments
@@ -574,21 +1132,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
               $err  = (int)($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE);
               $size = (int)($_FILES['attachments']['size'][$i] ?? 0);
 
-              if ($err === UPLOAD_ERR_NO_FILE || $orig === '') continue;
-              if ($err !== UPLOAD_ERR_OK) continue;
-              if ($size <= 0 || $size > $max_size) continue;
+              if (
+                $err === UPLOAD_ERR_NO_FILE ||
+                $orig === ''
+              ) {
+                continue;
+              }
+
+              if (
+                $err !== UPLOAD_ERR_OK ||
+                $size <= 0 ||
+                !is_uploaded_file($tmp)
+              ) {
+                continue;
+              }
 
               $safeOrig = sanitize_filename($orig);
-              $ext = strtolower(pathinfo($safeOrig, PATHINFO_EXTENSION));
-              if (!in_array($ext, $allowed_ext, true)) continue;
+              $ext = strtolower(
+                pathinfo($safeOrig, PATHINFO_EXTENSION)
+              );
 
-              $stored = time() . "_" . bin2hex(random_bytes(6)) . "_" . $safeOrig;
-              $dest = $upload_dir . "/" . $stored;
+              if (!in_array($ext, $allowed_ext, true)) {
+                continue;
+              }
 
-              if (@move_uploaded_file($tmp, $dest)) {
+              $maxForThisFile =
+                in_array(
+                  $ext,
+                  $video_ext,
+                  true
+                )
+                  ? $video_max_size
+                  : $normal_max_size;
+
+              if (
+                $phpUploadMaxBytes > 0 &&
+                $phpUploadMaxBytes <
+                  $maxForThisFile
+              ) {
+                $maxForThisFile =
+                  $phpUploadMaxBytes;
+              }
+
+              if ($size > $maxForThisFile) {
+                continue;
+              }
+
+              $stored =
+                bin2hex(random_bytes(16)) .
+                "." .
+                $ext;
+
+              $dest =
+                $upload_dir .
+                "/" .
+                $stored;
+
+              if (move_uploaded_file($tmp, $dest)) {
+                @chmod($dest, 0644);
+
                 $mime = guess_mime($dest);
-                $relPath = "uploads/announcements/" . $stored;
-                $insA->bind_param("issssi", $announcement_id, $safeOrig, $stored, $relPath, $mime, $size);
+                $relPath =
+                  "uploads/announcements/" .
+                  $stored;
+
+                $insA->bind_param(
+                  "issssi",
+                  $announcement_id,
+                  $safeOrig,
+                  $stored,
+                  $relPath,
+                  $mime,
+                  $size
+                );
+
                 $insA->execute();
               }
             }
@@ -597,26 +1214,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
           }
         }
 
-        // optional email sending (your existing file)
         require_once __DIR__ . "/send_announcement_mail.php";
 
-        $smtp = [
-          'host'       => 'smtp.gmail.com',
-          'username'   => 'baculpopatrick2440@gmail.com',
-          'password'   => 'vxsx lmtv livx hgtl',
-          'port'       => 587,
-          'encryption' => 'tls',
-          'from_email' => 'baculpopatrick2440@gmail.com',
-          'from_name'  => 'South Meridian HOA',
-        ];
+        $mailWarning = '';
 
-        $mailRes = send_announcement_mail($conn, $announcement_id, $smtp);
+        $secretsFile =
+          __DIR__ .
+          '/private/hoa_secrets.php';
 
-        if (!$mailRes['success']) {
-          $save_ok = false;
-          $save_err = "Announcement saved, but email sending failed: " . implode(" | ", $mailRes['errors']);
+        if (!is_file($secretsFile)) {
+          $mailWarning =
+            'Announcement saved, but SMTP configuration was not found.';
+
         } else {
-          $save_ok = true;
+          $secrets = require $secretsFile;
+
+          $smtpUsername =
+            trim(
+              (string)(
+                $secrets['smtp_username']
+                ?? ''
+              )
+            );
+
+          $smtpPassword =
+            preg_replace(
+              '/\s+/',
+              '',
+              trim(
+                (string)(
+                  $secrets['smtp_password']
+                  ?? ''
+                )
+              )
+            );
+
+          if (
+            $smtpUsername === '' ||
+            $smtpPassword === ''
+          ) {
+            $mailWarning =
+              'Announcement saved, but SMTP configuration is incomplete.';
+
+          } else {
+            $smtp = [
+              'host' =>
+                trim(
+                  (string)(
+                    $secrets['smtp_host']
+                    ?? 'smtp.gmail.com'
+                  )
+                ),
+              'username' => $smtpUsername,
+              'password' => $smtpPassword,
+              'port' =>
+                (int)(
+                  $secrets['smtp_port']
+                  ?? 587
+                ),
+              'encryption' =>
+                trim(
+                  (string)(
+                    $secrets['smtp_encryption']
+                    ?? 'tls'
+                  )
+                ),
+              'from_email' =>
+                trim(
+                  (string)(
+                    $secrets['smtp_from_email']
+                    ?? $smtpUsername
+                  )
+                ),
+              'from_name' =>
+                trim(
+                  (string)(
+                    $secrets['smtp_from_name']
+                    ?? 'South Meridian HOA'
+                  )
+                ),
+            ];
+
+            try {
+              $mailRes =
+                send_announcement_mail(
+                  $conn,
+                  $announcement_id,
+                  $smtp
+                );
+
+              if (empty($mailRes['success'])) {
+                $mailWarning =
+                  'Announcement saved, but some email notifications were not sent.';
+
+                if (
+                  !empty($mailRes['errors']) &&
+                  is_array($mailRes['errors'])
+                ) {
+                  error_log(
+                    'Announcement email errors: ' .
+                    implode(
+                      ' | ',
+                      $mailRes['errors']
+                    )
+                  );
+                }
+              }
+
+            } catch (Throwable $e) {
+              error_log(
+                'Announcement email failed: ' .
+                $e->getMessage()
+              );
+
+              $mailWarning =
+                'Announcement saved, but email notification failed.';
+            }
+          }
+        }
+
+        $save_ok = true;
+
+        if ($mailWarning !== '') {
+          $save_err = $mailWarning;
         }
       }
     } else {
@@ -640,6 +1360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
   <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
 
   <!-- FullCalendar -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css">
@@ -752,15 +1473,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
   box-shadow: 0 6px 18px rgba(0,0,0,0.2);
   z-index: 99999;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
   transform: translateY(-10px);
   transition: all .3s ease;
 }
 
 .access-toast.show {
   opacity: 1;
+  visibility: visible;
   transform: translateY(0);
 }
   </style>
+  <script>
+  (function () {
+    try {
+      const savedTheme =
+        localStorage.getItem('hoa-theme');
+
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia(
+            '(prefers-color-scheme: dark)'
+          ).matches
+        );
+
+      document.documentElement
+        .classList
+        .toggle('dark', dark);
+
+    } catch (e) {}
+  })();
+  </script>
 </head>
 <body>
 
@@ -771,6 +1518,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
     </div>
 
     <div class="header-right">
+
+      <!-- DARK MODE TOGGLE -->
+      <div class="admin-theme-switch">
+        <button
+          type="button"
+          id="themeToggle"
+          class="admin-theme-toggle"
+          aria-label="Switch theme"
+          title="Switch theme"
+        >
+          <span id="themeIcon">☾</span>
+        </button>
+      </div>
       <div class="user-info-dropdown">
         <div class="dropdown">
           <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
@@ -793,7 +1553,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
     <div class="pd-ltr-20">
 
       <?php if ($save_ok === true): ?>
-        <div class="alert alert-success">Announcement saved successfully.</div>
+        <div class="alert alert-success">
+          Announcement saved successfully.
+        </div>
+
+        <?php if ($save_err !== ''): ?>
+          <div class="alert alert-warning">
+            <?= esc($save_err) ?>
+          </div>
+        <?php endif; ?>
+
       <?php elseif ($save_ok === false): ?>
         <div class="alert alert-danger"><?= esc($save_err) ?></div>
       <?php endif; ?>
@@ -863,6 +1632,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
                       <option value="">Select audience</option>
                       <option value="all">All Homeowners (Phase)</option>
                       <option value="selected">Selected Homeowners</option>
+                      <option value="block">Homeowners by Block</option>
                       <option value="all_officers">HOA Officers (Phase)</option>
                     </select>
                   </div>
@@ -893,10 +1663,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
                   </div>
 
                   <div class="mb-3">
-                    <label class="form-label fw-semibold">Attachments (files / pictures)</label>
-                    <input type="file" name="attachments[]" class="form-control" multiple
-                      accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar">
-                    <div class="small-muted mt-1">Max 10MB each.</div>
+                    <label class="form-label fw-semibold">
+                      Attachments (pictures / videos / files)
+                    </label>
+
+                    <input
+                      type="file"
+                      id="announcementAttachments"
+                      name="attachments[]"
+                      class="form-control"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.m4v,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+                      data-normal-max="<?= (int)$appNormalMaxSize ?>"
+                      data-video-max="<?= (int)$appVideoMaxSize ?>"
+                      data-php-upload-max="<?= (int)$phpUploadMaxBytes ?>"
+                      data-php-post-max="<?= (int)$phpPostMaxBytes ?>"
+                    >
+
+                    <div class="small-muted mt-1">
+                      App limit:
+                      pictures/files max
+                      <?= esc(format_bytes_short($appNormalMaxSize)) ?> each;
+                      videos max
+                      <?= esc(format_bytes_short($appVideoMaxSize)) ?> each.
+                    </div>
+
+                    <div class="small-muted mt-1">
+                      Current PHP server:
+                      upload_max_filesize =
+                      <b><?= esc(format_bytes_short($phpUploadMaxBytes)) ?></b>,
+                      post_max_size =
+                      <b><?= esc(format_bytes_short($phpPostMaxBytes)) ?></b>.
+                    </div>
+
+                    <div
+                      id="attachmentUploadError"
+                      class="small text-danger font-weight-bold mt-2"
+                      style="display:none;"
+                    ></div>
                   </div>
 
                   <div class="row">
@@ -929,9 +1733,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
                   </div>
 
                   <div class="d-flex justify-content-end gap-2 mt-4">
-                    <button type="submit" class="btn btn-primary">
+                    <button
+                      type="submit"
+                      id="publishAnnouncementBtn"
+                      class="btn btn-primary"
+                    >
                       <i class="dw dw-paper-plane me-1"></i>
-                      Publish Announcement
+                      <span id="publishAnnouncementText">
+                        Publish Announcement
+                      </span>
                     </button>
                   </div>
 
@@ -1008,6 +1818,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+  <script src="vendors/scripts/admin_theme.js"></script>
 
   <script>
     // small helpers
@@ -1019,6 +1830,232 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
     }
+
+    // ===================== Attachment Upload Validation =====================
+    const announcementForm =
+      document.getElementById(
+        'announcementForm'
+      );
+
+    const attachmentInput =
+      document.getElementById(
+        'announcementAttachments'
+      );
+
+    const attachmentUploadError =
+      document.getElementById(
+        'attachmentUploadError'
+      );
+
+    const publishAnnouncementBtn =
+      document.getElementById(
+        'publishAnnouncementBtn'
+      );
+
+    const publishAnnouncementText =
+      document.getElementById(
+        'publishAnnouncementText'
+      );
+
+    const videoExtensions =
+      new Set([
+        'mp4',
+        'webm',
+        'mov',
+        'm4v'
+      ]);
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) {
+        return 'Unlimited';
+      }
+
+      const mb =
+        bytes /
+        (1024 * 1024);
+
+      if (mb >= 1) {
+        return `${mb.toFixed(
+          mb >= 10 ? 0 : 1
+        )} MB`;
+      }
+
+      return `${(
+        bytes / 1024
+      ).toFixed(1)} KB`;
+    }
+
+    function getExtension(name) {
+      const parts =
+        String(name || '')
+          .toLowerCase()
+          .split('.');
+
+      return
+        parts.length > 1
+          ? parts.pop()
+          : '';
+    }
+
+    function showAttachmentError(message) {
+      if (!attachmentUploadError) {
+        return;
+      }
+
+      attachmentUploadError.textContent =
+        message;
+
+      attachmentUploadError.style.display =
+        message
+          ? 'block'
+          : 'none';
+    }
+
+    function validateAnnouncementAttachments() {
+      if (!attachmentInput) {
+        return true;
+      }
+
+      showAttachmentError('');
+
+      const files =
+        Array.from(
+          attachmentInput.files
+          ?? []
+        );
+
+      if (files.length === 0) {
+        return true;
+      }
+
+      const normalMax =
+        Number(
+          attachmentInput.dataset.normalMax
+          || 0
+        );
+
+      const videoMax =
+        Number(
+          attachmentInput.dataset.videoMax
+          || 0
+        );
+
+      const phpUploadMax =
+        Number(
+          attachmentInput.dataset.phpUploadMax
+          || 0
+        );
+
+      const phpPostMax =
+        Number(
+          attachmentInput.dataset.phpPostMax
+          || 0
+        );
+
+      let totalSize = 0;
+
+      for (const file of files) {
+        totalSize +=
+          Number(
+            file.size
+            || 0
+          );
+
+        const ext =
+          getExtension(
+            file.name
+          );
+
+        let fileLimit =
+          videoExtensions.has(ext)
+            ? videoMax
+            : normalMax;
+
+        if (
+          phpUploadMax > 0 &&
+          (
+            fileLimit <= 0 ||
+            phpUploadMax < fileLimit
+          )
+        ) {
+          fileLimit =
+            phpUploadMax;
+        }
+
+        if (
+          fileLimit > 0 &&
+          file.size > fileLimit
+        ) {
+          showAttachmentError(
+            `"${file.name}" is ${formatBytes(file.size)}. ` +
+            `The current limit for this file is ${formatBytes(fileLimit)}.`
+          );
+
+          return false;
+        }
+      }
+
+      /*
+       * multipart/form-data adds a little overhead. Reserve 256 KB so a file
+       * that is exactly at post_max_size does not fail mysteriously.
+       */
+      const postSafetyMargin =
+        256 * 1024;
+
+      if (
+        phpPostMax > 0 &&
+        totalSize >
+          Math.max(
+            0,
+            phpPostMax -
+              postSafetyMargin
+          )
+      ) {
+        showAttachmentError(
+          `Selected attachments total ${formatBytes(totalSize)}, ` +
+          `but PHP post_max_size is only ${formatBytes(phpPostMax)}. ` +
+          `Choose smaller files or increase post_max_size in php.ini.`
+        );
+
+        return false;
+      }
+
+      return true;
+    }
+
+    attachmentInput?.addEventListener(
+      'change',
+      validateAnnouncementAttachments
+    );
+
+    announcementForm?.addEventListener(
+      'submit',
+      function (event) {
+        if (
+          !validateAnnouncementAttachments()
+        ) {
+          event.preventDefault();
+
+          attachmentUploadError?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+
+          return;
+        }
+
+        if (publishAnnouncementBtn) {
+          publishAnnouncementBtn.disabled =
+            true;
+        }
+
+        if (publishAnnouncementText) {
+          publishAnnouncementText.textContent =
+            'Publishing...';
+        }
+      }
+    );
+
 
     // show/hide sections based on audience
     const audience = document.getElementById('audience');
@@ -1047,8 +2084,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_announcement']))
       homeownersList.innerHTML = '<div class="small-muted">Loading approved homeowners...</div>';
       const phase = phasePick.value;
 
-      const res = await fetch(`announcements.php?ajax=homeowners&phase=${encodeURIComponent(phase)}`);
-      const data = await res.json();
+      let data;
+
+      try {
+        const res = await fetch(
+          `announcements.php?ajax=homeowners&phase=${encodeURIComponent(phase)}`,
+          {
+            headers: {
+              'Accept': 'application/json'
+            }
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        data = await res.json();
+
+      } catch (error) {
+        homeownersList.innerHTML =
+          '<div class="small-muted text-danger">Failed to load homeowners.</div>';
+        return;
+      }
 
       if (!data.success) {
         homeownersList.innerHTML = '<div class="small-muted">Failed to load homeowners.</div>';

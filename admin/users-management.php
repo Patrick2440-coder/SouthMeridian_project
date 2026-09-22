@@ -102,28 +102,166 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 		.table thead th { border-bottom: 1px solid #e9ecef !important; }
 		.table td, .table th { vertical-align: middle !important; }
 		.badge { border-radius: 999px; }
-		/* ACCESS TOAST */
-.access-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-  z-index: 99999;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: all .3s ease;
-}
 
-.access-toast.show {
-  opacity: 1;
-  transform: translateY(0);
-}
+		/* ACCESS TOAST */
+		.access-toast {
+		  position: fixed;
+		  top: 20px;
+		  right: 20px;
+		  padding: 12px 18px;
+		  border-radius: 8px;
+		  font-weight: 600;
+		  z-index: 99999;
+		  opacity: 0;
+		  visibility: hidden;
+		  pointer-events: none;
+		  transform: translateY(-10px);
+		  transition:
+		    opacity .3s ease,
+		    transform .3s ease,
+		    visibility .3s ease;
+		}
+
+		.access-toast.show {
+		  opacity: 1;
+		  visibility: visible;
+		  pointer-events: auto;
+		  transform: translateY(0);
+		}
 	</style>
+
+	<!-- SHARED ADMIN LIGHT / DARK THEME -->
+	<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+	<style>
+		/* =========================================================
+		   USER MANAGEMENT - DARK MODE SAFETY
+		   Base colors come from admin_theme.css
+		   ========================================================= */
+
+		html.dark .table thead th {
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark #homeownersTable,
+		html.dark #officersTable {
+			--bs-table-color: var(--admin-text);
+			--bs-table-bg: var(--admin-surface);
+			--bs-table-border-color: var(--admin-border);
+			--bs-table-striped-color: var(--admin-text);
+			--bs-table-striped-bg: rgba(148, 163, 184, .055);
+			--bs-table-hover-color: #ffffff;
+			--bs-table-hover-bg: var(--admin-hover);
+			color: var(--admin-text) !important;
+			background: var(--admin-surface) !important;
+		}
+
+		html.dark #homeownersTable > :not(caption) > * > *,
+		html.dark #officersTable > :not(caption) > * > * {
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark #homeownersTable tbody tr:nth-child(odd) > *,
+		html.dark #officersTable tbody tr:nth-child(odd) > * {
+			background: var(--admin-surface-2) !important;
+		}
+
+		html.dark #homeownersTable tbody tr:nth-child(even) > *,
+		html.dark #officersTable tbody tr:nth-child(even) > * {
+			background: var(--admin-surface) !important;
+		}
+
+		html.dark #homeownersTable tbody tr:hover > *,
+		html.dark #officersTable tbody tr:hover > * {
+			background: var(--admin-hover) !important;
+			color: #ffffff !important;
+		}
+
+		html.dark #homeownersTable thead th,
+		html.dark #officersTable thead th,
+		html.dark #officersTable thead {
+			background: var(--admin-surface-2) !important;
+			color: #f8fafc !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark .dataTables_wrapper .dataTables_length,
+		html.dark .dataTables_wrapper .dataTables_filter,
+		html.dark .dataTables_wrapper .dataTables_info,
+		html.dark .dataTables_wrapper .dataTables_paginate {
+			color: var(--admin-muted) !important;
+		}
+
+		html.dark .dataTables_wrapper .dataTables_filter input,
+		html.dark .dataTables_wrapper .dataTables_length select {
+			background: var(--admin-input) !important;
+			color: var(--admin-text) !important;
+			border: 1px solid var(--admin-border) !important;
+		}
+
+		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+			background: var(--admin-surface-3) !important;
+			color: #ffffff !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark #ep_homeowner_name {
+			background: var(--admin-input) !important;
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark #editPositionModal .modal-body,
+		html.dark #editPositionModal .modal-footer {
+			background: var(--admin-surface) !important;
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark #editPositionModal .form-control {
+			background: var(--admin-input) !important;
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark .badge-light {
+			background: var(--admin-surface-3) !important;
+			color: var(--admin-text) !important;
+			border-color: var(--admin-border) !important;
+		}
+
+		html.dark .access-toast {
+			background: #7f1d1d !important;
+			color: #fecaca !important;
+			border: 1px solid #991b1b !important;
+			box-shadow: 0 10px 30px rgba(0,0,0,.35) !important;
+		}
+	</style>
+
+	<script>
+	(function () {
+		try {
+			const savedTheme = localStorage.getItem('hoa-theme');
+
+			const dark =
+				savedTheme === 'dark' ||
+				(
+					!savedTheme &&
+					window.matchMedia &&
+					window.matchMedia('(prefers-color-scheme: dark)').matches
+				);
+
+			document.documentElement.classList.toggle('dark', dark);
+		} catch (e) {}
+	})();
+	</script>
 </head>
 
 <body>
@@ -133,6 +271,20 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
 		<div class="header-right">
+
+			<!-- SHARED ADMIN DARK MODE TOGGLE -->
+			<div class="admin-theme-switch">
+				<button
+					type="button"
+					id="themeToggle"
+					class="admin-theme-toggle"
+					aria-label="Switch theme"
+					title="Switch theme"
+				>
+					<span id="themeIcon">☾</span>
+				</button>
+			</div>
+
 			<div class="user-notification">
 				<div class="dropdown">
 					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
@@ -414,6 +566,9 @@ $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Manag
 	<script src="vendors/scripts/script.min.js"></script>
 	<script src="vendors/scripts/process.js"></script>
 	<script src="vendors/scripts/layout-settings.js"></script>
+
+	<!-- SHARED ADMIN DARK MODE -->
+	<script src="vendors/scripts/admin_theme.js"></script>
 
 	<!-- Bootstrap 4 modal dependencies -->
 	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>

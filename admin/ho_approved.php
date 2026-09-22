@@ -60,6 +60,146 @@ function subdivision_block_lot(array $record): array
     return [$block, $lot];
 }
 
+/*
+|--------------------------------------------------------------------------
+| Official South Meridian Block / Lot Locations
+|--------------------------------------------------------------------------
+*/
+
+function south_meridian_locations(): array
+{
+    static $locations = null;
+
+    if ($locations !== null) {
+        return $locations;
+    }
+
+    $locations = [];
+
+    $mappingPath =
+        __DIR__
+        . DIRECTORY_SEPARATOR
+        . 'southmeri_block_lot_mapping.json';
+
+
+    if (!is_readable($mappingPath)) {
+        return $locations;
+    }
+
+
+    $decoded =
+        json_decode(
+            (string)file_get_contents(
+                $mappingPath
+            ),
+            true
+        );
+
+
+    if (!is_array($decoded)) {
+        return $locations;
+    }
+
+
+    /*
+     * Coordinate conversion used by the
+     * official South Meridian map.
+     */
+    $pageWidthEmu =
+        8.5 * 914400;
+
+    $pageHeightEmu =
+        11 * 914400;
+
+    $pageMarginEmu =
+        914400;
+
+    $markerCenterOffsetEmu =
+        90000;
+
+
+    foreach ($decoded as $row) {
+
+        $block =
+            (int)($row['block'] ?? 0);
+
+        $lot =
+            (int)($row['lot'] ?? 0);
+
+        $xEmu =
+            (float)($row['x_emu'] ?? -1);
+
+        $yEmu =
+            (float)($row['y_emu'] ?? -1);
+
+
+        if (
+            $block < 1 ||
+            $lot < 1 ||
+            $xEmu < -$pageMarginEmu ||
+            $yEmu < -$pageMarginEmu
+        ) {
+            continue;
+        }
+
+
+        $locations[
+            $block . ':' . $lot
+        ] = [
+
+            'block' =>
+                $block,
+
+            'lot' =>
+                $lot,
+
+            'street' =>
+                trim(
+                    (string)(
+                        $row['street'] ?? ''
+                    )
+                ),
+
+            'x' =>
+                round(
+                    (
+                        (
+                            $pageMarginEmu +
+                            $xEmu +
+                            $markerCenterOffsetEmu
+                        )
+                        /
+                        $pageWidthEmu
+                    )
+                    * 2550,
+                    2
+                ),
+
+            'y' =>
+                round(
+                    (
+                        (
+                            $pageMarginEmu +
+                            $yEmu +
+                            $markerCenterOffsetEmu
+                        )
+                        /
+                        $pageHeightEmu
+                    )
+                    * 3300,
+                    2
+                )
+        ];
+    }
+
+
+    return $locations;
+}
+
+
+$southMeridianLocations =
+    south_meridian_locations();
+
 function file_ext(string $path): string {
   return strtolower(pathinfo($path, PATHINFO_EXTENSION));
 }
@@ -221,8 +361,118 @@ $homeownerStreet = trim(
 );
 
 
-$mapX = $homeowner['map_x'] ?? null;
-$mapY = $homeowner['map_y'] ?? null;
+/*
+|--------------------------------------------------------------------------
+| South Meridian Default Address Values
+|--------------------------------------------------------------------------
+| These defaults apply to every homeowner profile modal only when the saved
+| database value is blank. Existing homeowner values are kept.
+*/
+$homeownerRegion =
+    trim(
+        (string)(
+            $homeowner['region']
+            ?? ''
+        )
+    );
+
+if ($homeownerRegion === '') {
+    $homeownerRegion =
+        'CALABARZON';
+}
+
+
+$homeownerZipCode =
+    trim(
+        (string)(
+            $homeowner['zip_code']
+            ?? ''
+        )
+    );
+
+if ($homeownerZipCode === '') {
+    $homeownerZipCode =
+        '4114';
+}
+
+
+$homeownerCountry =
+    trim(
+        (string)(
+            $homeowner['country']
+            ?? ''
+        )
+    );
+
+if ($homeownerCountry === '') {
+    $homeownerCountry =
+        'Philippines';
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Find exact Block / Lot on official subdivision map
+|--------------------------------------------------------------------------
+*/
+
+$mapLocation = null;
+
+
+if (
+    $homeownerBlock > 0 &&
+    $homeownerLot > 0
+) {
+
+    $mapKey =
+        $homeownerBlock
+        . ':'
+        . $homeownerLot;
+
+
+    $mapLocation =
+        $southMeridianLocations[
+            $mapKey
+        ] ?? null;
+}
+
+
+/*
+ * Prefer official mapping coordinates.
+ *
+ * Older records that already have map_x / map_y
+ * can still use them as a fallback.
+ */
+$mapX =
+    $mapLocation['x']
+    ??
+    $homeowner['map_x']
+    ??
+    null;
+
+
+$mapY =
+    $mapLocation['y']
+    ??
+    $homeowner['map_y']
+    ??
+    null;
+
+
+/*
+ * If Street is missing from the homeowner record,
+ * use the official map street.
+ */
+if (
+    $homeownerStreet === '' &&
+    !empty($mapLocation['street'])
+) {
+
+    $homeownerStreet =
+        trim(
+            (string)$mapLocation['street']
+        );
+}
 
 
 $hasSubdivisionMap =
@@ -232,6 +482,27 @@ $hasSubdivisionMap =
     $mapY !== null &&
     is_numeric($mapX) &&
     is_numeric($mapY);
+
+
+/*
+|--------------------------------------------------------------------------
+| Static Image Map Pin Position
+|--------------------------------------------------------------------------
+|
+| The official subdivision map image is 2550 x 3300.
+| Convert the exact map coordinate to responsive percentages.
+|
+*/
+
+$markerLeft =
+    $hasSubdivisionMap
+        ? ((float)$mapX / 2550) * 100
+        : 0;
+
+$markerTop =
+    $hasSubdivisionMap
+        ? ((float)$mapY / 3300) * 100
+        : 0;
 
 
 /*
@@ -268,9 +539,9 @@ $fullAddress = trim(
                 $homeowner['barangay'] ?? '',
                 $homeowner['city_municipality'] ?? '',
                 $homeowner['province'] ?? '',
-                $homeowner['region'] ?? '',
-                $homeowner['zip_code'] ?? '',
-                $homeowner['country'] ?? ''
+                $homeownerRegion,
+                $homeownerZipCode,
+                $homeownerCountry
             ],
             static fn($value) =>
                 trim((string)$value) !== ''
@@ -290,7 +561,7 @@ $createdAt =
   <div class="container-fluid p-4">
     <div class="row g-4">
       <div class="col-lg-4">
-        <div class="card shadow-sm border-0 h-100">
+        <div class="card shadow-sm border-0 profile-summary-card">
           <div class="card-body text-center">
             <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
                  style="width:90px;height:90px;background:#077f46;color:#fff;font-size:32px;font-weight:700;">
@@ -468,11 +739,7 @@ $createdAt =
     </label>
 
     <div class="fw-semibold">
-        <?= esc(
-            $displayValue(
-                $homeowner['region'] ?? null
-            )
-        ) ?>
+        <?= esc($homeownerRegion) ?>
     </div>
 </div>
 
@@ -482,11 +749,7 @@ $createdAt =
     </label>
 
     <div class="fw-semibold">
-        <?= esc(
-            $displayValue(
-                $homeowner['zip_code'] ?? null
-            )
-        ) ?>
+        <?= esc($homeownerZipCode) ?>
     </div>
 </div>
 
@@ -496,11 +759,7 @@ $createdAt =
     </label>
 
     <div class="fw-semibold">
-        <?= esc(
-            $displayValue(
-                $homeowner['country'] ?? null
-            )
-        ) ?>
+        <?= esc($homeownerCountry) ?>
     </div>
 </div>
 
@@ -636,7 +895,26 @@ $createdAt =
             <?php endif; ?>
           </div>
         </div>
+<?php
 
+$mapImageFile =
+    dirname(__DIR__)
+    . DIRECTORY_SEPARATOR
+    . 'assets'
+    . DIRECTORY_SEPARATOR
+    . 'img'
+    . DIRECTORY_SEPARATOR
+    . 'south_meridian_block_lot_map.png';
+
+
+$mapImageVersion =
+    is_file($mapImageFile)
+        ? (int)filemtime(
+            $mapImageFile
+        )
+        : time();
+
+?>
 <div class="card shadow-sm border-0 mb-4">
 
     <div class="card-header bg-white">
@@ -663,57 +941,56 @@ $createdAt =
 
     <div class="card-body">
 
-        <?php if ($hasSubdivisionMap): ?>
+ <?php if ($hasSubdivisionMap): ?>
 
-            <div
-                id="coverMap"
+    <div
+        class="property-image-map"
+    >
 
-                data-map-type="subdivision"
-
-                data-map-x="<?= esc($mapX) ?>"
-                data-map-y="<?= esc($mapY) ?>"
-
-                data-block="<?= (int)$homeownerBlock ?>"
-                data-lot="<?= (int)$homeownerLot ?>"
-
-                data-street="<?= esc($homeownerStreet) ?>"
-
-                data-map-image="../assets/img/south_meridian_block_lot_map.png"
-
-                style="
-                    height:420px;
-                    border-radius:12px;
-                    overflow:hidden;
-                "
-            ></div>
+        <img
+            src="../assets/img/south_meridian_block_lot_map.png?v=<?= $mapImageVersion ?>"
+            alt="South Meridian Block and Lot Map"
+        >
 
 
-        <?php elseif ($hasLegacyGps): ?>
+        <!-- Exact homeowner location pin -->
+        <div
+            class="property-image-pin"
+            title="Block <?= (int)$homeownerBlock ?>, Lot <?= (int)$homeownerLot ?>"
+            style="
+                left:<?= esc(number_format($markerLeft, 4, '.', '')) ?>%;
+                top:<?= esc(number_format($markerTop, 4, '.', '')) ?>%;
+            "
+            aria-hidden="true"
+        >
+            📍
+        </div>
 
-            <div class="alert alert-warning py-2 small">
-                This is an older homeowner record.
-                The official Block/Lot map location has not
-                been assigned yet, so the previous GPS
-                location is being shown.
-            </div>
-
-            <div
-                id="coverMap"
-
-                data-map-type="gps"
-
-                data-lat="<?= esc($lat) ?>"
-                data-lng="<?= esc($lng) ?>"
-
-                style="
-                    height:360px;
-                    border-radius:12px;
-                    overflow:hidden;
-                "
-            ></div>
+    </div>
 
 
-        <?php else: ?>
+    <div class="text-center mt-2 text-muted small">
+
+        Block <?= (int)$homeownerBlock ?>,
+        Lot <?= (int)$homeownerLot ?>
+
+        <?php if ($homeownerStreet !== ''): ?>
+
+            · <?= esc($homeownerStreet) ?>
+
+        <?php endif; ?>
+
+    </div>
+
+
+<?php elseif ($hasLegacyGps): ?>
+
+    <div class="alert alert-warning mb-0">
+        This is an older homeowner record.
+        The official Block/Lot image-map location has not yet been assigned.
+    </div>
+
+<?php else: ?>
 
             <div class="text-muted">
                 No property map location is available.
@@ -922,17 +1199,21 @@ $resultApproved = $sqlApproved->get_result();
 	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
 	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+	<!-- Bootstrap 5 utilities/modal support used by this page -->
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+	<!-- DataTables base CSS -->
 	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+	<!-- IMPORTANT: DeskApp theme must load AFTER Bootstrap 5/DataTables
+	     so Bootstrap does not replace the Admin typography and link styles. -->
+	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 
-	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 	<style>
 		:root{--brand:#077f46;}
@@ -999,15 +1280,307 @@ $resultApproved = $sqlApproved->get_result();
 		  word-break:break-word;
 		}
 
-		#viewHomeownerModal #coverMap{
-		  min-height:360px;
-		  background:#e9eef6;
-		}
+        /* View Homeowner: keep the left profile card at its natural height. */
+        #viewHomeownerModal .profile-summary-card{
+          height:auto !important;
+        }
+
+        /*
+         * Static South Meridian image map.
+         * The source image is exactly 2550 x 3300 = 17:22.
+         * Keeping the wrapper at the same ratio preserves exact pin alignment.
+         */
+        .property-image-map{
+          position:relative;
+          width:min(100%, 460px);
+          aspect-ratio:17 / 22;
+          margin:0 auto;
+          overflow:hidden;
+          border:1px solid rgba(148,163,184,.35);
+          border-radius:12px;
+          background:#e9eef6;
+          box-shadow:0 4px 14px rgba(15,23,42,.10);
+        }
+
+        .property-image-map img{
+          display:block;
+          width:100%;
+          height:100%;
+          object-fit:fill;
+          user-select:none;
+          -webkit-user-drag:none;
+        }
+
+        html.dark .property-image-map{
+          background:#0f172a;
+          border-color:rgba(148,163,184,.22);
+          box-shadow:0 6px 18px rgba(0,0,0,.28);
+        }
+
+        .property-image-pin{
+          position:absolute;
+          transform:translate(-50%, -100%);
+          font-size:30px;
+          line-height:1;
+          color:#dc3545;
+          text-shadow:0 1px 4px rgba(0,0,0,.55);
+          z-index:5;
+          pointer-events:none;
+          filter:drop-shadow(0 2px 2px rgba(255,255,255,.35));
+        }
+
+        @media (max-width: 575.98px){
+          .property-image-map{
+            width:100%;
+          }
+        }
 </style>
 
 <!-- ADMIN DARK MODE -->
 <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
 
+<style>
+/* =========================================================
+   DESKAPP TYPOGRAPHY / LINK RESTORE
+   Bootstrap 5 is used for modal/utilities on this page, but
+   DeskApp remains the visual design system for the Admin UI.
+   ========================================================= */
+
+html,
+body,
+button,
+input,
+select,
+textarea,
+.table,
+.dataTables_wrapper {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Bootstrap 5 underlines anchors by default.
+   DeskApp navigation links should not be underlined. */
+.brand-logo a,
+.header a,
+.left-side-bar a,
+.sidebar-menu a,
+.dropdown-menu a {
+    text-decoration: none !important;
+}
+
+/* Restore DeskApp sidebar typography. */
+.sidebar-menu .dropdown-toggle {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 16px !important;
+    font-weight: 400 !important;
+    letter-spacing: .03em !important;
+    line-height: 1.5 !important;
+}
+
+.sidebar-menu .submenu li a {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 400 !important;
+    line-height: 1.45 !important;
+    text-decoration: none !important;
+}
+
+/* Page/title typography. */
+.page-title-wrap h2,
+.page-title-wrap .h4 {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
+}
+
+.page-title-wrap .subtitle {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 500 !important;
+}
+
+/* Table typography. */
+#approvedTable,
+#approvedTable th,
+#approvedTable td,
+.dataTables_wrapper label,
+.dataTables_wrapper input,
+.dataTables_wrapper select,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+    font-family: 'Inter', sans-serif !important;
+}
+
+#approvedTable thead th {
+    font-weight: 600 !important;
+}
+
+#approvedTable tbody td {
+    font-weight: 400 !important;
+}
+
+/* Keep normal text inside profile/edit modals consistent too. */
+#viewHomeownerModal,
+#editHomeownerModal,
+#deleteHomeownerModal {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* =========================================================
+   HO APPROVED - DARK TABLE SAFETY
+   ========================================================= */
+/* =========================================================
+   HO APPROVED - DARK TABLE SAFETY
+   ========================================================= */
+
+html.dark #approvedTable {
+    --bs-table-color: var(--admin-text);
+    --bs-table-bg: var(--admin-surface);
+
+    --bs-table-border-color:
+        var(--admin-border);
+
+    --bs-table-striped-color:
+        var(--admin-text);
+
+    --bs-table-striped-bg:
+        rgba(148, 163, 184, .055);
+
+    --bs-table-hover-color:
+        #ffffff;
+
+    --bs-table-hover-bg:
+        var(--admin-hover);
+
+    color:
+        var(--admin-text) !important;
+
+    background:
+        var(--admin-surface) !important;
+}
+
+
+/* Main Approved Households table cells */
+html.dark #approvedTable tbody td {
+    color:
+        var(--admin-text) !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+/* Normal/even rows */
+html.dark #approvedTable tbody tr:nth-child(even) > * {
+    background:
+        var(--admin-surface) !important;
+
+    color:
+        var(--admin-text) !important;
+}
+
+
+/* Striped/odd rows */
+html.dark #approvedTable tbody tr:nth-child(odd) > * {
+    background:
+        var(--admin-surface-2) !important;
+
+    color:
+        var(--admin-text) !important;
+}
+
+
+/* Header */
+html.dark #approvedTable thead th {
+    background:
+        var(--admin-surface-2) !important;
+
+    color:
+        #f8fafc !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+/* Row hover */
+html.dark #approvedTable tbody tr:hover > * {
+    background:
+        var(--admin-hover) !important;
+
+    color:
+        #ffffff !important;
+}
+
+
+/* =========================================================
+   TABLES INSIDE VIEW HOMEOWNER MODAL
+   Household Members + Registered Tenants
+   ========================================================= */
+
+html.dark #viewHomeownerModal .table {
+    --bs-table-color:
+        var(--admin-text);
+
+    --bs-table-bg:
+        var(--admin-surface);
+
+    --bs-table-striped-color:
+        var(--admin-text);
+
+    --bs-table-striped-bg:
+        rgba(148, 163, 184, .055);
+
+    --bs-table-border-color:
+        var(--admin-border);
+}
+
+
+html.dark #viewHomeownerModal
+.table > :not(caption) > * > * {
+
+    color:
+        var(--admin-text) !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+html.dark #viewHomeownerModal
+.table tbody tr:nth-child(even) > * {
+
+    background:
+        var(--admin-surface) !important;
+}
+
+
+html.dark #viewHomeownerModal
+.table tbody tr:nth-child(odd) > * {
+
+    background:
+        var(--admin-surface-2) !important;
+}
+
+
+html.dark #viewHomeownerModal
+.table thead th {
+
+    background:
+        var(--admin-surface-2) !important;
+
+    color:
+        #f8fafc !important;
+
+    border-color:
+        var(--admin-border) !important;
+}
+
+
+html.dark #viewHomeownerModal .modal-body,
+html.dark #editHomeownerModal .modal-body {
+    background:
+        var(--admin-bg) !important;
+}
+</style>
 <script>
 (function () {
     try {
@@ -1317,348 +1890,113 @@ $rowAddress =
 			const content = document.getElementById('viewHomeownerContent');
 			const modal = new bootstrap.Modal(modalEl, { backdrop:'static', keyboard:true });
 
-			let coverMapInstance = null;
-
-			function destroyCoverMap() {
-				if (coverMapInstance) {
-					coverMapInstance.remove();
-					coverMapInstance = null;
-				}
-			}
-function initCoverMapIfAny() {
-
-    const mapEl =
-        document.getElementById(
-            'coverMap'
-        );
-
-    if (
-        !mapEl ||
-        typeof L === 'undefined'
-    ) {
-        return;
-    }
 
 
-    const mapType =
-        mapEl.getAttribute(
-            'data-map-type'
-        ) || '';
+/*
+|--------------------------------------------------------------------------
+| View Approved Homeowner
+|--------------------------------------------------------------------------
+|
+| The profile HTML already contains the static subdivision image and
+| exact pin position. No Leaflet initialization is needed.
+|
+*/
 
+$(document).on(
+    'click',
+    '.viewHomeownerBtn',
+    function (e) {
 
-    destroyCoverMap();
+        e.preventDefault();
 
+        const id =
+            $(this).data('id');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Official South Meridian subdivision map
-    |--------------------------------------------------------------------------
-    */
-
-    if (mapType === 'subdivision') {
-
-        const x =
-            parseFloat(
-                mapEl.getAttribute(
-                    'data-map-x'
-                ) || ''
-            );
-
-        const y =
-            parseFloat(
-                mapEl.getAttribute(
-                    'data-map-y'
-                ) || ''
-            );
-
-        const block =
-            mapEl.getAttribute(
-                'data-block'
-            ) || '';
-
-        const lot =
-            mapEl.getAttribute(
-                'data-lot'
-            ) || '';
-
-        const street =
-            mapEl.getAttribute(
-                'data-street'
-            ) || '';
-
-        const imageUrl =
-            mapEl.getAttribute(
-                'data-map-image'
-            ) || '';
-
-
-        if (
-            !Number.isFinite(x) ||
-            !Number.isFinite(y) ||
-            !imageUrl
-        ) {
+        if (!id) {
             return;
         }
 
+        content.innerHTML =
+            `
+            <div class="p-4 text-muted fw-semibold">
+                Loading...
+            </div>
+            `;
 
-        const leafletY =
-            3300 - y;
+        modal.show();
 
-
-        coverMapInstance =
-            L.map(
-                mapEl,
-                {
-                    crs:
-                        L.CRS.Simple,
-
-                    center:
-                        [
-                            leafletY,
-                            x
-                        ],
-
-                    zoom:
-                        -1,
-
-                    minZoom:
-                        -3,
-
-                    maxZoom:
-                        3,
-
-                    zoomSnap:
-                        0.25,
-
-                    zoomControl:
-                        true,
-
-                    attributionControl:
-                        false
-                }
-            );
-
-
-        const mapBounds =
-            [
-                [0, 0],
-                [3300, 2550]
-            ];
-
-
-        L.imageOverlay(
-            imageUrl,
-            mapBounds
-        ).addTo(
-            coverMapInstance
-        );
-
-
-        L.marker(
-            [
-                leafletY,
-                x
-            ]
-        )
-        .addTo(
-            coverMapInstance
-        )
-        .bindPopup(
-            `<strong>Block ${block}, Lot ${lot}</strong>` +
-            (
-                street
-                    ? `<br>${street}`
-                    : ''
-            )
-        )
-        .openPopup();
-
-
-        setTimeout(
-            function () {
-
-                if (coverMapInstance) {
-
-                    coverMapInstance
-                        .invalidateSize(true);
-
-                    coverMapInstance
-                        .setView(
-                            [
-                                leafletY,
-                                x
-                            ],
-                            -1
-                        );
-                }
-
-            },
-            300
-        );
-
-
-        setTimeout(
-            function () {
-
-                if (coverMapInstance) {
-                    coverMapInstance
-                        .invalidateSize(true);
-                }
-
-            },
-            800
-        );
-
-
-        return;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Old GPS fallback
-    |--------------------------------------------------------------------------
-    */
-
-    if (mapType === 'gps') {
-
-        const lat =
-            parseFloat(
-                mapEl.getAttribute(
-                    'data-lat'
-                ) || ''
-            );
-
-        const lng =
-            parseFloat(
-                mapEl.getAttribute(
-                    'data-lng'
-                ) || ''
-            );
-
-
-        if (
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lng)
-        ) {
-            return;
-        }
-
-
-        coverMapInstance =
-            L.map(
-                mapEl,
-                {
-                    center:
-                        [
-                            lat,
-                            lng
-                        ],
-
-                    zoom:
-                        18,
-
-                    zoomControl:
-                        true,
-
-                    attributionControl:
-                        true
-                }
-            );
-
-
-        L.tileLayer(
-            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        $.get(
+            'ho_approved.php',
             {
-                maxZoom:
-                    19,
+                ajax:
+                    'homeowner_profile',
 
-                attribution:
-                    '&copy; OpenStreetMap contributors'
+                id:
+                    id,
+
+                _:
+                    Date.now()
             }
         )
-        .addTo(
-            coverMapInstance
-        );
+        .done(
+            function (html) {
 
-
-        L.marker(
-            [
-                lat,
-                lng
-            ]
+                /*
+                 * The returned HTML already includes:
+                 *
+                 * - South Meridian subdivision image
+                 * - responsive pin position
+                 * - Block / Lot / Street information
+                 */
+                content.innerHTML =
+                    html;
+            }
         )
-        .addTo(
-            coverMapInstance
-        );
+        .fail(
+            function (xhr) {
 
-
-        setTimeout(
-            function () {
-
-                if (coverMapInstance) {
-                    coverMapInstance
-                        .invalidateSize(true);
-                }
-
-            },
-            300
+                content.innerHTML =
+                    `
+                    <div class="p-4">
+                        <div class="alert alert-danger mb-0">
+                            Failed to load profile.
+                            HTTP ${xhr.status}
+                        </div>
+                    </div>
+                    `;
+            }
         );
     }
-}
+);
 
-			$(document).on('click','.viewHomeownerBtn', function(e){
-				e.preventDefault();
-				const id = $(this).data('id');
-				if (!id) return;
 
-				content.innerHTML = `<div class="p-4 text-muted fw-semibold">Loading...</div>`;
-				modal.show();
+modalEl.addEventListener(
+    'hidden.bs.modal',
+    function () {
 
-				$.get('ho_approved.php', { ajax:'homeowner_profile', id:id, _:Date.now() })
-					.done(function(html){ content.innerHTML = html; initCoverMapIfAny(); })
-					.fail(function(xhr){
-						content.innerHTML = `<div class="p-4"><div class="alert alert-danger mb-0">Failed to load profile. HTTP ${xhr.status}</div></div>`;
-					});
-			});
+        content.innerHTML =
+            '';
+    }
+);
 
-			modalEl.addEventListener('hidden.bs.modal', function(){
-				if (coverMapInstance) { coverMapInstance.remove(); coverMapInstance = null; }
-				content.innerHTML = '';
-			});
 
 			const editModalEl = document.getElementById('editHomeownerModal');
 			const editContent = document.getElementById('editHomeownerContent');
 			const editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
 
-let editMapInstance = null;
-let editMapMarker = null;
 let pendingInit = false;
 
 
 /*
 |--------------------------------------------------------------------------
-| Destroy Edit Property Map
+| Initialize Official South Meridian Edit Image Map
 |--------------------------------------------------------------------------
+|
+| This uses the same 2550 x 3300 static subdivision image as the View modal.
+| No Leaflet library is required.
+|
 */
-function destroyEditMap() {
 
-    if (editMapInstance) {
-
-        editMapInstance.remove();
-
-        editMapInstance = null;
-    }
-
-    editMapMarker = null;
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| Initialize Official South Meridian Edit Map
-|--------------------------------------------------------------------------
-*/
 function initEditPropertyMap() {
 
     const mapEl =
@@ -1684,18 +2022,12 @@ function initEditPropertyMap() {
         !mapEl ||
         !dataEl ||
         !blockSelect ||
-        !lotSelect ||
-        typeof L === 'undefined'
+        !lotSelect
     ) {
         return;
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Read Block/Lot mapping
-    |--------------------------------------------------------------------------
-    */
     let locations = [];
 
     try {
@@ -1716,87 +2048,149 @@ function initEditPropertyMap() {
     }
 
 
-    destroyEditMap();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Create Leaflet image map
-    |--------------------------------------------------------------------------
-    */
-    editMapInstance =
-        L.map(
-            mapEl,
-            {
-                crs: L.CRS.Simple,
-
-                center: [
-                    1650,
-                    1275
-                ],
-
-                zoom: -1,
-
-                minZoom: -3,
-                maxZoom: 3,
-
-                zoomSnap: 0.25,
-
-                zoomControl: true,
-
-                attributionControl: false
-            }
-        );
-
-
-    const mapBounds = [
-        [0, 0],
-        [3300, 2550]
-    ];
-
-
     const imageUrl =
         mapEl.dataset.mapImage ||
         '../assets/img/south_meridian_block_lot_map.png';
 
 
-    L.imageOverlay(
-        imageUrl,
-        mapBounds
-    ).addTo(editMapInstance);
-
-
     /*
-    |--------------------------------------------------------------------------
-    | Find a property
-    |--------------------------------------------------------------------------
-    */
-    function findLocation(block, lot) {
+     * Rebuild the map container as a responsive image map.
+     */
+    mapEl.innerHTML = '';
+
+    mapEl.style.position =
+        'relative';
+
+    mapEl.style.width =
+        'min(100%, 460px)';
+
+    mapEl.style.aspectRatio =
+        '17 / 22';
+
+    mapEl.style.height =
+        'auto';
+
+    mapEl.style.minHeight =
+        '0';
+
+    mapEl.style.margin =
+        '0 auto';
+
+    mapEl.style.overflow =
+        'hidden';
+
+    mapEl.style.borderRadius =
+        '12px';
+
+    mapEl.style.background =
+        '#e9eef6';
+
+
+    const mapImage =
+        document.createElement('img');
+
+    mapImage.src =
+        imageUrl;
+
+    mapImage.alt =
+        'South Meridian Block and Lot Map';
+
+    mapImage.style.display =
+        'block';
+
+    mapImage.style.width =
+        '100%';
+
+    mapImage.style.height =
+        '100%';
+
+    mapImage.style.objectFit =
+        'fill';
+
+    mapEl.appendChild(
+        mapImage
+    );
+
+
+    const marker =
+        document.createElement('div');
+
+    marker.textContent =
+        '📍';
+
+    marker.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+
+    Object.assign(
+        marker.style,
+        {
+            position:
+                'absolute',
+
+            transform:
+                'translate(-50%, -100%)',
+
+            fontSize:
+                '30px',
+
+            lineHeight:
+                '1',
+
+            color:
+                '#dc3545',
+
+            textShadow:
+                '0 1px 4px rgba(0,0,0,.45)',
+
+            zIndex:
+                '5',
+
+            pointerEvents:
+                'none',
+
+            display:
+                'none'
+        }
+    );
+
+    mapEl.appendChild(
+        marker
+    );
+
+
+    function findLocation(
+        block,
+        lot
+    ) {
 
         return locations.find(
             function (item) {
 
                 return (
-                    Number(item.block) === Number(block) &&
-                    Number(item.lot) === Number(lot)
+                    Number(item.block) ===
+                        Number(block)
+                    &&
+                    Number(item.lot) ===
+                        Number(lot)
                 );
             }
         );
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Update map using selected Block + Lot
-    |--------------------------------------------------------------------------
-    */
     function showSelectedProperty() {
 
         const block =
-            Number(blockSelect.value);
+            Number(
+                blockSelect.value
+            );
 
         const lot =
-            Number(lotSelect.value);
+            Number(
+                lotSelect.value
+            );
 
 
         const location =
@@ -1806,13 +2200,14 @@ function initEditPropertyMap() {
             );
 
 
-        /*
-         * No valid Block/Lot selected
-         */
         if (!location) {
 
+            marker.style.display =
+                'none';
+
             if (streetInput) {
-                streetInput.value = '';
+                streetInput.value =
+                    '';
             }
 
             if (propertyInfo) {
@@ -1820,25 +2215,19 @@ function initEditPropertyMap() {
                     'Select a valid Block and Lot.';
             }
 
-
-            if (editMapMarker) {
-
-                editMapInstance.removeLayer(
-                    editMapMarker
-                );
-
-                editMapMarker = null;
-            }
-
             return;
         }
 
 
         const x =
-            Number(location.map_x);
+            Number(
+                location.map_x
+            );
 
         const y =
-            Number(location.map_y);
+            Number(
+                location.map_y
+            );
 
         const street =
             String(
@@ -1850,55 +2239,48 @@ function initEditPropertyMap() {
             !Number.isFinite(x) ||
             !Number.isFinite(y)
         ) {
+
+            marker.style.display =
+                'none';
+
             return;
         }
 
 
-        /*
-         * Convert image Y coordinate
-         * to Leaflet CRS.Simple coordinate
-         */
-        const leafletY =
-            3300 - y;
+        const leftPercent =
+            (x / 2550) * 100;
+
+        const topPercent =
+            (y / 3300) * 100;
 
 
-        /*
-         * Remove previous marker
-         */
-        if (editMapMarker) {
+        marker.style.left =
+            leftPercent + '%';
 
-            editMapInstance.removeLayer(
-                editMapMarker
+        marker.style.top =
+            topPercent + '%';
+
+        marker.style.display =
+            'block';
+
+        marker.title =
+            'Block ' +
+            block +
+            ', Lot ' +
+            lot +
+            (
+                street
+                    ? ' · ' + street
+                    : ''
             );
-        }
 
 
-        /*
-         * Official marker — NOT draggable
-         */
-        editMapMarker =
-            L.marker(
-                [
-                    leafletY,
-                    x
-                ]
-            )
-            .addTo(editMapInstance);
-
-
-        /*
-         * Update Street field
-         */
         if (streetInput) {
-
             streetInput.value =
                 street;
         }
 
 
-        /*
-         * Update property description safely
-         */
         if (propertyInfo) {
 
             propertyInfo.textContent =
@@ -1913,64 +2295,12 @@ function initEditPropertyMap() {
                         : ''
                 );
         }
-
-
-        /*
-         * Marker popup
-         */
-        const popupContent =
-            document.createElement('div');
-
-        const popupTitle =
-            document.createElement('strong');
-
-        popupTitle.textContent =
-            'Block ' +
-            block +
-            ', Lot ' +
-            lot;
-
-        popupContent.appendChild(
-            popupTitle
-        );
-
-
-        if (street) {
-
-            popupContent.appendChild(
-                document.createElement('br')
-            );
-
-            popupContent.appendChild(
-                document.createTextNode(
-                    street
-                )
-            );
-        }
-
-
-        editMapMarker
-            .bindPopup(
-                popupContent
-            )
-            .openPopup();
-
-
-        editMapInstance.setView(
-            [
-                leafletY,
-                x
-            ],
-            -1
-        );
     }
 
 
     /*
-    |--------------------------------------------------------------------------
-    | When Block changes
-    |--------------------------------------------------------------------------
-    */
+     * Rebuild the Lot choices whenever Block changes.
+     */
     blockSelect.addEventListener(
         'change',
         function () {
@@ -1981,9 +2311,6 @@ function initEditPropertyMap() {
                 );
 
 
-            /*
-             * Reset Lot dropdown
-             */
             lotSelect.innerHTML =
                 '<option value="">Select Lot</option>';
 
@@ -1999,9 +2326,6 @@ function initEditPropertyMap() {
             }
 
 
-            /*
-             * Get valid Lots for selected Block
-             */
             const lots =
                 locations
                     .filter(
@@ -2051,21 +2375,11 @@ function initEditPropertyMap() {
             lotSelect.disabled =
                 false;
 
-
-            /*
-             * No Lot selected yet,
-             * therefore clear map marker.
-             */
             showSelectedProperty();
         }
     );
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | When Lot changes
-    |--------------------------------------------------------------------------
-    */
     lotSelect.addEventListener(
         'change',
         function () {
@@ -2076,84 +2390,118 @@ function initEditPropertyMap() {
 
 
     /*
-    |--------------------------------------------------------------------------
-    | Display homeowner's current property
-    |--------------------------------------------------------------------------
-    */
-    showSelectedProperty();
-
-
-    /*
-     * Modal animation can temporarily
-     * give Leaflet the wrong dimensions.
+     * Show the homeowner's current property immediately.
      */
-    setTimeout(
-        function () {
-
-            if (editMapInstance) {
-
-                editMapInstance.invalidateSize(
-                    true
-                );
-            }
-
-        },
-        250
-    );
-
-
-    setTimeout(
-        function () {
-
-            if (editMapInstance) {
-
-                editMapInstance.invalidateSize(
-                    true
-                );
-            }
-
-        },
-        700
-    );
+    showSelectedProperty();
 }
 
-			$(document).on('click','.editHomeowner', function(e){
-				e.preventDefault();
-				const id = $(this).data('id');
-				if (!id) return;
 
-				pendingInit = true;
-				editContent.innerHTML = `<div class="p-3 text-muted fw-semibold">Loading edit form...</div>`;
-				editModal.show();
+$(document).on(
+    'click',
+    '.editHomeowner',
+    function (e) {
 
-				$.get('edit_homeowner_modal.php', { ajax:'edit_homeowner', id:id, _:Date.now() })
-					.done(function(html){
-						editContent.innerHTML = html;
-						if (editModalEl.classList.contains('show')) {
-							initEditPropertyMap();
-							pendingInit = false;
-						}
-					})
-					.fail(function(xhr){
-						pendingInit = false;
-						editContent.innerHTML = `<div class="alert alert-danger">Failed to load. HTTP ${xhr.status}</div>`;
-					});
-			});
+        e.preventDefault();
 
-			editModalEl.addEventListener('shown.bs.modal', function(){
-				if (pendingInit) {
-					initEditPropertyMap();
-					pendingInit = false;
-				}
-			});
+        const id =
+            $(this).data('id');
 
-			editModalEl.addEventListener('hidden.bs.modal', function(){
-				destroyEditMap();
-				editContent.innerHTML = '';
-				pendingInit = false;
-			});
+        if (!id) {
+            return;
+        }
 
-			document.addEventListener('click', async function(e){
+        pendingInit =
+            true;
+
+        editContent.innerHTML =
+            `
+            <div class="p-3 text-muted fw-semibold">
+                Loading edit form...
+            </div>
+            `;
+
+        editModal.show();
+
+        $.get(
+            'edit_homeowner_modal.php',
+            {
+                ajax:
+                    'edit_homeowner',
+
+                id:
+                    id,
+
+                _:
+                    Date.now()
+            }
+        )
+        .done(
+            function (html) {
+
+                editContent.innerHTML =
+                    html;
+
+                if (
+                    editModalEl.classList.contains(
+                        'show'
+                    )
+                ) {
+
+                    initEditPropertyMap();
+
+                    pendingInit =
+                        false;
+                }
+            }
+        )
+        .fail(
+            function (xhr) {
+
+                pendingInit =
+                    false;
+
+                editContent.innerHTML =
+                    `
+                    <div class="alert alert-danger">
+                        Failed to load.
+                        HTTP ${xhr.status}
+                    </div>
+                    `;
+            }
+        );
+    }
+);
+
+
+editModalEl.addEventListener(
+    'shown.bs.modal',
+    function () {
+
+        if (pendingInit) {
+
+            initEditPropertyMap();
+
+            pendingInit =
+                false;
+        }
+    }
+);
+
+
+editModalEl.addEventListener(
+    'hidden.bs.modal',
+    function () {
+
+        editContent.innerHTML =
+            '';
+
+        pendingInit =
+            false;
+    }
+);
+
+
+document.addEventListener('click', async function(e){
 				if (!e.target.closest('#saveEditHomeownerBtn')) return;
 
 				const btn = e.target.closest('#saveEditHomeownerBtn');
