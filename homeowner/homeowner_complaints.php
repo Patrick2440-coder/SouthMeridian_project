@@ -2,6 +2,7 @@
 session_start();
 
 require_once '../config/database.php';
+require_once '../includes/complaint_service.php';
 
 if (
     !isset($_SESSION['role']) ||
@@ -115,17 +116,7 @@ function complaint_priority_icon(string $priority): string
 
 function complaint_priority_for_category(string $category): string
 {
-    return match ($category) {
-        'security',
-        'noise',
-        'neighbor' => 'urgent',
-
-        'maintenance',
-        'parking',
-        'billing' => 'high',
-
-        default => 'normal',
-    };
+    return smh_complaint_priority_for_category($category);
 }
 
 
@@ -622,6 +613,11 @@ if (
 |--------------------------------------------------------------------------
 | File complaint
 |--------------------------------------------------------------------------
+|
+| Complaint validation, automatic priority, evidence upload, transaction,
+| and initial message creation now use the shared complaint service so the
+| website and future Android API use exactly the same rules.
+|
 */
 
 if (
@@ -630,362 +626,34 @@ if (
     $isPost &&
     isset($_POST['file_complaint_submit'])
 ) {
-
-    $subject =
-        $formSubject;
-
-    $category =
-        $formCategory;
-
-    $priority =
-        complaint_priority_for_category(
-            $category
+    try {
+        $createdComplaint = smh_create_complaint(
+            $conn,
+            [
+                'homeowner_id'      => $hid,
+                'phase'             => $phase,
+                'admin_id'          => $phaseAdminId,
+                'subject'           => $formSubject,
+                'category'          => $formCategory,
+                'description'       => $formDescription,
+                'submitted_by_role' => $isTenant ? 'tenant' : 'homeowner',
+                'proof_required'    => true,
+            ],
+            $_FILES['proof_file'] ?? null
         );
 
-    $description =
-        $formDescription;
-
-
-    $allowedCategories = [
-        'general',
-        'security',
-        'maintenance',
-        'noise',
-        'parking',
-        'neighbor',
-        'billing',
-        'other'
-    ];
-    /*
-    |--------------------------------------------------------------------------
-    | Required complaint proof (image or video)
-    |--------------------------------------------------------------------------
-    */
-
-    $proofError = '';
-    $proofMeta = null;
-
-    $proofFile =
-        $_FILES['proof_file']
-        ?? null;
-
-    if (
-        !is_array($proofFile) ||
-        (int)($proofFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE
-    ) {
-
-        $proofError =
-            'Proof / Evidence is required. Please attach a picture or video.';
-
-    } else {
-
-        $uploadError =
-            (int)($proofFile['error'] ?? UPLOAD_ERR_NO_FILE);
-
-        $proofSize =
-            (int)($proofFile['size'] ?? 0);
-
-        $proofTmp =
-            (string)($proofFile['tmp_name'] ?? '');
-
-        $proofOriginalName =
-            trim((string)($proofFile['name'] ?? 'proof'));
-
-
-        if ($uploadError !== UPLOAD_ERR_OK) {
-
-            $proofError =
-                'The proof file could not be uploaded. Please choose the file again.';
-
-        } elseif (
-            $proofSize <= 0 ||
-            $proofSize > (50 * 1024 * 1024)
-        ) {
-
-            $proofError =
-                'Proof must be an image or video no larger than 50 MB.';
-
-        } elseif (
-            $proofTmp === '' ||
-            !is_uploaded_file($proofTmp)
-        ) {
-
-            $proofError =
-                'The selected proof file is invalid. Please choose it again.';
-
-        } else {
-
-            $finfo =
-                new finfo(FILEINFO_MIME_TYPE);
-
-            $mime =
-                (string)$finfo->file($proofTmp);
-
-            $allowedProofTypes = [
-                'image/jpeg'      => ['kind' => 'image', 'ext' => 'jpg'],
-                'image/png'       => ['kind' => 'image', 'ext' => 'png'],
-                'image/webp'      => ['kind' => 'image', 'ext' => 'webp'],
-                'image/gif'       => ['kind' => 'image', 'ext' => 'gif'],
-                'video/mp4'       => ['kind' => 'video', 'ext' => 'mp4'],
-                'video/webm'      => ['kind' => 'video', 'ext' => 'webm'],
-                'video/quicktime' => ['kind' => 'video', 'ext' => 'mov']
-            ];
-
-
-            if (!isset($allowedProofTypes[$mime])) {
-
-                $proofError =
-                    'Unsupported proof format. Use JPG, PNG, WEBP, GIF, MP4, WEBM, or MOV.';
-
-            } else {
-
-                $proofMeta = [
-                    'tmp_name'      => $proofTmp,
-                    'original_name' => $proofOriginalName !== ''
-                        ? $proofOriginalName
-                        : 'proof.' . $allowedProofTypes[$mime]['ext'],
-                    'mime_type'     => $mime,
-                    'file_kind'     => $allowedProofTypes[$mime]['kind'],
-                    'extension'     => $allowedProofTypes[$mime]['ext'],
-                    'file_size'     => $proofSize
-                ];
-            }
-        }
-    }
-
-
-    if (
-        $subject === '' ||
-        mb_strlen($subject) < 3
-    ) {
-
-        $err =
-            'Subject must be at least 3 characters.';
-
-    } elseif (
-        !in_array(
-            $category,
-            $allowedCategories,
-            true
-        )
-    ) {
-
-        $err =
-            'Invalid category selected.';
-
-    } elseif (
-        $description === ''
-    ) {
-
-        $err =
-            'Complaint details are required.';
-
-    } elseif ($proofError !== '') {
-
-        $err =
-            $proofError;
-
-    } else {
-
-        $savedProofAbsolutePath = null;
-
-        try {
-
-            $conn->begin_transaction();
-
-
-            $stmt = $conn->prepare("
-                INSERT INTO complaints
-                (
-                    homeowner_id,
-                    phase,
-                    admin_id,
-                    subject,
-                    category,
-                    description,
-                    status,
-                    priority
-                )
-                VALUES
-                (
-                    ?, ?, ?, ?, ?, ?,
-                    'open',
-                    ?
-                )
-            ");
-
-            $stmt->bind_param(
-                "isissss",
-                $hid,
-                $phase,
-                $phaseAdminId,
-                $subject,
-                $category,
-                $description,
-                $priority
-            );
-
-            $stmt->execute();
-
-            $complaintId =
-                (int)$stmt->insert_id;
-
-            $stmt->close();
-
-
-            if ($proofMeta !== null) {
-
-                $uploadDirectory =
-                    dirname(__DIR__) .
-                    DIRECTORY_SEPARATOR .
-                    'uploads' .
-                    DIRECTORY_SEPARATOR .
-                    'complaints';
-
-
-                if (
-                    !is_dir($uploadDirectory) &&
-                    !mkdir($uploadDirectory, 0775, true) &&
-                    !is_dir($uploadDirectory)
-                ) {
-                    throw new RuntimeException(
-                        'Unable to create the complaint upload directory.'
-                    );
-                }
-
-
-                $storedFileName =
-                    'complaint_' .
-                    $complaintId .
-                    '_' .
-                    bin2hex(random_bytes(12)) .
-                    '.' .
-                    $proofMeta['extension'];
-
-                $savedProofAbsolutePath =
-                    $uploadDirectory .
-                    DIRECTORY_SEPARATOR .
-                    $storedFileName;
-
-
-                if (
-                    !move_uploaded_file(
-                        $proofMeta['tmp_name'],
-                        $savedProofAbsolutePath
-                    )
-                ) {
-                    throw new RuntimeException(
-                        'Unable to save the uploaded complaint proof.'
-                    );
-                }
-
-
-                $savedProofRelativePath =
-                    'uploads/complaints/' .
-                    $storedFileName;
-
-                $stmt = $conn->prepare("
-                    INSERT INTO complaint_attachments
-                    (
-                        complaint_id,
-                        file_path,
-                        original_name,
-                        mime_type,
-                        file_kind,
-                        file_size
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-
-                $stmt->bind_param(
-                    "issssi",
-                    $complaintId,
-                    $savedProofRelativePath,
-                    $proofMeta['original_name'],
-                    $proofMeta['mime_type'],
-                    $proofMeta['file_kind'],
-                    $proofMeta['file_size']
-                );
-
-                $stmt->execute();
-                $stmt->close();
-            }
-
-
-            $stmt = $conn->prepare("
-                INSERT INTO complaint_messages
-                (
-                    complaint_id,
-                    sender_type,
-                    sender_homeowner_id,
-                    message
-                )
-                VALUES
-                (
-                    ?,
-                    'homeowner',
-                    ?,
-                    ?
-                )
-            ");
-
-            $stmt->bind_param(
-                "iis",
-                $complaintId,
-                $hid,
-                $description
-            );
-
-            $stmt->execute();
-            $stmt->close();
-
-
-            $conn->commit();
-
-            $savedProofAbsolutePath = null;
-
-            $okMsg =
-                'Complaint filed successfully.';
-
-            $formSubject =
-                '';
-
-            $formCategory =
-                'general';
-
-            $formPriority =
-                complaint_priority_for_category(
-                    $formCategory
-                );
-
-            $formDescription =
-                '';
-
-        } catch (Throwable $e) {
-
-            try {
-                $conn->rollback();
-            } catch (Throwable $rollbackError) {
-                // Ignore rollback failure and keep the original error.
-            }
-
-
-            if (
-                $savedProofAbsolutePath !== null &&
-                is_file($savedProofAbsolutePath)
-            ) {
-                @unlink($savedProofAbsolutePath);
-            }
-
-
-            error_log(
-                'Complaint submission error: ' .
-                $e->getMessage()
-            );
-
-            $err =
-                'Unable to submit the complaint right now. Please try again.';
-        }
+        $okMsg = 'Complaint filed successfully.';
+        $formSubject = '';
+        $formCategory = 'general';
+        $formPriority = complaint_priority_for_category($formCategory);
+        $formDescription = '';
+
+    } catch (InvalidArgumentException $e) {
+        $err = $e->getMessage();
+
+    } catch (Throwable $e) {
+        error_log('Complaint submission error: ' . $e->getMessage());
+        $err = 'Unable to submit the complaint right now. Please try again.';
     }
 }
 
@@ -2454,10 +2122,13 @@ $chatOpen =
                                     <?= esc(ucfirst($formPriority)) ?>
                                 </span>
                                 <span class="ml-auto text-xs font-semibold text-slate-400 dark:text-slate-500">
-                                 
+                                    Auto-assigned
                                 </span>
                             </div>
 
+                            <p class="mt-1.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                Priority is automatically assigned based on the selected category.
+                            </p>
 
                         </div>
 

@@ -132,6 +132,7 @@ if (
 
 require_once 'admin_access.php';
 require_once '../config/database.php';
+require_once 'ownership_transfer_common.php';
 
 if (!canAccess('homeowner_management')) {
     respond([
@@ -285,7 +286,10 @@ if ($adminRole === 'superadmin') {
             middle_name,
             last_name,
             email,
-            phase
+            phase,
+            block,
+            lot,
+            house_lot_number
          FROM homeowners
          WHERE status='pending'
            AND valid_id_path LIKE 'imports/%'
@@ -299,7 +303,10 @@ if ($adminRole === 'superadmin') {
             middle_name,
             last_name,
             email,
-            phase
+            phase,
+            block,
+            lot,
+            house_lot_number
          FROM homeowners
          WHERE status='pending'
            AND valid_id_path LIKE 'imports/%'
@@ -356,6 +363,14 @@ foreach ($pendingHomeowners as $homeowner) {
         $failed++;
         $errors[] =
             "Homeowner ID {$homeownerId}: invalid email address.";
+        continue;
+    }
+
+    $activePropertyOwner = otFindApprovedPropertyOwner($conn, $homeowner, $homeownerId);
+    if ($activePropertyOwner && otEmailsDifferent($homeowner, $activePropertyOwner)) {
+        [$conflictBlock, $conflictLot] = otBlockLot($homeowner);
+        $failed++;
+        $errors[] = "Homeowner ID {$homeownerId}: possible ownership transfer for {$homeowner['phase']}, Block {$conflictBlock}, Lot {$conflictLot}; use Ownership Transfer Verification.";
         continue;
     }
 

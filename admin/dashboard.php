@@ -458,6 +458,994 @@ if (
 
 
     /* -------------------------
+       Cross-module homeowner activity
+       ------------------------- */
+
+    $activityItems = [];
+    $currentDuesYear = (int)date('Y');
+    $currentDuesMonth = (int)date('n');
+    $monthlyDuesAmount = 0.0;
+    $duesMonths = [];
+    $paidDuesTotal = 0.0;
+
+    $activityTableExists =
+        static function (mysqli $conn, string $table): bool {
+            static $cache = [];
+
+            if (array_key_exists($table, $cache)) {
+                return $cache[$table];
+            }
+
+            try {
+                $stmt = $conn->prepare("
+                    SELECT COUNT(*) AS c
+                    FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                      AND table_name = ?
+                ");
+                $stmt->bind_param('s', $table);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                $cache[$table] = ((int)($row['c'] ?? 0) > 0);
+            } catch (Throwable $e) {
+                $cache[$table] = false;
+            }
+
+            return $cache[$table];
+        };
+
+    $activityShortText =
+        static function (?string $value, int $limit = 180): string {
+            $value = trim((string)$value);
+
+            if ($value === '') {
+                return '';
+            }
+
+            if (mb_strlen($value) <= $limit) {
+                return $value;
+            }
+
+            return rtrim(mb_substr($value, 0, $limit - 1)) . '…';
+        };
+
+    $activityAdd =
+        static function (
+            array &$items,
+            string $module,
+            string $title,
+            string $detail,
+            string $status,
+            ?string $occurredAt,
+            string $actor = 'Homeowner',
+            string $tone = 'neutral'
+        ): void {
+            $occurredAt = trim((string)$occurredAt);
+
+            if ($occurredAt === '') {
+                return;
+            }
+
+            $timestamp = strtotime($occurredAt);
+
+            if (!$timestamp) {
+                return;
+            }
+
+            $items[] = [
+                'module' => $module,
+                'title' => $title,
+                'detail' => $detail,
+                'status' => $status,
+                'occurred_at' => $occurredAt,
+                'timestamp' => $timestamp,
+                'actor' => $actor,
+                'tone' => $tone
+            ];
+        };
+
+    $activityTone =
+        static function (string $status): string {
+            $status = strtolower(trim($status));
+
+            return match ($status) {
+                'paid', 'approved', 'active', 'resolved', 'cleared', 'finished' => 'success',
+                'pending', 'open', 'in_progress', 'for payment', 'draft' => 'warning',
+                'rejected', 'denied', 'revoked', 'failed', 'expired', 'void' => 'danger',
+                'closed', 'cancelled', 'inactive' => 'neutral',
+                default => 'info'
+            };
+        };
+
+    /* Account creation is the first homeowner-linked record. */
+    $activityAdd(
+        $activityItems,
+        'account',
+        'Homeowner account registered',
+        'The homeowner record was added to the South Meridian Homes system.',
+        ucfirst((string)($homeowner['status'] ?? 'pending')),
+        (string)($homeowner['created_at'] ?? ''),
+        'System',
+        ((string)($homeowner['status'] ?? '') === 'approved') ? 'success' : 'warning'
+    );
+
+    /* Monthly dues setting for this phase. */
+    if ($activityTableExists($conn, 'finance_dues_settings')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT monthly_dues
+                FROM finance_dues_settings
+                WHERE phase = ?
+                LIMIT 1
+            ");
+            $stmt->bind_param('s', $phase);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            $monthlyDuesAmount = (float)($row['monthly_dues'] ?? 0);
+        } catch (Throwable $e) {
+            $monthlyDuesAmount = 0.0;
+        }
+    }
+
+    $paidByMonth = [];
+    $checkoutByMonth = [];
+
+    /* Monthly dues payment records. */
+    if ($activityTableExists($conn, 'finance_payments')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT
+                    id,
+                    pay_year,
+                    pay_month,
+                    amount,
+                    status,
+                    paid_at,
+                    reference_no,
+                    notes,
+                    created_by_admin_id,
+                    created_at
+                FROM finance_payments
+                WHERE homeowner_id = ?
+                ORDER BY pay_year DESC, pay_month DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $year = (int)($row['pay_year'] ?? 0);
+                $month = (int)($row['pay_month'] ?? 0);
+                $statusValue = strtolower((string)($row['status'] ?? 'paid'));
+                $amount = (float)($row['amount'] ?? 0);
+                $period = ($year > 0 && $month >= 1 && $month <= 12)
+                    ? date('F Y', mktime(0, 0, 0, $month, 1, $year))
+                    : 'Monthly dues';
+
+                if ($statusValue === 'paid') {
+                    $paidDuesTotal += $amount;
+                }
+
+                if ($year === $currentDuesYear && $month >= 1 && $month <= 12) {
+                    $paidByMonth[$month] = [
+                        'status' => $statusValue,
+                        'amount' => $amount,
+                        'paid_at' => (string)($row['paid_at'] ?? ''),
+                        'reference_no' => (string)($row['reference_no'] ?? '')
+                    ];
+                }
+
+                $detailParts = [
+                    'Amount ₱' . number_format($amount, 2)
+                ];
+
+                $reference = trim((string)($row['reference_no'] ?? ''));
+                if ($reference !== '') {
+                    $detailParts[] = 'Ref: ' . $reference;
+                }
+
+                $notes = $activityShortText((string)($row['notes'] ?? ''), 90);
+                if ($notes !== '') {
+                    $detailParts[] = $notes;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'finance',
+                    'Monthly dues — ' . $period,
+                    implode(' • ', $detailParts),
+                    strtoupper($statusValue),
+                    (string)(($row['paid_at'] ?? '') ?: ($row['created_at'] ?? '')),
+                    !empty($row['created_by_admin_id']) ? 'Admin' : 'Homeowner / Online payment',
+                    $activityTone($statusValue)
+                );
+            }
+        } catch (Throwable $e) {
+            // Keep the homeowner profile usable even if a finance table changes.
+        }
+    }
+
+    /* PayMongo checkout attempts / pending payments. */
+    if ($activityTableExists($conn, 'finance_paymongo_checkouts')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT
+                    id,
+                    pay_year,
+                    pay_month,
+                    amount,
+                    status,
+                    paid_at,
+                    created_at,
+                    updated_at
+                FROM finance_paymongo_checkouts
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $year = (int)($row['pay_year'] ?? 0);
+                $month = (int)($row['pay_month'] ?? 0);
+                $statusValue = strtolower((string)($row['status'] ?? 'pending'));
+                $period = ($year > 0 && $month >= 1 && $month <= 12)
+                    ? date('F Y', mktime(0, 0, 0, $month, 1, $year))
+                    : 'Monthly dues';
+
+                if ($year === $currentDuesYear && $month >= 1 && $month <= 12) {
+                    if (!isset($paidByMonth[$month]) || ($paidByMonth[$month]['status'] ?? '') !== 'paid') {
+                        $checkoutByMonth[$month] = [
+                            'status' => $statusValue,
+                            'amount' => (float)($row['amount'] ?? 0),
+                            'created_at' => (string)($row['created_at'] ?? '')
+                        ];
+                    }
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'finance',
+                    'Online dues checkout — ' . $period,
+                    'Amount ₱' . number_format((float)($row['amount'] ?? 0), 2),
+                    strtoupper($statusValue),
+                    (string)(($row['updated_at'] ?? '') ?: ($row['paid_at'] ?? '') ?: ($row['created_at'] ?? '')),
+                    'Homeowner / Payment gateway',
+                    $activityTone($statusValue)
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional finance history.
+        }
+    }
+
+    /* Build current-year monthly dues status cards. */
+    $registeredTimestamp = !empty($homeowner['created_at'])
+        ? strtotime((string)$homeowner['created_at'])
+        : false;
+    $registeredYear = $registeredTimestamp ? (int)date('Y', $registeredTimestamp) : 0;
+    $registeredMonth = $registeredTimestamp ? (int)date('n', $registeredTimestamp) : 0;
+
+    for ($month = 1; $month <= 12; $month++) {
+        $statusValue = 'unpaid';
+        $amount = $monthlyDuesAmount;
+        $meta = '';
+
+        if (isset($paidByMonth[$month]) && ($paidByMonth[$month]['status'] ?? '') === 'paid') {
+            $statusValue = 'paid';
+            $amount = (float)($paidByMonth[$month]['amount'] ?? $monthlyDuesAmount);
+            $meta = (string)($paidByMonth[$month]['paid_at'] ?? '');
+        } elseif (isset($checkoutByMonth[$month]) && ($checkoutByMonth[$month]['status'] ?? '') === 'pending') {
+            $statusValue = 'pending';
+            $amount = (float)($checkoutByMonth[$month]['amount'] ?? $monthlyDuesAmount);
+            $meta = (string)($checkoutByMonth[$month]['created_at'] ?? '');
+        } elseif ($currentDuesYear < $registeredYear || ($currentDuesYear === $registeredYear && $month < $registeredMonth)) {
+            $statusValue = 'not_due';
+        } elseif ($month > $currentDuesMonth) {
+            $statusValue = 'upcoming';
+        } elseif (isset($paidByMonth[$month])) {
+            $statusValue = strtolower((string)($paidByMonth[$month]['status'] ?? 'unpaid'));
+            $amount = (float)($paidByMonth[$month]['amount'] ?? $monthlyDuesAmount);
+        } elseif (isset($checkoutByMonth[$month])) {
+            $statusValue = strtolower((string)($checkoutByMonth[$month]['status'] ?? 'unpaid'));
+            $amount = (float)($checkoutByMonth[$month]['amount'] ?? $monthlyDuesAmount);
+        }
+
+        $duesMonths[] = [
+            'month' => $month,
+            'label' => date('M', mktime(0, 0, 0, $month, 1, $currentDuesYear)),
+            'status' => $statusValue,
+            'amount' => $amount,
+            'meta' => $meta
+        ];
+    }
+
+    /* Complaints + complaint conversation activity. */
+    if ($activityTableExists($conn, 'complaints')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT id, subject, category, status, priority, created_at, updated_at
+                FROM complaints
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $complaintRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($complaintRows as $row) {
+                $statusValue = (string)($row['status'] ?? 'open');
+                $activityAdd(
+                    $activityItems,
+                    'complaints',
+                    'Complaint filed: ' . (string)($row['subject'] ?? 'Untitled complaint'),
+                    'Category: ' . ucwords(str_replace('_', ' ', (string)($row['category'] ?? 'general'))) .
+                    ' • Priority: ' . strtoupper((string)($row['priority'] ?? 'normal')) .
+                    ' • Complaint #' . (int)($row['id'] ?? 0),
+                    strtoupper(str_replace('_', ' ', $statusValue)),
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    $activityTone($statusValue)
+                );
+
+                $createdAt = (string)($row['created_at'] ?? '');
+                $updatedAt = (string)($row['updated_at'] ?? '');
+                if ($updatedAt !== '' && $updatedAt !== $createdAt) {
+                    $activityAdd(
+                        $activityItems,
+                        'complaints',
+                        'Complaint status / handling updated',
+                        (string)($row['subject'] ?? 'Complaint') . ' • Complaint #' . (int)($row['id'] ?? 0),
+                        strtoupper(str_replace('_', ' ', $statusValue)),
+                        $updatedAt,
+                        'HOA / Admin',
+                        $activityTone($statusValue)
+                    );
+                }
+            }
+        } catch (Throwable $e) {
+            $complaintRows = [];
+        }
+    } else {
+        $complaintRows = [];
+    }
+
+    if ($activityTableExists($conn, 'complaint_messages') && $activityTableExists($conn, 'complaints')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT
+                    cm.id,
+                    cm.sender_type,
+                    cm.message,
+                    cm.created_at,
+                    c.id AS complaint_id,
+                    c.subject
+                FROM complaint_messages cm
+                INNER JOIN complaints c
+                    ON c.id = cm.complaint_id
+                WHERE c.homeowner_id = ?
+                ORDER BY cm.created_at DESC, cm.id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $isHomeowner = ((string)($row['sender_type'] ?? '') === 'homeowner');
+                $activityAdd(
+                    $activityItems,
+                    'complaints',
+                    $isHomeowner ? 'Complaint message sent' : 'Admin replied to complaint',
+                    'Complaint #' . (int)($row['complaint_id'] ?? 0) .
+                    ' • ' . (string)($row['subject'] ?? '') .
+                    ' • ' . $activityShortText((string)($row['message'] ?? ''), 150),
+                    'MESSAGE',
+                    (string)($row['created_at'] ?? ''),
+                    $isHomeowner ? 'Homeowner' : 'HOA / Admin',
+                    $isHomeowner ? 'info' : 'neutral'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional conversation history.
+        }
+    }
+
+    /* Facility rental requests. */
+    if ($activityTableExists($conn, 'facility_rental_requests')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT id, facility, start_dt, end_dt, purpose, amount, status, admin_remarks, created_at, updated_at
+                FROM facility_rental_requests
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $facilityRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($facilityRows as $row) {
+                $facility = ucwords(str_replace('_', ' ', (string)($row['facility'] ?? 'facility')));
+                $statusValue = (string)($row['status'] ?? 'pending');
+                $detail = 'Schedule: ' . date('M d, Y h:i A', strtotime((string)$row['start_dt'])) .
+                    ' → ' . date('M d, Y h:i A', strtotime((string)$row['end_dt']));
+                if ((float)($row['amount'] ?? 0) > 0) {
+                    $detail .= ' • ₱' . number_format((float)$row['amount'], 2);
+                }
+                $purpose = $activityShortText((string)($row['purpose'] ?? ''), 80);
+                if ($purpose !== '') {
+                    $detail .= ' • ' . $purpose;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'facilities',
+                    $facility . ' rental request',
+                    $detail,
+                    strtoupper($statusValue),
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    $activityTone($statusValue)
+                );
+
+                $createdAt = (string)($row['created_at'] ?? '');
+                $updatedAt = (string)($row['updated_at'] ?? '');
+                if ($updatedAt !== '' && $updatedAt !== $createdAt) {
+                    $activityAdd(
+                        $activityItems,
+                        'facilities',
+                        $facility . ' rental status updated',
+                        $activityShortText((string)($row['admin_remarks'] ?? ''), 120),
+                        strtoupper($statusValue),
+                        $updatedAt,
+                        'HOA / Admin',
+                        $activityTone($statusValue)
+                    );
+                }
+            }
+        } catch (Throwable $e) {
+            $facilityRows = [];
+        }
+    } else {
+        $facilityRows = [];
+    }
+
+    /* Parking permit applications / renewals. */
+    if ($activityTableExists($conn, 'parking_permits')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT
+                    id,
+                    request_type,
+                    plate_no,
+                    vehicle_type,
+                    vehicle_make,
+                    vehicle_model,
+                    permit_no,
+                    permit_duration,
+                    payment_method,
+                    payment_status,
+                    status,
+                    valid_from,
+                    valid_until,
+                    requested_at,
+                    approved_at,
+                    updated_at
+                FROM parking_permits
+                WHERE homeowner_id = ?
+                ORDER BY requested_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $parkingPermitRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($parkingPermitRows as $row) {
+                $statusValue = (string)($row['status'] ?? 'pending');
+                $requestType = ((string)($row['request_type'] ?? 'new') === 'renew') ? 'renewal' : 'application';
+                $detailParts = [
+                    'Plate ' . (string)($row['plate_no'] ?? ''),
+                    ucwords((string)($row['vehicle_type'] ?? 'vehicle'))
+                ];
+                $permitNo = trim((string)($row['permit_no'] ?? ''));
+                if ($permitNo !== '') {
+                    $detailParts[] = 'Permit ' . $permitNo;
+                }
+                $paymentStatus = trim((string)($row['payment_status'] ?? ''));
+                if ($paymentStatus !== '') {
+                    $detailParts[] = 'Payment: ' . strtoupper($paymentStatus);
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'parking',
+                    'Parking permit ' . $requestType,
+                    implode(' • ', $detailParts),
+                    strtoupper($statusValue),
+                    (string)($row['requested_at'] ?? ''),
+                    'Homeowner',
+                    $activityTone($statusValue)
+                );
+
+                $updatedAt = (string)($row['updated_at'] ?? '');
+                $requestedAt = (string)($row['requested_at'] ?? '');
+                if ($updatedAt !== '' && $updatedAt !== $requestedAt) {
+                    $activityAdd(
+                        $activityItems,
+                        'parking',
+                        'Parking permit status updated',
+                        'Plate ' . (string)($row['plate_no'] ?? '') . ($permitNo !== '' ? ' • Permit ' . $permitNo : ''),
+                        strtoupper($statusValue),
+                        $updatedAt,
+                        'HOA / Admin',
+                        $activityTone($statusValue)
+                    );
+                }
+            }
+        } catch (Throwable $e) {
+            $parkingPermitRows = [];
+        }
+    } else {
+        $parkingPermitRows = [];
+    }
+
+    /* Parking violations connected to the homeowner. */
+    if ($activityTableExists($conn, 'parking_violations')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT id, plate_no, violation_type, location, fine_amount, status, issued_at, resolved_at
+                FROM parking_violations
+                WHERE homeowner_id = ?
+                ORDER BY issued_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $parkingViolationRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($parkingViolationRows as $row) {
+                $statusValue = (string)($row['status'] ?? 'open');
+                $detail = 'Plate ' . (string)($row['plate_no'] ?? '') .
+                    ' • ' . (string)($row['violation_type'] ?? 'Parking violation') .
+                    ' • Fine ₱' . number_format((float)($row['fine_amount'] ?? 0), 2);
+                $location = trim((string)($row['location'] ?? ''));
+                if ($location !== '') {
+                    $detail .= ' • ' . $location;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'parking',
+                    'Parking violation issued',
+                    $detail,
+                    strtoupper($statusValue),
+                    (string)($row['issued_at'] ?? ''),
+                    'HOA / Admin',
+                    $activityTone($statusValue)
+                );
+
+                if (!empty($row['resolved_at'])) {
+                    $activityAdd(
+                        $activityItems,
+                        'parking',
+                        'Parking violation resolved',
+                        'Plate ' . (string)($row['plate_no'] ?? '') . ' • ' . (string)($row['violation_type'] ?? ''),
+                        strtoupper($statusValue),
+                        (string)$row['resolved_at'],
+                        'HOA / Admin',
+                        $activityTone($statusValue)
+                    );
+                }
+            }
+        } catch (Throwable $e) {
+            $parkingViolationRows = [];
+        }
+    } else {
+        $parkingViolationRows = [];
+    }
+
+    /* Announcement comments. */
+    if ($activityTableExists($conn, 'announcement_comments') && $activityTableExists($conn, 'announcements')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT ac.comment, ac.created_at, a.id AS announcement_id, a.title
+                FROM announcement_comments ac
+                INNER JOIN announcements a
+                    ON a.id = ac.announcement_id
+                WHERE ac.homeowner_id = ?
+                ORDER BY ac.created_at DESC, ac.id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $activityAdd(
+                    $activityItems,
+                    'community',
+                    'Commented on announcement',
+                    (string)($row['title'] ?? 'Announcement') . ' • ' . $activityShortText((string)($row['comment'] ?? ''), 150),
+                    'COMMENT',
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    'info'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional community history.
+        }
+    }
+
+    /* Existing announcement likes. Removed likes cannot be reconstructed. */
+    if ($activityTableExists($conn, 'announcement_likes') && $activityTableExists($conn, 'announcements')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT al.created_at, a.id AS announcement_id, a.title
+                FROM announcement_likes al
+                INNER JOIN announcements a
+                    ON a.id = al.announcement_id
+                WHERE al.homeowner_id = ?
+                ORDER BY al.created_at DESC, al.id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $activityAdd(
+                    $activityItems,
+                    'community',
+                    'Liked an announcement',
+                    (string)($row['title'] ?? 'Announcement'),
+                    'LIKE',
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    'info'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional community history.
+        }
+    }
+
+    /* Public chat posts. */
+    if ($activityTableExists($conn, 'public_chat_messages')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT message, attachment_name, attachment_type, created_at
+                FROM public_chat_messages
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $detail = $activityShortText((string)($row['message'] ?? ''), 150);
+                $attachmentName = trim((string)($row['attachment_name'] ?? ''));
+                if ($attachmentName !== '') {
+                    $detail .= ($detail !== '' ? ' • ' : '') . 'Attachment: ' . $attachmentName;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'community',
+                    'Posted in Public Chat',
+                    $detail !== '' ? $detail : 'Sent an attachment.',
+                    'MESSAGE',
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    'info'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional chat history.
+        }
+    }
+
+    /* Homeowner ↔ officer messages. */
+    if ($activityTableExists($conn, 'homeowner_officer_messages')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT sender_type, message, attachment_name, created_at
+                FROM homeowner_officer_messages
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $isHomeowner = ((string)($row['sender_type'] ?? '') === 'homeowner');
+                $detail = $activityShortText((string)($row['message'] ?? ''), 150);
+                $attachmentName = trim((string)($row['attachment_name'] ?? ''));
+                if ($attachmentName !== '') {
+                    $detail .= ($detail !== '' ? ' • ' : '') . 'Attachment: ' . $attachmentName;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'community',
+                    $isHomeowner ? 'Messaged an HOA officer' : 'HOA officer sent a message',
+                    $detail !== '' ? $detail : 'Attachment sent.',
+                    'MESSAGE',
+                    (string)($row['created_at'] ?? ''),
+                    $isHomeowner ? 'Homeowner' : 'HOA / Admin',
+                    $isHomeowner ? 'info' : 'neutral'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional officer-message history.
+        }
+    }
+
+    /* Public-chat moderation state connected to this homeowner. */
+    if ($activityTableExists($conn, 'public_chat_mutes')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT is_muted, reason, muted_at, updated_at
+                FROM public_chat_mutes
+                WHERE homeowner_id = ?
+                  AND phase = ?
+                LIMIT 1
+            ");
+            $stmt->bind_param('is', $homeownerId, $phase);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($row) {
+                $muted = ((int)($row['is_muted'] ?? 0) === 1);
+                $activityAdd(
+                    $activityItems,
+                    'community',
+                    $muted ? 'Public Chat access muted' : 'Public Chat access restored',
+                    $activityShortText((string)($row['reason'] ?? ''), 140),
+                    $muted ? 'MUTED' : 'ACTIVE',
+                    (string)(($row['updated_at'] ?? '') ?: ($row['muted_at'] ?? '')),
+                    'HOA / Admin',
+                    $muted ? 'danger' : 'success'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional moderation state.
+        }
+    }
+
+    /* Election participation. Deliberately does not expose who the homeowner voted for. */
+    if ($activityTableExists($conn, 'election_votes')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT ev.position, ev.created_at, es.title AS election_title
+                FROM election_votes ev
+                LEFT JOIN election_sessions es
+                    ON es.id = ev.election_id
+                WHERE ev.voter_homeowner_id = ?
+                ORDER BY ev.created_at DESC, ev.id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $activityAdd(
+                    $activityItems,
+                    'elections',
+                    'Participated in HOA election',
+                    ((string)($row['election_title'] ?? '') !== '' ? (string)$row['election_title'] . ' • ' : '') .
+                    'Position: ' . (string)($row['position'] ?? ''),
+                    'VOTE CAST',
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    'success'
+                );
+            }
+        } catch (Throwable $e) {
+            // Voting participation is optional in older databases.
+        }
+    }
+
+    if ($activityTableExists($conn, 'election_nominations')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT en.position, en.created_at, es.title AS election_title
+                FROM election_nominations en
+                LEFT JOIN election_sessions es
+                    ON es.id = en.election_id
+                WHERE en.homeowner_id = ?
+                ORDER BY en.created_at DESC, en.id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $activityAdd(
+                    $activityItems,
+                    'elections',
+                    'Nominated for HOA position',
+                    ((string)($row['election_title'] ?? '') !== '' ? (string)$row['election_title'] . ' • ' : '') .
+                    (string)($row['position'] ?? ''),
+                    'NOMINATED',
+                    (string)($row['created_at'] ?? ''),
+                    'HOA / Election',
+                    'info'
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional nomination history.
+        }
+    }
+
+    /* Tenant registration events. */
+    foreach ($tenants as $tenantRow) {
+        $tenantName = trim(
+            (string)($tenantRow['first_name'] ?? '') . ' ' .
+            (string)($tenantRow['middle_name'] ?? '') . ' ' .
+            (string)($tenantRow['last_name'] ?? '')
+        );
+        $tenantStatus = (string)($tenantRow['status'] ?? 'inactive');
+
+        $activityAdd(
+            $activityItems,
+            'account',
+            'Tenant registered under homeowner',
+            $tenantName !== '' ? $tenantName : 'Tenant record',
+            strtoupper($tenantStatus),
+            (string)($tenantRow['registered_at'] ?? ''),
+            'Homeowner / HOA',
+            $activityTone($tenantStatus)
+        );
+    }
+
+    /* Staff / volunteer applications submitted as this homeowner. */
+    if ($activityTableExists($conn, 'staff_applications')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT staff_type, position_title, status, president_remarks, created_at, updated_at
+                FROM staff_applications
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $statusValue = (string)($row['status'] ?? 'pending');
+                $detail = (string)($row['staff_type'] ?? 'Staff');
+                $positionTitle = trim((string)($row['position_title'] ?? ''));
+                if ($positionTitle !== '') {
+                    $detail .= ' • ' . $positionTitle;
+                }
+                $remarks = $activityShortText((string)($row['president_remarks'] ?? ''), 100);
+                if ($remarks !== '') {
+                    $detail .= ' • ' . $remarks;
+                }
+
+                $activityAdd(
+                    $activityItems,
+                    'account',
+                    'Staff / volunteer application',
+                    $detail,
+                    strtoupper($statusValue),
+                    (string)($row['created_at'] ?? ''),
+                    'Homeowner',
+                    $activityTone($statusValue)
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional staffing module.
+        }
+    }
+
+    /* Imported/migrated homeowner records, where available. */
+    if ($activityTableExists($conn, 'homeowner_import_queue')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT status, created_at, approved_at
+                FROM homeowner_import_queue
+                WHERE approved_homeowner_id = ?
+                   OR duplicate_homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('ii', $homeownerId, $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $statusValue = (string)($row['status'] ?? 'pending');
+                $activityAdd(
+                    $activityItems,
+                    'account',
+                    'Homeowner import / migration record',
+                    'Imported homeowner data linked to this account.',
+                    strtoupper($statusValue),
+                    (string)(($row['approved_at'] ?? '') ?: ($row['created_at'] ?? '')),
+                    'HOA / Admin',
+                    $activityTone($statusValue)
+                );
+            }
+        } catch (Throwable $e) {
+            // Optional import history.
+        }
+    }
+
+    /* Optional centralized activity log, if added later. */
+    if ($activityTableExists($conn, 'homeowner_activity_logs')) {
+        try {
+            $stmt = $conn->prepare("
+                SELECT module, action, details, status, actor_type, created_at
+                FROM homeowner_activity_logs
+                WHERE homeowner_id = ?
+                ORDER BY created_at DESC, id DESC
+            ");
+            $stmt->bind_param('i', $homeownerId);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            foreach ($rows as $row) {
+                $statusValue = (string)($row['status'] ?? 'recorded');
+                $activityAdd(
+                    $activityItems,
+                    strtolower((string)($row['module'] ?? 'account')),
+                    (string)($row['action'] ?? 'Recorded activity'),
+                    $activityShortText((string)($row['details'] ?? ''), 180),
+                    strtoupper($statusValue),
+                    (string)($row['created_at'] ?? ''),
+                    (string)($row['actor_type'] ?? 'System'),
+                    $activityTone($statusValue)
+                );
+            }
+        } catch (Throwable $e) {
+            // The optional log table may use a different structure in future versions.
+        }
+    }
+
+    usort(
+        $activityItems,
+        static fn(array $a, array $b): int =>
+            ($b['timestamp'] ?? 0) <=> ($a['timestamp'] ?? 0)
+    );
+
+    $activityCounts = [
+        'all' => count($activityItems),
+        'finance' => 0,
+        'complaints' => 0,
+        'facilities' => 0,
+        'parking' => 0,
+        'community' => 0,
+        'elections' => 0,
+        'account' => 0
+    ];
+
+    foreach ($activityItems as $item) {
+        $moduleKey = (string)($item['module'] ?? 'account');
+        if (isset($activityCounts[$moduleKey])) {
+            $activityCounts[$moduleKey]++;
+        }
+    }
+
+    /* -------------------------
        Display values
        ------------------------- */
 
@@ -1556,6 +2544,176 @@ if (
           </div>
 
         <?php endif; ?>
+      </section>
+
+
+      <!-- HOMEOWNER ACTIVITY & RECORDS -->
+      <section class="hp-card hp-activity-card">
+        <div class="hp-card-head hp-activity-head">
+          <div>
+            <span class="hp-section-kicker">Cross-module history</span>
+            <h3>Homeowner Activity & Records</h3>
+            <p class="hp-activity-note">
+              Current records linked to this homeowner across finance, complaints, facilities,
+              parking, community activity, elections, and account-related modules.
+            </p>
+          </div>
+
+          <span class="hp-count-chip">
+            <?= (int)$activityCounts['all'] ?> record<?= (int)$activityCounts['all'] === 1 ? '' : 's' ?>
+          </span>
+        </div>
+
+        <div class="hp-activity-summary">
+          <div class="hp-activity-stat">
+            <span>Total linked records</span>
+            <strong><?= (int)$activityCounts['all'] ?></strong>
+          </div>
+          <div class="hp-activity-stat">
+            <span>Complaint activity</span>
+            <strong><?= (int)$activityCounts['complaints'] ?></strong>
+          </div>
+          <div class="hp-activity-stat">
+            <span>Paid dues recorded</span>
+            <strong>₱<?= esc(number_format($paidDuesTotal, 2)) ?></strong>
+          </div>
+          <div class="hp-activity-stat">
+            <span>Parking records</span>
+            <strong><?= (int)$activityCounts['parking'] ?></strong>
+          </div>
+        </div>
+
+        <div class="hp-dues-section">
+          <div class="hp-activity-subhead">
+            <div>
+              <strong>Monthly Dues Status — <?= (int)$currentDuesYear ?></strong>
+              <span>
+                Phase monthly dues: ₱<?= esc(number_format($monthlyDuesAmount, 2)) ?>
+              </span>
+            </div>
+          </div>
+
+          <div class="hp-dues-grid">
+            <?php foreach ($duesMonths as $dueMonth): ?>
+              <?php
+                $dueStatus = (string)$dueMonth['status'];
+                $dueStatusLabel = match ($dueStatus) {
+                    'paid' => 'Paid',
+                    'pending' => 'Pending',
+                    'failed' => 'Failed',
+                    'expired' => 'Expired',
+                    'not_due' => 'Not Due',
+                    'upcoming' => 'Upcoming',
+                    default => 'Unpaid'
+                };
+              ?>
+              <div class="hp-due-month is-<?= esc($dueStatus) ?>">
+                <div class="hp-due-month-top">
+                  <strong><?= esc((string)$dueMonth['label']) ?></strong>
+                  <span><?= esc($dueStatusLabel) ?></span>
+                </div>
+                <div class="hp-due-amount">
+                  ₱<?= esc(number_format((float)$dueMonth['amount'], 2)) ?>
+                </div>
+                <?php if (!empty($dueMonth['meta'])): ?>
+                  <small>
+                    <?= esc(date('M d, Y', strtotime((string)$dueMonth['meta']))) ?>
+                  </small>
+                <?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+
+        <div class="hp-activity-toolbar" role="group" aria-label="Filter homeowner activity">
+          <?php
+            $activityFilterLabels = [
+                'all' => 'All',
+                'finance' => 'Finance',
+                'complaints' => 'Complaints',
+                'facilities' => 'Facilities',
+                'parking' => 'Parking',
+                'community' => 'Community',
+                'elections' => 'Elections',
+                'account' => 'Account'
+            ];
+          ?>
+
+          <?php foreach ($activityFilterLabels as $filterKey => $filterLabel): ?>
+            <button
+              type="button"
+              class="hp-activity-filter <?= $filterKey === 'all' ? 'active' : '' ?>"
+              data-activity-filter="<?= esc($filterKey) ?>"
+            >
+              <?= esc($filterLabel) ?>
+              <span><?= (int)($activityCounts[$filterKey] ?? 0) ?></span>
+            </button>
+          <?php endforeach; ?>
+        </div>
+
+        <?php if (!empty($activityItems)): ?>
+          <div class="hp-activity-list" id="homeownerActivityList">
+            <?php foreach ($activityItems as $activity): ?>
+              <?php
+                $module = (string)($activity['module'] ?? 'account');
+                $tone = (string)($activity['tone'] ?? 'neutral');
+              ?>
+              <article
+                class="hp-activity-item"
+                data-activity-module="<?= esc($module) ?>"
+              >
+                <div class="hp-activity-marker is-<?= esc($tone) ?>" aria-hidden="true"></div>
+
+                <div class="hp-activity-body">
+                  <div class="hp-activity-item-top">
+                    <div class="hp-activity-title-wrap">
+                      <div class="hp-activity-meta-row">
+                        <span class="hp-module-chip is-<?= esc($module) ?>">
+                          <?= esc(ucfirst($module)) ?>
+                        </span>
+
+                        <span class="hp-actor-chip">
+                          <?= esc((string)($activity['actor'] ?? 'System')) ?>
+                        </span>
+                      </div>
+
+                      <strong class="hp-activity-title">
+                        <?= esc((string)$activity['title']) ?>
+                      </strong>
+                    </div>
+
+                    <div class="hp-activity-time">
+                      <?= esc(date('M d, Y', (int)$activity['timestamp'])) ?>
+                      <small><?= esc(date('h:i A', (int)$activity['timestamp'])) ?></small>
+                    </div>
+                  </div>
+
+                  <?php if (trim((string)$activity['detail']) !== ''): ?>
+                    <p class="hp-activity-detail">
+                      <?= esc((string)$activity['detail']) ?>
+                    </p>
+                  <?php endif; ?>
+
+                  <?php if (trim((string)$activity['status']) !== ''): ?>
+                    <span class="hp-activity-status is-<?= esc($tone) ?>">
+                      <?= esc((string)$activity['status']) ?>
+                    </span>
+                  <?php endif; ?>
+                </div>
+              </article>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?>
+          <div class="hp-empty-state hp-empty-compact">
+            <strong>No linked activity records found.</strong>
+          </div>
+        <?php endif; ?>
+
+        <div class="hp-activity-footnote">
+          This history is built from records that currently exist in the database. Actions whose
+          old state was overwritten or deleted by another module cannot be reconstructed unless that
+          module keeps a separate audit log.
+        </div>
       </section>
 
 
@@ -3365,6 +4523,408 @@ function complaintPriorityBadge($p){
 
 
     /* -------------------------
+       Homeowner activity history
+       ------------------------- */
+
+    .hp-activity-card {
+      overflow: visible;
+    }
+
+    .hp-activity-head {
+      align-items: center;
+    }
+
+    .hp-activity-note {
+      max-width: 760px;
+      margin: 5px 0 0;
+      color: #64748b;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .hp-activity-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+      padding: 14px 15px 0;
+    }
+
+    .hp-activity-stat {
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+
+    .hp-activity-stat span {
+      display: block;
+      color: #64748b;
+      font-size: 9px;
+      line-height: 1.35;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .045em;
+    }
+
+    .hp-activity-stat strong {
+      display: block;
+      margin-top: 5px;
+      color: #0f172a;
+      font-size: 16px;
+      line-height: 1.2;
+      font-weight: 900;
+      word-break: break-word;
+    }
+
+    .hp-dues-section {
+      margin: 14px 15px 0;
+      padding: 13px;
+      border: 1px solid #dbe3ec;
+      border-radius: 14px;
+      background: #fbfdfc;
+    }
+
+    .hp-activity-subhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .hp-activity-subhead strong,
+    .hp-activity-subhead span {
+      display: block;
+    }
+
+    .hp-activity-subhead strong {
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .hp-activity-subhead span {
+      margin-top: 2px;
+      color: #64748b;
+      font-size: 9px;
+      font-weight: 650;
+    }
+
+    .hp-dues-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .hp-due-month {
+      min-width: 0;
+      padding: 9px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .hp-due-month-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+    }
+
+    .hp-due-month-top strong {
+      color: #334155;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .hp-due-month-top span {
+      padding: 3px 5px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 7px;
+      line-height: 1;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      white-space: nowrap;
+    }
+
+    .hp-due-amount {
+      margin-top: 7px;
+      color: #475569;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .hp-due-month small {
+      display: block;
+      margin-top: 3px;
+      color: #94a3b8;
+      font-size: 8px;
+    }
+
+    .hp-due-month.is-paid {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+    }
+
+    .hp-due-month.is-paid .hp-due-month-top span {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .hp-due-month.is-pending {
+      border-color: #fde68a;
+      background: #fffbeb;
+    }
+
+    .hp-due-month.is-pending .hp-due-month-top span {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .hp-due-month.is-unpaid,
+    .hp-due-month.is-failed,
+    .hp-due-month.is-expired {
+      border-color: #fecaca;
+      background: #fef2f2;
+    }
+
+    .hp-due-month.is-unpaid .hp-due-month-top span,
+    .hp-due-month.is-failed .hp-due-month-top span,
+    .hp-due-month.is-expired .hp-due-month-top span {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .hp-due-month.is-upcoming,
+    .hp-due-month.is-not_due {
+      opacity: .72;
+      background: #f8fafc;
+    }
+
+    .hp-activity-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 14px 15px 10px;
+    }
+
+    .hp-activity-filter {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 6px 9px;
+      border: 1px solid #dbe3ec;
+      border-radius: 9px;
+      background: #fff;
+      color: #475569;
+      font-size: 9px;
+      line-height: 1;
+      font-weight: 850;
+      cursor: pointer;
+      transition: .18s ease;
+    }
+
+    .hp-activity-filter span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      min-height: 18px;
+      padding: 2px 5px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 8px;
+    }
+
+    .hp-activity-filter:hover {
+      border-color: #a7f3d0;
+      color: #047857;
+    }
+
+    .hp-activity-filter.active {
+      border-color: #047857;
+      background: #047857;
+      color: #fff;
+    }
+
+    .hp-activity-filter.active span {
+      background: rgba(255,255,255,.18);
+      color: #fff;
+    }
+
+    .hp-activity-list {
+      position: relative;
+      max-height: 620px;
+      overflow-y: auto;
+      margin: 0 15px 14px;
+      padding: 3px 5px 3px 1px;
+    }
+
+    .hp-activity-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .hp-activity-list::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: #cbd5e1;
+    }
+
+    .hp-activity-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 16px minmax(0,1fr);
+      gap: 10px;
+      padding: 10px 9px 10px 3px;
+    }
+
+    .hp-activity-item + .hp-activity-item {
+      border-top: 1px solid #eef2f7;
+    }
+
+    .hp-activity-item.is-filter-hidden {
+      display: none;
+    }
+
+    .hp-activity-marker {
+      width: 10px;
+      height: 10px;
+      margin: 7px auto 0;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: #94a3b8;
+      box-shadow: 0 0 0 3px #e2e8f0;
+    }
+
+    .hp-activity-marker.is-success { background:#16a34a; box-shadow:0 0 0 3px #dcfce7; }
+    .hp-activity-marker.is-warning { background:#d97706; box-shadow:0 0 0 3px #fef3c7; }
+    .hp-activity-marker.is-danger  { background:#dc2626; box-shadow:0 0 0 3px #fee2e2; }
+    .hp-activity-marker.is-info    { background:#2563eb; box-shadow:0 0 0 3px #dbeafe; }
+
+    .hp-activity-body {
+      min-width: 0;
+    }
+
+    .hp-activity-item-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .hp-activity-title-wrap {
+      min-width: 0;
+    }
+
+    .hp-activity-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+
+    .hp-module-chip,
+    .hp-actor-chip,
+    .hp-activity-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 3px 6px;
+      border-radius: 999px;
+      font-size: 7px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .hp-module-chip {
+      border: 1px solid #dbe3ec;
+      background: #f8fafc;
+      color: #475569;
+    }
+
+    .hp-module-chip.is-finance { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+    .hp-module-chip.is-complaints { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+    .hp-module-chip.is-facilities { background:#f5f3ff; border-color:#ddd6fe; color:#6d28d9; }
+    .hp-module-chip.is-parking { background:#ecfeff; border-color:#a5f3fc; color:#155e75; }
+    .hp-module-chip.is-community { background:#fdf2f8; border-color:#fbcfe8; color:#9d174d; }
+    .hp-module-chip.is-elections { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+    .hp-module-chip.is-account { background:#ecfdf5; border-color:#bbf7d0; color:#166534; }
+
+    .hp-actor-chip {
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      color: #64748b;
+    }
+
+    .hp-activity-title {
+      display: block;
+      color: #1e293b;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 900;
+      word-break: break-word;
+    }
+
+    .hp-activity-time {
+      flex: 0 0 auto;
+      color: #64748b;
+      font-size: 9px;
+      line-height: 1.35;
+      font-weight: 800;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .hp-activity-time small {
+      display: block;
+      margin-top: 2px;
+      color: #94a3b8;
+      font-size: 8px;
+      font-weight: 650;
+    }
+
+    .hp-activity-detail {
+      margin: 5px 0 0;
+      color: #64748b;
+      font-size: 9px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    .hp-activity-status {
+      margin-top: 7px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #64748b;
+    }
+
+    .hp-activity-status.is-success { background:#ecfdf5; border-color:#bbf7d0; color:#166534; }
+    .hp-activity-status.is-warning { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+    .hp-activity-status.is-danger  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+    .hp-activity-status.is-info    { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+
+    .hp-activity-footnote {
+      margin: 0 15px 15px;
+      padding: 10px 11px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 10px;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 8px;
+      line-height: 1.5;
+    }
+
+    /* -------------------------
        Homeowner profile dark
        ------------------------- */
 
@@ -3470,6 +5030,97 @@ function complaintPriorityBadge($p){
     }
 
 
+    html.dark .hp-activity-note,
+    html.dark .hp-activity-subhead span,
+    html.dark .hp-activity-stat span,
+    html.dark .hp-activity-detail,
+    html.dark .hp-activity-time,
+    html.dark .hp-activity-footnote,
+    html.dark .hp-due-amount,
+    html.dark .hp-due-month small {
+      color: var(--admin-muted) !important;
+    }
+
+    html.dark .hp-activity-stat,
+    html.dark .hp-dues-section,
+    html.dark .hp-due-month,
+    html.dark .hp-activity-filter,
+    html.dark .hp-actor-chip,
+    html.dark .hp-activity-footnote {
+      border-color: var(--admin-border) !important;
+      background: var(--admin-surface-2) !important;
+    }
+
+    html.dark .hp-activity-stat strong,
+    html.dark .hp-activity-subhead strong,
+    html.dark .hp-due-month-top strong,
+    html.dark .hp-activity-title {
+      color: var(--admin-text) !important;
+    }
+
+    html.dark .hp-activity-filter {
+      color: #cbd5e1 !important;
+    }
+
+    html.dark .hp-activity-filter span {
+      background: var(--admin-surface-3) !important;
+      color: #cbd5e1 !important;
+    }
+
+    html.dark .hp-activity-filter:hover {
+      border-color: rgba(52,211,153,.32) !important;
+      color: #6ee7b7 !important;
+    }
+
+    html.dark .hp-activity-filter.active {
+      border-color: #047857 !important;
+      background: #047857 !important;
+      color: #fff !important;
+    }
+
+    html.dark .hp-activity-filter.active span {
+      background: rgba(255,255,255,.15) !important;
+      color: #fff !important;
+    }
+
+    html.dark .hp-activity-item + .hp-activity-item {
+      border-color: var(--admin-border) !important;
+    }
+
+    html.dark .hp-actor-chip {
+      color: #94a3b8 !important;
+    }
+
+    html.dark .hp-module-chip {
+      filter: saturate(.82) brightness(.92);
+    }
+
+    html.dark .hp-due-month.is-paid {
+      border-color: rgba(34,197,94,.28) !important;
+      background: rgba(22,163,74,.10) !important;
+    }
+
+    html.dark .hp-due-month.is-pending {
+      border-color: rgba(245,158,11,.28) !important;
+      background: rgba(217,119,6,.10) !important;
+    }
+
+    html.dark .hp-due-month.is-unpaid,
+    html.dark .hp-due-month.is-failed,
+    html.dark .hp-due-month.is-expired {
+      border-color: rgba(239,68,68,.28) !important;
+      background: rgba(220,38,38,.10) !important;
+    }
+
+    html.dark .hp-due-month.is-upcoming,
+    html.dark .hp-due-month.is-not_due {
+      background: var(--admin-surface-2) !important;
+    }
+
+    html.dark .hp-activity-list::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+
     @media (max-width: 991.98px) {
       .hp-hero {
         align-items: flex-start;
@@ -3528,6 +5179,50 @@ function complaintPriorityBadge($p){
       .hp-detail-grid-two,
       .hp-document-grid {
         grid-template-columns: 1fr;
+      }
+
+      .hp-activity-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding-left: 11px;
+        padding-right: 11px;
+      }
+
+      .hp-dues-section {
+        margin-left: 11px;
+        margin-right: 11px;
+      }
+
+      .hp-dues-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .hp-activity-toolbar {
+        padding-left: 11px;
+        padding-right: 11px;
+      }
+
+      .hp-activity-list {
+        margin-left: 11px;
+        margin-right: 11px;
+      }
+
+      .hp-activity-item-top {
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .hp-activity-time {
+        text-align: left;
+      }
+
+      .hp-activity-time small {
+        display: inline;
+        margin-left: 5px;
+      }
+
+      .hp-activity-footnote {
+        margin-left: 11px;
+        margin-right: 11px;
       }
 
       .hp-document-card {
@@ -4479,7 +6174,7 @@ function complaintPriorityBadge($p){
 
           <div>
             <div class="modal-title-text" id="viewModalTitle">Homeowner Profile</div>
-            <div class="modal-subtitle-text">Profile, property map, household, tenants and documents</div>
+            <div class="modal-subtitle-text">Profile, property, household, dues, activity history, tenants and documents</div>
           </div>
         </div>
 
@@ -4627,6 +6322,21 @@ function complaintPriorityBadge($p){
             <strong>${escapeHtml(message)}</strong>
           </div>
         `;
+      });
+    });
+
+    // Homeowner activity filter (modal content is loaded dynamically)
+    $(document).on('click', '.hp-activity-filter', function () {
+      const filter = String($(this).data('activity-filter') || 'all');
+      const $scope = $(this).closest('.hp-activity-card');
+
+      $scope.find('.hp-activity-filter').removeClass('active');
+      $(this).addClass('active');
+
+      $scope.find('.hp-activity-item').each(function () {
+        const moduleName = String($(this).data('activity-module') || '');
+        const show = filter === 'all' || moduleName === filter;
+        $(this).toggleClass('is-filter-hidden', !show);
       });
     });
 

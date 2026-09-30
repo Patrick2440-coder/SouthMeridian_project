@@ -2,11 +2,14 @@
 session_start();
 require_once 'admin_access.php';
 require_once '../config/database.php';
+require_once 'ownership_transfer_common.php';
 requireAccess('homeowner_management');
 
 if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
     !in_array($_SESSION['admin_role'], ['admin','superadmin'], true)) {
-  echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
+  $_SESSION['flash_type'] = 'danger';
+  $_SESSION['flash_message'] = 'Access denied. Please login as admin.';
+  header('Location: index.php');
   exit();
 }
 
@@ -445,6 +448,7 @@ try {
                 q.residential_type,
 
                 'duplicate' AS status,
+                q.duplicate_homeowner_id,
 
                 q.created_at
 
@@ -478,6 +482,7 @@ try {
                 h.residential_type,
 
                 h.status,
+                NULL AS duplicate_homeowner_id,
 
                 h.created_at
 
@@ -515,6 +520,7 @@ ORDER BY created_at DESC
                 q.residential_type,
 
                 'duplicate' AS status,
+                q.duplicate_homeowner_id,
 
                 q.created_at
 
@@ -549,6 +555,7 @@ ORDER BY created_at DESC
                 h.residential_type,
 
                 h.status,
+                NULL AS duplicate_homeowner_id,
 
                 h.created_at
 
@@ -586,21 +593,6 @@ ORDER BY created_at DESC
     );
 }
 
-// Archived duplicate imports (records are preserved, never deleted).
-if ($admin_role === 'superadmin') {
-  $archiveStmt = $conn->prepare(
-    "SELECT * FROM homeowner_import_archive ORDER BY archived_at DESC"
-  );
-} else {
-  $archiveStmt = $conn->prepare(
-    "SELECT * FROM homeowner_import_archive WHERE phase=? ORDER BY archived_at DESC"
-  );
-  $archiveStmt->bind_param('s', $admin_phase);
-}
-$archiveStmt->execute();
-$resultArchivedDuplicates = $archiveStmt->get_result();
-$archiveStmt->close();
-
 /*
  * Count valid imported homeowners that are still waiting to be pushed.
  * Duplicate imports are stored in homeowner_import_queue and are not included.
@@ -627,6 +619,86 @@ $pendingImportedCountStmt->execute();
 $pendingImportedCountRow = $pendingImportedCountStmt->get_result()->fetch_assoc();
 $pendingImportedCount = (int)($pendingImportedCountRow['total'] ?? 0);
 $pendingImportedCountStmt->close();
+
+/*
+ * Manual / walk-in pending registrations that use a property already assigned
+ * to another APPROVED homeowner are possible ownership transfers. They are
+ * intentionally kept Pending until both parties are verified and an admin
+ * completes the transfer.
+ */
+$manualTransferCandidates = [];
+try {
+    if ($admin_role === 'superadmin') {
+        $manualPendingStmt = $conn->prepare(
+            "SELECT * FROM homeowners
+             WHERE status='pending'
+               AND valid_id_path NOT LIKE 'imports/%'
+             ORDER BY created_at DESC"
+        );
+        $approvedOwnersStmt = $conn->prepare(
+            "SELECT id, public_id, first_name, middle_name, last_name, email,
+                    phase, block, lot, street, house_lot_number, status
+             FROM homeowners
+             WHERE status='approved'"
+        );
+    } else {
+        $manualPendingStmt = $conn->prepare(
+            "SELECT * FROM homeowners
+             WHERE status='pending'
+               AND valid_id_path NOT LIKE 'imports/%'
+               AND phase=?
+             ORDER BY created_at DESC"
+        );
+        $manualPendingStmt->bind_param('s', $admin_phase);
+
+        $approvedOwnersStmt = $conn->prepare(
+            "SELECT id, public_id, first_name, middle_name, last_name, email,
+                    phase, block, lot, street, house_lot_number, status
+             FROM homeowners
+             WHERE status='approved' AND phase=?"
+        );
+        $approvedOwnersStmt->bind_param('s', $admin_phase);
+    }
+
+    $approvedOwnersStmt->execute();
+    $approvedOwners = $approvedOwnersStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $approvedOwnersStmt->close();
+
+    $ownerByProperty = [];
+    foreach ($approvedOwners as $ownerRow) {
+        [$ownerBlock, $ownerLot] = subdivision_block_lot($ownerRow);
+        if ($ownerBlock <= 0 || $ownerLot <= 0) continue;
+        $ownerKey = (string)$ownerRow['phase'] . '|' . $ownerBlock . '|' . $ownerLot;
+        if (!isset($ownerByProperty[$ownerKey])) {
+            $ownerByProperty[$ownerKey] = $ownerRow;
+        }
+    }
+
+    $manualPendingStmt->execute();
+    $manualPendingRows = $manualPendingStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $manualPendingStmt->close();
+
+    foreach ($manualPendingRows as $pendingRow) {
+        [$pendingBlock, $pendingLot] = subdivision_block_lot($pendingRow);
+        if ($pendingBlock <= 0 || $pendingLot <= 0) continue;
+        $key = (string)$pendingRow['phase'] . '|' . $pendingBlock . '|' . $pendingLot;
+        if (!isset($ownerByProperty[$key])) continue;
+
+        $currentOwner = $ownerByProperty[$key];
+        $incomingEmail = strtolower(trim((string)($pendingRow['email'] ?? '')));
+        $currentEmail = strtolower(trim((string)($currentOwner['email'] ?? '')));
+        if ($incomingEmail === '' || $currentEmail === '' || $incomingEmail === $currentEmail) continue;
+
+        $manualTransferCandidates[] = [
+            'incoming' => $pendingRow,
+            'current_owner' => $currentOwner,
+            'block' => $pendingBlock,
+            'lot' => $pendingLot,
+        ];
+    }
+} catch (Throwable $e) {
+    error_log('Manual ownership-transfer candidate query failed: ' . $e->getMessage());
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -924,6 +996,41 @@ html.dark .dataTables_wrapper
         1px solid
         var(--admin-border) !important;
 }
+
+/* =========================================================
+   HOA CUSTOM CONFIRMATION MODAL
+   Replaces native browser confirm() / "localhost says".
+   ========================================================= */
+#hoaConfirmModal {
+    z-index: 1100 !important;
+}
+
+.modal-backdrop.hoa-confirm-backdrop {
+    z-index: 1090 !important;
+}
+
+#hoaConfirmModal .modal-content {
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+html.dark #hoaConfirmModal .modal-content {
+    background: var(--admin-surface, #1f2937) !important;
+    color: var(--admin-text, #f8fafc) !important;
+    border: 1px solid var(--admin-border, #334155) !important;
+}
+
+html.dark #hoaConfirmModal .modal-header,
+html.dark #hoaConfirmModal .modal-footer {
+    border-color: var(--admin-border, #334155) !important;
+}
+
+html.dark #hoaConfirmModal .btn-light {
+    background: var(--admin-surface-2, #334155) !important;
+    color: var(--admin-text, #f8fafc) !important;
+    border-color: var(--admin-border, #475569) !important;
+}
+
 </style>
 
 <!-- ADMIN DARK MODE - keep this after all page CSS -->
@@ -1093,7 +1200,12 @@ html.dark .dataTables_wrapper
               <?php endif; ?>
             </div>
 
-
+            <div class="alert alert-info py-2 mb-3">
+              <strong>Review flow:</strong>
+              Double-check the imported residents. You may push them one by one, or use
+              <strong>Push All to Homeowner Data</strong> to activate all valid pending imports at once.
+              Duplicate records are excluded and remain available for separate review and archiving.
+            </div>
             <div class="table-responsive">
               <table id="importQueueTable" class="table table-bordered table-striped align-middle" style="width:100%">
                 <thead>
@@ -1109,7 +1221,35 @@ html.dark .dataTables_wrapper
                 </thead>
                 <tbody>
                   <?php while ($qrow = $resultImportQueue->fetch_assoc()): ?>
-                    <?php [$queueBlock, $queueLot] = subdivision_block_lot($qrow); ?>
+                    <?php
+                    [$queueBlock, $queueLot] = subdivision_block_lot($qrow);
+                    $isPossibleOwnershipTransfer = false;
+
+                    if (($qrow['source_type'] ?? '') === 'duplicate' && !empty($qrow['duplicate_homeowner_id'])) {
+                        $linkedOwnerId = (int)$qrow['duplicate_homeowner_id'];
+                        $linkedStmt = $conn->prepare(
+                            "SELECT id, email, phase, block, lot, house_lot_number, status
+                             FROM homeowners WHERE id=? LIMIT 1"
+                        );
+                        $linkedStmt->bind_param('i', $linkedOwnerId);
+                        $linkedStmt->execute();
+                        $linkedOwner = $linkedStmt->get_result()->fetch_assoc();
+                        $linkedStmt->close();
+
+                        if ($linkedOwner && (string)($linkedOwner['status'] ?? '') === 'approved') {
+                            [$linkedBlock, $linkedLot] = subdivision_block_lot($linkedOwner);
+                            $incomingEmail = strtolower(trim((string)($qrow['email'] ?? '')));
+                            $linkedEmail = strtolower(trim((string)($linkedOwner['email'] ?? '')));
+                            $isPossibleOwnershipTransfer =
+                                $queueBlock > 0 && $queueLot > 0 &&
+                                $queueBlock === $linkedBlock &&
+                                $queueLot === $linkedLot &&
+                                (string)($qrow['phase'] ?? '') === (string)($linkedOwner['phase'] ?? '') &&
+                                $incomingEmail !== '' && $linkedEmail !== '' &&
+                                $incomingEmail !== $linkedEmail;
+                        }
+                    }
+                    ?>
                     <tr>
                       <td>
 <?php if (($qrow['source_type'] ?? '') === 'duplicate'): ?>
@@ -1149,9 +1289,15 @@ html.dark .dataTables_wrapper
 
 <?php if (($qrow['source_type'] ?? '') === 'duplicate'): ?>
 
-    <span class="badge badge-danger">
-        Duplicate
-    </span>
+    <?php if ($isPossibleOwnershipTransfer): ?>
+        <span class="badge badge-warning">
+            Possible Ownership Transfer
+        </span>
+    <?php else: ?>
+        <span class="badge badge-danger">
+            Duplicate Account
+        </span>
+    <?php endif; ?>
 
 <?php else: ?>
 
@@ -1192,8 +1338,9 @@ html.dark .dataTables_wrapper
         type="button"
         class="btn btn-sm btn-danger viewDuplicateResidentBtn"
         data-id="<?= (int)$qrow['source_id'] ?>"
+        data-source="import_queue"
     >
-        View Duplicate
+        Review Conflict
     </button>
 
 <?php else: ?>
@@ -1224,37 +1371,70 @@ html.dark .dataTables_wrapper
           </div>
         <?php endif; ?>
 
-        <?php if ($resultArchivedDuplicates && $resultArchivedDuplicates->num_rows > 0): ?>
-          <hr class="my-4">
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-            <h6 class="fw-bold mb-0">Archived Duplicate Records</h6>
-            <span class="badge badge-secondary" style="background:#64748b;">Records preserved — no deletion</span>
-          </div>
-          <div class="table-responsive">
-            <table id="archiveTable" class="table table-bordered table-striped align-middle" style="width:100%">
-              <thead>
-                <tr>
-                  <th>Archived</th>
-                  <th>Imported Resident</th>
-                  <th>Email</th>
-                  <th>Phase / Block / Lot</th>
-                  <th>Existing Homeowner ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php while ($arch = $resultArchivedDuplicates->fetch_assoc()): ?>
+        <?php if (!empty($manualTransferCandidates)): ?>
+          <div class="mt-4 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <div>
+                <h6 class="fw-bold mb-1">Possible Ownership Transfers — Registered Households</h6>
+                <small class="text-muted">Pending walk-in/manual registrations using a Block and Lot that already has an active homeowner.</small>
+              </div>
+              <span class="badge bg-warning text-dark"><?= count($manualTransferCandidates) ?> pending</span>
+            </div>
+
+            <div class="alert alert-warning py-2 mb-3">
+              These records must <strong>not</strong> be normally approved. Review the current and incoming homeowner, send the two verification emails, verify ownership documents, then use <strong>Confirm Ownership Transfer</strong>.
+            </div>
+
+            <div class="table-responsive">
+              <table id="manualTransferTable" class="table table-bordered table-striped align-middle" style="width:100%">
+                <thead>
                   <tr>
-                    <td><?= esc($arch['archived_at'] ?? '') ?></td>
-                    <td><?= esc(trim(($arch['first_name'] ?? '').' '.($arch['middle_name'] ?? '').' '.($arch['last_name'] ?? ''))) ?></td>
-                    <td><?= esc($arch['email'] ?? '') ?></td>
-                    <td><?= esc(($arch['phase'] ?? '').' / Block '.(int)($arch['block'] ?? 0).' / Lot '.(int)($arch['lot'] ?? 0)) ?></td>
-                    <td><?= esc($arch['existing_homeowner_id'] ?? 'Not found') ?></td>
+                    <th>Incoming ID</th>
+                    <th>Incoming Homeowner</th>
+                    <th>Email</th>
+                    <th>Property</th>
+                    <th>Current Homeowner</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                <?php endwhile; ?>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                <?php foreach ($manualTransferCandidates as $candidate): ?>
+                  <?php
+                    $incoming = $candidate['incoming'];
+                    $currentOwner = $candidate['current_owner'];
+                    $incomingName = trim(($incoming['first_name'] ?? '') . ' ' . ($incoming['middle_name'] ?? '') . ' ' . ($incoming['last_name'] ?? ''));
+                    $currentName = trim(($currentOwner['first_name'] ?? '') . ' ' . ($currentOwner['middle_name'] ?? '') . ' ' . ($currentOwner['last_name'] ?? ''));
+                    $incomingDisplayId = trim((string)($incoming['public_id'] ?? '')) ?: (phase_prefix((string)$incoming['phase']) . (int)$incoming['id']);
+                  ?>
+                  <tr>
+                    <td><?= esc($incomingDisplayId) ?></td>
+                    <td><?= esc($incomingName) ?></td>
+                    <td><?= esc($incoming['email'] ?? '') ?></td>
+                    <td><?= esc(($incoming['phase'] ?? '') . ' / Block ' . (int)$candidate['block'] . ' / Lot ' . (int)$candidate['lot']) ?></td>
+                    <td>
+                      <div class="fw-semibold"><?= esc($currentName) ?></div>
+                      <small class="text-muted"><?= esc($currentOwner['public_id'] ?? ('#' . (int)$currentOwner['id'])) ?></small>
+                    </td>
+                    <td><span class="badge badge-warning">Possible Ownership Transfer</span></td>
+                    <td>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-warning reviewOwnershipTransferBtn"
+                        data-id="<?= (int)$incoming['id'] ?>"
+                        data-source="pending_homeowner"
+                      >
+                        Review Transfer
+                      </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
           </div>
         <?php endif; ?>
+
 
 				</div>
 			</div>
@@ -1345,7 +1525,7 @@ html.dark .dataTables_wrapper
             <div class="modal-header">
 
                 <h5 class="modal-title fw-bold">
-                    Duplicate Resident Review
+                    Resident Conflict Review
                 </h5>
 
                 <button 
@@ -1370,26 +1550,50 @@ html.dark .dataTables_wrapper
             </div>
 
 
-            <div class="modal-footer">
-
-                <button 
-                    type="button" 
-                    class="btn btn-light"
-                    data-bs-dismiss="modal">
-
-                    Close
-
-                </button>
-
+            <div class="modal-footer flex-wrap gap-2">
 
                 <button
                     type="button"
-                    class="btn btn-danger"
+                    class="btn btn-light"
+                    data-bs-dismiss="modal">
+                    Close
+                </button>
+
+                <button
+                    type="button"
+                    class="btn btn-outline-danger"
                     id="notifyDeleteDuplicateBtn"
                     data-id="">
+                    Notify &amp; Archive as Duplicate
+                </button>
 
-                    Notify Both & Archive Duplicate
+                <button
+                    type="button"
+                    class="btn btn-success d-none"
+                    id="startOwnershipTransferBtn"
+                    data-id="">
+                    Start Ownership Transfer Verification
+                </button>
 
+                <button
+                    type="button"
+                    class="btn btn-warning d-none"
+                    id="manualVerifyOldOwnerBtn">
+                    Verify Current Owner at HOA Office
+                </button>
+
+                <button
+                    type="button"
+                    class="btn btn-outline-danger d-none"
+                    id="cancelOwnershipTransferBtn">
+                    Cancel Transfer Verification
+                </button>
+
+                <button
+                    type="button"
+                    class="btn btn-success d-none"
+                    id="finalizeOwnershipTransferBtn">
+                    Confirm Ownership Transfer
                 </button>
 
             </div>
@@ -1399,6 +1603,88 @@ html.dark .dataTables_wrapper
 
     </div>
 
+</div>
+
+<!-- =====================================================
+     OWNERSHIP TRANSFER - MANUAL CURRENT OWNER VERIFICATION
+     ===================================================== -->
+<div class="modal fade" id="manualOwnershipVerifyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Verify Current Homeowner Manually</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    Use this only when the current homeowner cannot complete email verification. Verify the person at the HOA office or through valid ownership documents.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Verification Method</label>
+                    <select id="manualOwnershipVerifyMethod" class="form-select">
+                        <option value="">Select method</option>
+                        <option value="office">Verified at HOA Office</option>
+                        <option value="documents">Verified Through Documents</option>
+                        <option value="mixed">Office + Documents</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label fw-semibold">Verification Notes</label>
+                    <textarea id="manualOwnershipVerifyNotes" class="form-control" rows="4" placeholder="Example: Previous homeowner presented valid ID and signed the transfer acknowledgement at the HOA office."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="saveManualOwnershipVerifyBtn">Save Verification</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     OWNERSHIP TRANSFER - FINAL ADMIN CONFIRMATION
+     ===================================================== -->
+<div class="modal fade" id="finalizeOwnershipTransferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Final Ownership Transfer Confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    Both required homeowner confirmations must be complete. Finalizing will preserve the previous homeowner as <strong>Former Owner</strong> and create/activate a new homeowner account for the incoming owner.
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="ownershipDocumentsVerified">
+                    <label class="form-check-label fw-semibold" for="ownershipDocumentsVerified">
+                        I verified the ownership-transfer documents (e.g. deed of sale/transfer documents, IDs, and relevant HOA proof).
+                    </label>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Overall Verification Method</label>
+                    <select id="finalOwnershipVerifyMethod" class="form-select">
+                        <option value="">Select method</option>
+                        <option value="email">Email Confirmations</option>
+                        <option value="office">HOA Office Verification</option>
+                        <option value="documents">Documents</option>
+                        <option value="mixed">Mixed Verification</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Admin Notes</label>
+                    <textarea id="finalOwnershipTransferNotes" class="form-control" rows="4" placeholder="Record what documents were checked and any important transfer details."></textarea>
+                </div>
+                <div class="alert alert-warning mb-0">
+                    <strong>Important:</strong> Historical dues, complaints, rentals, parking records, and other transactions remain attached to the previous homeowner. They are not moved to the new homeowner.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmFinalizeOwnershipTransferBtn">Confirm Transfer</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- =====================================================
@@ -1499,6 +1785,38 @@ html.dark .dataTables_wrapper
 </div>
 
 
+
+<!-- =====================================================
+     SHARED HOA CONFIRMATION MODAL (THIS PAGE ONLY)
+     ===================================================== -->
+<div class="modal fade" id="hoaConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="hoaConfirmTitle">Confirm Action</h5>
+                <button type="button" class="btn-close" id="hoaConfirmCloseBtn" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="d-flex gap-3 align-items-start">
+                    <div class="flex-shrink-0 d-flex align-items-center justify-content-center"
+                         style="width:46px;height:46px;border-radius:50%;background:#fff3cd;color:#b45309;font-size:22px;">
+                        <i class="dw dw-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <p class="mb-0" id="hoaConfirmMessage">Are you sure?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" id="hoaConfirmCancelBtn">Cancel</button>
+                <button type="button" class="btn btn-success" id="hoaConfirmOkBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
 		<div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="d-flex">
@@ -1590,6 +1908,114 @@ function showToast(
             }
         )
         .show();
+}
+
+
+/**
+ * Custom promise-based confirmation dialog used by ownership-transfer actions.
+ * This intentionally avoids the browser-native confirm() popup that displays
+ * "localhost says" while testing locally.
+ */
+function hoaConfirm(message, options = {}) {
+    return new Promise(function (resolve) {
+        const modalEl = document.getElementById('hoaConfirmModal');
+        const titleEl = document.getElementById('hoaConfirmTitle');
+        const messageEl = document.getElementById('hoaConfirmMessage');
+        const okBtn = document.getElementById('hoaConfirmOkBtn');
+        const cancelBtn = document.getElementById('hoaConfirmCancelBtn');
+        const closeBtn = document.getElementById('hoaConfirmCloseBtn');
+
+        if (
+            !modalEl ||
+            !titleEl ||
+            !messageEl ||
+            !okBtn ||
+            !cancelBtn ||
+            !closeBtn ||
+            typeof bootstrap === 'undefined'
+        ) {
+            console.error('HOA confirmation modal is unavailable.');
+            showToast('Unable to open the confirmation dialog. Refresh the page and try again.', 'error');
+            resolve(false);
+            return;
+        }
+
+        const title = options.title || 'Confirm Action';
+        const confirmText = options.confirmText || 'Confirm';
+        const cancelText = options.cancelText || 'Cancel';
+        const danger = options.danger === true;
+
+        titleEl.textContent = title;
+        messageEl.textContent = String(message || 'Are you sure?');
+        okBtn.textContent = confirmText;
+        cancelBtn.textContent = cancelText;
+
+        okBtn.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-primary');
+        okBtn.classList.add(danger ? 'btn-danger' : 'btn-success');
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+            backdrop: 'static',
+            keyboard: false,
+            focus: true
+        });
+
+        let settled = false;
+
+        const clearHandlers = function () {
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            closeBtn.onclick = null;
+        };
+
+        const finish = function (result) {
+            if (settled) return;
+            settled = true;
+            clearHandlers();
+            resolve(result);
+            modal.hide();
+        };
+
+        okBtn.onclick = function () {
+            finish(true);
+        };
+
+        cancelBtn.onclick = function () {
+            finish(false);
+        };
+
+        closeBtn.onclick = function () {
+            finish(false);
+        };
+
+        const hiddenHandler = function () {
+            modalEl.removeEventListener('hidden.bs.modal', hiddenHandler);
+            document
+                .querySelectorAll('.modal-backdrop.hoa-confirm-backdrop')
+                .forEach(function (backdrop) {
+                    backdrop.classList.remove('hoa-confirm-backdrop');
+                });
+
+            if (!settled) {
+                settled = true;
+                clearHandlers();
+                resolve(false);
+            }
+        };
+
+        modalEl.addEventListener('hidden.bs.modal', hiddenHandler);
+
+        modal.show();
+
+        // When another Bootstrap modal is already open (Resident Conflict Review),
+        // keep this confirmation dialog and its backdrop above it.
+        setTimeout(function () {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length) {
+                backdrops[backdrops.length - 1].classList.add('hoa-confirm-backdrop');
+            }
+            okBtn.focus();
+        }, 80);
+    });
 }
 
 	const homeownerImportCsrf = <?= json_encode($homeownerImportCsrf) ?>;
@@ -2117,6 +2543,7 @@ if (!location) {
 
             let imported = 0;
             let duplicates = 0;
+            let possibleTransfers = 0;
             let skipped = 0;
 
             const errors = [];
@@ -2274,6 +2701,11 @@ if (!location) {
                         data.duplicates || 0
                     );
 
+                possibleTransfers +=
+                    Number(
+                        data.possible_transfers || 0
+                    );
+
                 skipped +=
                     Number(
                         data.skipped || 0
@@ -2305,6 +2737,12 @@ if (!location) {
                     `, ${duplicates} duplicate(s) detected`;
             }
 
+            if (possibleTransfers > 0) {
+
+                summary +=
+                    `, ${possibleTransfers} possible ownership transfer(s)`;
+            }
+
             if (skipped > 0) {
 
                 summary +=
@@ -2326,7 +2764,20 @@ if (!location) {
             |--------------------------------------------------------------------------
             */
 
-            if (duplicates > 0) {
+            if (possibleTransfers > 0) {
+
+                setImportStatus(
+                    summary +
+                    ' Property conflicts are listed below. Review possible ownership transfers before archiving anything as a duplicate.',
+                    'warning'
+                );
+
+                showToast(
+                    `${possibleTransfers} possible ownership transfer(s) need review.`,
+                    'warning'
+                );
+
+            } else if (duplicates > 0) {
 
                 setImportStatus(
                     summary +
@@ -2522,6 +2973,21 @@ if (!location) {
             $('#importQueueTable').DataTable({
                 responsive: true,
                 pageLength: 25,
+                order: [],
+                columnDefs: [
+                    { orderable: false, targets: 6 }
+                ]
+            });
+        }
+
+        if (
+            $.fn.DataTable &&
+            $('#manualTransferTable').length &&
+            !$.fn.DataTable.isDataTable('#manualTransferTable')
+        ) {
+            $('#manualTransferTable').DataTable({
+                responsive: true,
+                pageLength: 10,
                 order: [],
                 columnDefs: [
                     { orderable: false, targets: 6 }
@@ -2830,28 +3296,24 @@ function initCoverMapIfAny() {
 	</script>
 	<script>
 		
-const duplicateResidentModalEl =
-    document.getElementById(
-        'duplicateResidentModal'
-    );
+const duplicateResidentModalEl = document.getElementById('duplicateResidentModal');
+const duplicateResidentModal = duplicateResidentModalEl ? new bootstrap.Modal(duplicateResidentModalEl) : null;
+const duplicateResidentContent = document.getElementById('duplicateResidentContent');
+const notifyDeleteDuplicateBtn = document.getElementById('notifyDeleteDuplicateBtn');
+const startOwnershipTransferBtn = document.getElementById('startOwnershipTransferBtn');
+const manualVerifyOldOwnerBtn = document.getElementById('manualVerifyOldOwnerBtn');
+const cancelOwnershipTransferBtn = document.getElementById('cancelOwnershipTransferBtn');
+const finalizeOwnershipTransferBtn = document.getElementById('finalizeOwnershipTransferBtn');
 
-const duplicateResidentModal =
-    duplicateResidentModalEl
-        ? new bootstrap.Modal(
-            duplicateResidentModalEl
-        )
-        : null;
+const manualOwnershipVerifyModalEl = document.getElementById('manualOwnershipVerifyModal');
+const manualOwnershipVerifyModal = manualOwnershipVerifyModalEl ? new bootstrap.Modal(manualOwnershipVerifyModalEl, {backdrop:'static'}) : null;
+const finalizeOwnershipTransferModalEl = document.getElementById('finalizeOwnershipTransferModal');
+const finalizeOwnershipTransferModal = finalizeOwnershipTransferModalEl ? new bootstrap.Modal(finalizeOwnershipTransferModalEl, {backdrop:'static'}) : null;
 
-const duplicateResidentContent =
-    document.getElementById(
-        'duplicateResidentContent'
-    );
-
-const notifyDeleteDuplicateBtn =
-    document.getElementById(
-        'notifyDeleteDuplicateBtn'
-    );
-
+let currentConflictQueueId = 0;
+let currentConflictSource = 'import_queue';
+let currentOwnershipTransfer = null;
+let currentConflictMatchType = 'duplicate_account';
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -2862,230 +3324,366 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
+function setConflictButton(button, visible) {
+    if (!button) return;
+    button.classList.toggle('d-none', !visible);
+}
 
-$(document).on(
-    'click',
-    '.viewDuplicateResidentBtn',
-    async function () {
+function ownershipStatusBadge(label, rawStatus) {
+    const cls = rawStatus === 'confirmed' || rawStatus === 'manual_verified'
+        ? 'bg-success'
+        : rawStatus === 'denied'
+            ? 'bg-danger'
+            : 'bg-warning text-dark';
+    return `<span class="badge ${cls}">${escapeHtml(label || rawStatus || 'Pending')}</span>`;
+}
 
-        const id =
-            Number(
-                this.dataset.id || 0
-            );
+function resetConflictActions(queueId, sourceType = 'import_queue') {
+    currentConflictQueueId = Number(queueId || 0);
+    currentConflictSource = sourceType === 'pending_homeowner' ? 'pending_homeowner' : 'import_queue';
+    currentOwnershipTransfer = null;
+    currentConflictMatchType = 'duplicate_account';
 
-        if (!id) {
-            return;
-        }
-
-        duplicateResidentContent.innerHTML =
-            '<div class="text-muted">Loading duplicate information...</div>';
-
-        notifyDeleteDuplicateBtn.dataset.id =
-            String(id);
-
-        notifyDeleteDuplicateBtn.disabled =
-            true;
-
-        duplicateResidentModal.show();
-
-
-        try {
-
-            const response =
-                await fetch(
-                    'get_duplicate_homeowner.php?id='
-                    +
-                    encodeURIComponent(id),
-                    {
-                        headers: {
-                            'Accept':
-                                'application/json'
-                        }
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (
-                !response.ok ||
-                !data.success
-            ) {
-                throw new Error(
-                    data.message ||
-                    'Unable to load duplicate information.'
-                );
-            }
-
-
-            const q =
-                data.queue;
-
-            const existing =
-                data.existing;
-
-
-            duplicateResidentContent.innerHTML = `
-
-                <div class="alert alert-warning">
-                    The imported email address is already registered in the system.
-                    Review both records before archiving the duplicate import.
-                </div>
-
-                <div class="row g-3">
-
-                    <div class="col-md-6">
-
-                        <div class="card h-100 border-warning">
-
-                            <div class="card-header fw-bold">
-                                Imported Resident
-                            </div>
-
-                            <div class="card-body">
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Name</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(q.name)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Email</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(q.email)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Contact</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(q.contact_number)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Phase</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(q.phase)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Address</small>
-                                    <div class="fw-semibold">
-                                        Block ${escapeHtml(q.block)},
-                                        Lot ${escapeHtml(q.lot)}
-                                        ${q.street ? ' · ' + escapeHtml(q.street) : ''}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <small class="text-muted">Residential Type</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(q.residential_type)}
-                                    </div>
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-                    <div class="col-md-6">
-
-                        <div class="card h-100 border-success">
-
-                            <div class="card-header fw-bold">
-                                Existing Registered Homeowner
-                            </div>
-
-                            <div class="card-body">
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Homeowner ID</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.public_id || existing.id)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Name</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.name)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Email</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.email)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Contact</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.contact_number)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Phase</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.phase)}
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <small class="text-muted">Address</small>
-                                    <div class="fw-semibold">
-                                        Block ${escapeHtml(existing.block)},
-                                        Lot ${escapeHtml(existing.lot)}
-                                        ${existing.street ? ' · ' + escapeHtml(existing.street) : ''}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <small class="text-muted">Status</small>
-                                    <div class="fw-semibold">
-                                        ${escapeHtml(existing.status)}
-                                    </div>
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-            `;
-
-
-            notifyDeleteDuplicateBtn.disabled =
-                false;
-
-
-        } catch (err) {
-
-            duplicateResidentContent.innerHTML =
-                '<div class="alert alert-danger mb-0">'
-                +
-                escapeHtml(
-                    err.message ||
-                    'Unable to load duplicate information.'
-                )
-                +
-                '</div>';
-        }
+    if (notifyDeleteDuplicateBtn) {
+        notifyDeleteDuplicateBtn.dataset.id = String(currentConflictQueueId);
+        notifyDeleteDuplicateBtn.disabled = true;
+        notifyDeleteDuplicateBtn.textContent = 'Notify & Archive as Duplicate';
     }
-);
+    if (startOwnershipTransferBtn) {
+        startOwnershipTransferBtn.dataset.id = String(currentConflictQueueId);
+        startOwnershipTransferBtn.disabled = false;
+        startOwnershipTransferBtn.textContent = 'Start Ownership Transfer Verification';
+    }
+
+    setConflictButton(notifyDeleteDuplicateBtn, false);
+    setConflictButton(startOwnershipTransferBtn, false);
+    setConflictButton(manualVerifyOldOwnerBtn, false);
+    setConflictButton(cancelOwnershipTransferBtn, false);
+    setConflictButton(finalizeOwnershipTransferBtn, false);
+}
+
+function renderConflictActions(data) {
+    const transfer = data.transfer || null;
+    currentOwnershipTransfer = transfer;
+    currentConflictMatchType = data.match_type || 'duplicate_account';
+
+    if (currentConflictMatchType !== 'possible_ownership_transfer') {
+        setConflictButton(notifyDeleteDuplicateBtn, currentConflictSource === 'import_queue');
+        if (notifyDeleteDuplicateBtn) notifyDeleteDuplicateBtn.disabled = false;
+        return;
+    }
+
+    if (!data.schema_ready) {
+        setConflictButton(startOwnershipTransferBtn, true);
+        startOwnershipTransferBtn.disabled = true;
+        startOwnershipTransferBtn.textContent = 'Run Ownership Transfer SQL Setup First';
+        setConflictButton(notifyDeleteDuplicateBtn, currentConflictSource === 'import_queue');
+        if (notifyDeleteDuplicateBtn) notifyDeleteDuplicateBtn.disabled = false;
+        return;
+    }
+
+    if (!transfer) {
+        setConflictButton(startOwnershipTransferBtn, true);
+        setConflictButton(notifyDeleteDuplicateBtn, currentConflictSource === 'import_queue');
+        if (notifyDeleteDuplicateBtn) notifyDeleteDuplicateBtn.disabled = false;
+        return;
+    }
+
+    const status = String(transfer.status || '');
+    const active = status === 'awaiting_confirmation' || status === 'ready_for_admin';
+
+    if (status === 'awaiting_confirmation') {
+        setConflictButton(startOwnershipTransferBtn, true);
+        startOwnershipTransferBtn.textContent = 'Resend Pending Verification Email(s)';
+        setConflictButton(manualVerifyOldOwnerBtn, transfer.old_confirmation === 'pending');
+        setConflictButton(cancelOwnershipTransferBtn, true);
+        setConflictButton(notifyDeleteDuplicateBtn, false);
+    } else if (status === 'ready_for_admin' || transfer.ready_for_admin) {
+        setConflictButton(finalizeOwnershipTransferBtn, true);
+        setConflictButton(cancelOwnershipTransferBtn, true);
+        setConflictButton(notifyDeleteDuplicateBtn, false);
+    } else if (status === 'denied' || status === 'cancelled') {
+        setConflictButton(startOwnershipTransferBtn, true);
+        startOwnershipTransferBtn.textContent = 'Restart Ownership Transfer Verification';
+        setConflictButton(notifyDeleteDuplicateBtn, currentConflictSource === 'import_queue');
+        if (notifyDeleteDuplicateBtn) notifyDeleteDuplicateBtn.disabled = false;
+    } else if (status === 'completed') {
+        setConflictButton(notifyDeleteDuplicateBtn, false);
+    } else if (!active) {
+        setConflictButton(notifyDeleteDuplicateBtn, currentConflictSource === 'import_queue');
+        if (notifyDeleteDuplicateBtn) notifyDeleteDuplicateBtn.disabled = false;
+    }
+}
+
+function transferStatusHtml(transfer) {
+    if (!transfer) {
+        return `
+            <div class="alert alert-light border mt-3 mb-0">
+                Ownership-transfer verification has not started yet.
+            </div>`;
+    }
+
+    const expires = transfer.token_expires_at
+        ? escapeHtml(transfer.token_expires_at)
+        : '—';
+
+    return `
+        <div class="card border-success mt-3">
+            <div class="card-header fw-bold">Ownership Transfer Verification</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Current Homeowner</small>
+                        ${ownershipStatusBadge(transfer.old_confirmation_label, transfer.old_confirmation)}
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Incoming Homeowner</small>
+                        ${ownershipStatusBadge(transfer.new_confirmation_label, transfer.new_confirmation)}
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Transfer Status</small>
+                        <span class="fw-semibold">${escapeHtml(String(transfer.status || '').replaceAll('_',' '))}</span>
+                    </div>
+                </div>
+                <div class="small text-muted mt-3">Email verification expires: ${expires}</div>
+                ${transfer.admin_notes ? `<div class="mt-2"><small class="text-muted">Admin Notes</small><div>${escapeHtml(transfer.admin_notes)}</div></div>` : ''}
+            </div>
+        </div>`;
+}
+
+$(document).on('click', '.viewDuplicateResidentBtn, .reviewOwnershipTransferBtn', async function () {
+    const id = Number(this.dataset.id || 0);
+    const sourceType = this.dataset.source === 'pending_homeowner' ? 'pending_homeowner' : 'import_queue';
+    if (!id) return;
+
+    resetConflictActions(id, sourceType);
+    duplicateResidentContent.innerHTML = '<div class="text-muted">Loading resident conflict information...</div>';
+    duplicateResidentModal?.show();
+
+    try {
+        const response = await fetch('get_duplicate_homeowner.php?source=' + encodeURIComponent(sourceType) + '&id=' + encodeURIComponent(id), {
+            headers: {'Accept': 'application/json'}
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Unable to load resident conflict information.');
+        }
+
+        const q = data.queue;
+        const existing = data.existing;
+        const isTransfer = data.match_type === 'possible_ownership_transfer';
+
+        const topAlert = isTransfer
+            ? `<div class="alert alert-info">
+                 <strong>Possible Ownership Transfer:</strong>
+                 this is a different resident/email using the same active Phase, Block, and Lot as the current registered homeowner.
+                 Do not replace the current homeowner directly. Verify both parties first.
+               </div>`
+            : `<div class="alert alert-warning">
+                 <strong>Duplicate Account:</strong>
+                 the incoming record matches an existing homeowner account. Review both records before archiving the duplicate.
+               </div>`;
+
+        duplicateResidentContent.innerHTML = `
+            ${topAlert}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card h-100 ${isTransfer ? 'border-info' : 'border-warning'}">
+                        <div class="card-header fw-bold">${escapeHtml(q.source_label || 'Incoming Homeowner')}</div>
+                        <div class="card-body">
+                            <div class="mb-2"><small class="text-muted">Name</small><div class="fw-semibold">${escapeHtml(q.name)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Email</small><div class="fw-semibold text-break">${escapeHtml(q.email)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Contact</small><div class="fw-semibold">${escapeHtml(q.contact_number)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Phase</small><div class="fw-semibold">${escapeHtml(q.phase)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Address</small><div class="fw-semibold">Block ${escapeHtml(q.block)}, Lot ${escapeHtml(q.lot)}${q.street ? ' · ' + escapeHtml(q.street) : ''}</div></div>
+                            <div><small class="text-muted">Residential Type</small><div class="fw-semibold">${escapeHtml(q.residential_type)}</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border-success">
+                        <div class="card-header fw-bold">Current Registered Homeowner</div>
+                        <div class="card-body">
+                            <div class="mb-2"><small class="text-muted">Homeowner ID</small><div class="fw-semibold">${escapeHtml(existing.public_id || existing.id)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Name</small><div class="fw-semibold">${escapeHtml(existing.name)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Email</small><div class="fw-semibold text-break">${escapeHtml(existing.email)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Contact</small><div class="fw-semibold">${escapeHtml(existing.contact_number)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Phase</small><div class="fw-semibold">${escapeHtml(existing.phase)}</div></div>
+                            <div class="mb-2"><small class="text-muted">Address</small><div class="fw-semibold">Block ${escapeHtml(existing.block)}, Lot ${escapeHtml(existing.lot)}${existing.street ? ' · ' + escapeHtml(existing.street) : ''}</div></div>
+                            <div><small class="text-muted">Status</small><div class="fw-semibold">${escapeHtml(existing.status)}</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ${isTransfer ? transferStatusHtml(data.transfer) : ''}
+        `;
+
+        renderConflictActions(data);
+
+    } catch (err) {
+        duplicateResidentContent.innerHTML = '<div class="alert alert-danger mb-0">' + escapeHtml(err.message || 'Unable to load resident conflict information.') + '</div>';
+    }
+});
+
+async function postOwnershipTransferAction(payload) {
+    const body = new URLSearchParams();
+    Object.entries(payload).forEach(([key, value]) => body.set(key, String(value ?? '')));
+    body.set('csrf', homeownerImportCsrf);
+
+    const response = await fetch('ownership_transfer_admin_action.php', {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+        body: body.toString()
+    });
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch (_) { throw new Error('Server returned an invalid response.'); }
+    if (!response.ok || !data.success) throw new Error(data.message || 'Ownership-transfer action failed.');
+    return data;
+}
+
+startOwnershipTransferBtn?.addEventListener('click', async function () {
+    const id = Number(this.dataset.id || currentConflictQueueId || 0);
+    if (!id) return;
+    const sendVerification = await hoaConfirm(
+        'Send ownership-transfer verification email(s) to the current and incoming homeowner?',
+        {
+            title: 'Start Ownership Transfer Verification',
+            confirmText: 'Send Verification',
+            cancelText: 'Cancel'
+        }
+    );
+    if (!sendVerification) return;
+
+    const original = this.textContent;
+    this.disabled = true;
+    this.textContent = 'Sending verification...';
+    try {
+        const body = new URLSearchParams({id:String(id), source:currentConflictSource, csrf:homeownerImportCsrf});
+        const response = await fetch('start_ownership_transfer.php', {
+            method:'POST',
+            headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+            body:body.toString()
+        });
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch (_) { throw new Error('Server returned an invalid response.'); }
+        if (!response.ok || !data.success) throw new Error(data.message || 'Unable to start ownership transfer verification.');
+        showToast(data.message, 'success');
+        duplicateResidentModal?.hide();
+        setTimeout(() => location.reload(), 900);
+    } catch (error) {
+        showToast(error.message || 'Unable to start ownership transfer verification.', 'error');
+        this.disabled = false;
+        this.textContent = original;
+    }
+});
+
+manualVerifyOldOwnerBtn?.addEventListener('click', function () {
+    document.getElementById('manualOwnershipVerifyMethod').value = '';
+    document.getElementById('manualOwnershipVerifyNotes').value = '';
+    duplicateResidentModal?.hide();
+    manualOwnershipVerifyModal?.show();
+});
+
+document.getElementById('saveManualOwnershipVerifyBtn')?.addEventListener('click', async function () {
+    const transferId = Number(currentOwnershipTransfer?.id || 0);
+    const method = document.getElementById('manualOwnershipVerifyMethod').value;
+    const notes = document.getElementById('manualOwnershipVerifyNotes').value.trim();
+    if (!transferId) return showToast('No ownership transfer selected.', 'error');
+    if (!method || !notes) return showToast('Select a verification method and enter verification notes.', 'warning');
+
+    const original = this.textContent;
+    this.disabled = true;
+    this.textContent = 'Saving...';
+    try {
+        const data = await postOwnershipTransferAction({
+            action:'manual_verify_old', transfer_id:transferId,
+            verification_method:method, notes:notes
+        });
+        manualOwnershipVerifyModal?.hide();
+        showToast(data.message, 'success');
+        setTimeout(() => location.reload(), 800);
+    } catch (error) {
+        showToast(error.message, 'error');
+        this.disabled = false;
+        this.textContent = original;
+    }
+});
+
+cancelOwnershipTransferBtn?.addEventListener('click', async function () {
+    const transferId = Number(currentOwnershipTransfer?.id || 0);
+    if (!transferId) return;
+    const cancelTransfer = await hoaConfirm(
+        'Cancel this ownership-transfer verification? No homeowner record will be deleted.',
+        {
+            title: 'Cancel Ownership Transfer',
+            confirmText: 'Cancel Verification',
+            cancelText: 'Keep Verification',
+            danger: true
+        }
+    );
+    if (!cancelTransfer) return;
+    this.disabled = true;
+    try {
+        const data = await postOwnershipTransferAction({action:'cancel', transfer_id:transferId, notes:'Cancelled from Resident Conflict Review.'});
+        showToast(data.message, 'success');
+        duplicateResidentModal?.hide();
+        setTimeout(() => location.reload(), 800);
+    } catch (error) {
+        showToast(error.message, 'error');
+        this.disabled = false;
+    }
+});
+
+finalizeOwnershipTransferBtn?.addEventListener('click', function () {
+    document.getElementById('ownershipDocumentsVerified').checked = false;
+    document.getElementById('finalOwnershipVerifyMethod').value = currentOwnershipTransfer?.verification_method || '';
+    document.getElementById('finalOwnershipTransferNotes').value = currentOwnershipTransfer?.admin_notes || '';
+    duplicateResidentModal?.hide();
+    finalizeOwnershipTransferModal?.show();
+});
+
+document.getElementById('confirmFinalizeOwnershipTransferBtn')?.addEventListener('click', async function () {
+    const transferId = Number(currentOwnershipTransfer?.id || 0);
+    const documentsVerified = document.getElementById('ownershipDocumentsVerified').checked;
+    const method = document.getElementById('finalOwnershipVerifyMethod').value;
+    const notes = document.getElementById('finalOwnershipTransferNotes').value.trim();
+
+    if (!transferId) return showToast('No ownership transfer selected.', 'error');
+    if (!documentsVerified) return showToast('Confirm that you verified the ownership-transfer documents.', 'warning');
+    if (!method || !notes) return showToast('Select the verification method and enter admin notes.', 'warning');
+    const finalizeTransfer = await hoaConfirm(
+        'Finalize this ownership transfer? The previous homeowner will become Former Owner and the incoming homeowner will become the active homeowner for this property.',
+        {
+            title: 'Confirm Ownership Transfer',
+            confirmText: 'Finalize Transfer',
+            cancelText: 'Go Back',
+            danger: false
+        }
+    );
+    if (!finalizeTransfer) return;
+
+    const original = this.textContent;
+    this.disabled = true;
+    this.textContent = 'Finalizing transfer...';
+    try {
+        const data = await postOwnershipTransferAction({
+            action:'finalize', transfer_id:transferId,
+            documents_verified:1, verification_method:method, notes:notes
+        });
+        finalizeOwnershipTransferModal?.hide();
+        showToast(data.message, 'success');
+        setTimeout(() => location.reload(), 1000);
+    } catch (error) {
+        showToast(error.message, 'error');
+        this.disabled = false;
+        this.textContent = original;
+    }
+});
+
 /* =========================================================
    DUPLICATE ARCHIVE CONFIRMATION MODAL
    ========================================================= */
@@ -3135,6 +3733,11 @@ let pendingDuplicateDeleteId = 0;
 notifyDeleteDuplicateBtn?.addEventListener(
     'click',
     function () {
+
+        if (currentConflictSource !== 'import_queue') {
+            showToast('Manual registrations are handled through ownership-transfer verification, not duplicate import archiving.', 'warning');
+            return;
+        }
 
         const id =
             Number(
@@ -3455,7 +4058,7 @@ duplicateDeleteConfirmModalEl
                     false;
 
                 duplicateDeleteConfirmBtn.textContent =
-                    'Notify Both & Archive';
+                    'Notify & Archive as Duplicate';
             }
         }
     );

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 22, 2026 at 11:40 PM
+-- Generation Time: Sep 30, 2026 at 12:21 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -152,6 +152,14 @@ CREATE TABLE `activity_logs` (
   `ip_address` varchar(45) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `activity_logs`
+--
+
+INSERT INTO `activity_logs` (`id`, `admin_id`, `phase`, `action`, `module_key`, `details`, `ip_address`, `created_at`) VALUES
+(1, 2, 'Phase 1', 'Excel import processed', 'homeowner_management', '4 resident(s) added for review; 1 duplicate-account record(s); 4 possible ownership transfer(s); 0 row(s) skipped.', '::1', '2026-09-30 05:33:40'),
+(2, 2, 'Phase 1', 'Ownership transfer verification started', 'homeowner_management', 'Transfer #1: Phase 1, Block 1, Lot 1. Current homeowner: Adrian M. Reyes. Incoming homeowner: Sofia M Lim. Verification email(s) sent.', '::1', '2026-09-30 06:04:04');
 
 -- --------------------------------------------------------
 
@@ -332,6 +340,37 @@ CREATE TABLE `complaints` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `complaints`
+--
+
+INSERT INTO `complaints` (`id`, `homeowner_id`, `phase`, `admin_id`, `subject`, `category`, `description`, `status`, `priority`, `created_at`, `updated_at`) VALUES
+(1, 46, 'Phase 1', 2, 'May sunog', 'neighbor', 'May nasusunog!!', 'resolved', 'urgent', '2026-09-28 21:50:08', '2026-09-28 21:57:43');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `complaint_attachments`
+--
+
+CREATE TABLE `complaint_attachments` (
+  `id` int(11) NOT NULL,
+  `complaint_id` int(11) NOT NULL,
+  `file_path` varchar(500) NOT NULL,
+  `original_name` varchar(255) NOT NULL,
+  `mime_type` varchar(100) NOT NULL,
+  `file_kind` enum('image','video') NOT NULL,
+  `file_size` bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `complaint_attachments`
+--
+
+INSERT INTO `complaint_attachments` (`id`, `complaint_id`, `file_path`, `original_name`, `mime_type`, `file_kind`, `file_size`, `created_at`) VALUES
+(1, 1, 'uploads/complaints/complaint_1_395be10a47065e866da3a53f.png', 'abs.png', 'image/png', 'image', 3015337, '2026-09-28 21:50:08');
+
 -- --------------------------------------------------------
 
 --
@@ -347,6 +386,18 @@ CREATE TABLE `complaint_messages` (
   `message` text NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `complaint_messages`
+--
+
+INSERT INTO `complaint_messages` (`id`, `complaint_id`, `sender_type`, `sender_homeowner_id`, `sender_admin_id`, `message`, `created_at`) VALUES
+(1, 1, 'homeowner', 46, NULL, 'May nasusunog!!', '2026-09-28 21:50:08'),
+(2, 1, 'admin', NULL, 2, 'comming', '2026-09-28 21:50:47'),
+(3, 1, 'admin', NULL, 2, 'Complaint status updated to CLOSED.', '2026-09-28 21:50:57'),
+(4, 1, 'admin', NULL, 2, 'Complaint status updated to RESOLVED.', '2026-09-28 21:51:11'),
+(5, 1, 'homeowner', 46, NULL, 'awdasda', '2026-09-28 21:51:35'),
+(6, 1, 'admin', NULL, 2, 'Complaint status updated to RESOLVED.', '2026-09-28 21:57:43');
 
 -- --------------------------------------------------------
 
@@ -709,7 +760,7 @@ CREATE TABLE `homeowners` (
   `longitude` decimal(10,7) DEFAULT NULL,
   `map_x` int(11) DEFAULT NULL,
   `map_y` int(11) DEFAULT NULL,
-  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `status` enum('pending','approved','rejected','former') DEFAULT 'pending',
   `admin_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `reset_token` varchar(255) DEFAULT NULL,
@@ -766,7 +817,16 @@ INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_
 (43, 'P3H013', 'Uma', 'P.', 'Serrano', '09173000013', 'p3.homeowner13@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 1', '15', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000013', 'Block 15, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
 (44, 'P3H014', 'Vince', 'R.', 'Padilla', '09173000014', 'p3.homeowner14@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 2', '15', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000014', 'Block 15, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
 (45, 'P3H015', 'Wella', 'M.', 'Alcantara', '09173000015', 'p3.homeowner15@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 3', '15', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000015', 'Block 15, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(46, 'P146', 'Patrick', 'Justin', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$/GMjMRWJ0p7AZQzn1H.ak.VmXnizrCNNv7W3d5LMAc4vXd/XKy6JC', 0, 'Phase 1', 'Block 9 Lot 4', '9', '4', 'Horizon Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/3579848c75935c791d98daacc1370125_id.jpg', 'uploads/a5a3ff1819e4a040ae2c57338ccd4da7_proof.jpg', NULL, NULL, NULL, 1732, 1768, 'approved', 2, '2026-09-22 21:32:56', NULL, NULL);
+(46, 'P146', 'Patrick', 'Justin', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$/GMjMRWJ0p7AZQzn1H.ak.VmXnizrCNNv7W3d5LMAc4vXd/XKy6JC', 0, 'Phase 1', 'Block 9 Lot 4', '9', '4', 'Horizon Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/3579848c75935c791d98daacc1370125_id.jpg', 'uploads/a5a3ff1819e4a040ae2c57338ccd4da7_proof.jpg', NULL, NULL, NULL, 1732, 1768, 'approved', 2, '2026-09-22 21:32:56', NULL, NULL),
+(47, 'P147', 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', '$2y$10$ElEdyBOnSEuA50kYfMtqw.TB4fVtz06GPDdkeVmzkznmJD/KrZsq6', 1, 'Phase 1', 'Block 1 Lot 1', '1', '1', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near main gate', '5 years', 'Owner', 'Ana Dela Cruz', '09180000001', 'Block 1, Lot 1, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 2134, 3189, 'approved', 2, '2026-09-28 21:55:28', '52d36e2434a8029ac4fffcc93dc91098f0e9c6fe9076533fe57c21a9012ab293', '2026-09-29 01:14:19'),
+(48, 'P148', 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', '$2y$10$NvcbJBPczmr8iGrIwmSW/uazaXwx/Q9jPqlvVe2ipAtQVcWlWzmDC', 1, 'Phase 1', 'Block 1 Lot 2', '1', '2', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near clubhouse', '8 years', 'Owner', 'Pedro Garcia', '09180000002', 'Block 1, Lot 2, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1976, 3147, 'approved', 2, '2026-09-28 21:55:28', '1680a52012065c8907288f03942d2bf26bd7a2499e51098625874cae3c06e64c', '2026-09-29 01:14:23'),
+(49, 'P149', 'Carlo', 'Mendoza', 'Santos', '09170000003', 'phase1.test03@example.com', '$2y$10$v0gfEGxGSWIR7c6YXjfJ3um6uQJ4nMNtTVhfAwx9R32mUdmlqtJNC', 1, 'Phase 1', 'Block 1 Lot 3', '1', '3', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Corner property', '3 years', 'Owner', 'Liza Santos', '09180000003', 'Block 1, Lot 3, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 2104, 3140, 'approved', 2, '2026-09-28 21:55:28', '87f2b0b5dea24415d364e828a910b97287b42ebeb9330e71f15c108344bc46d8', '2026-09-29 01:14:27'),
+(50, 'P150', 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', '$2y$10$s1KaSuODvBcCXkr5znIZpe8woUw7Hz4cQ8j7F3DQSW.Ujz9ftwUiW', 1, 'Phase 1', 'Block 2 Lot 1', '2', '1', 'Gulf Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near basketball court', '10 years', 'Owner', 'Ramon Reyes', '09180000004', 'Block 2, Lot 1, Gulf Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1677, 3036, 'approved', 2, '2026-09-28 21:55:28', '19f580d56e87979e737ff82c681e5b799d3965b5bf4d4bf94108669e3a4bf32b', '2026-09-29 01:14:32'),
+(51, 'P151', 'Miguel', 'Ramos', 'Flores', '09170000005', 'phase1.test05@example.com', '$2y$10$Kj0F62aqh0hO13fjvojmx.Qmge9BD5KPPJNNE3WJsDbS77RpVX1wS', 1, 'Phase 1', 'Block 2 Lot 2', '2', '2', 'Equator Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near subdivision park', '6 years', 'Owner', 'Elena Flores', '09180000005', 'Block 2, Lot 2, Equator Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1786, 3135, 'approved', 2, '2026-09-28 21:55:28', '1d797973ff73cb9fbcb997bd5670404ae1b3ea6dac3af491959766cf5fce0631', '2026-09-29 01:14:37'),
+(52, 'P152', 'Noel', 'P', 'Garcia', '09171111001', 'p1.normal01@example.com', '$2y$10$dSkQTmRKrNa4d7tQW6XCku80BrrHmv8UehxMg8kq1bpltyUfZvoLG', 1, 'Phase 1', 'Block 16 Lot 21', '16', '21', 'Africa Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 1 - NORMAL NEW HOMEOWNER: unique email + vacant property; expected normal For Review.', '2 years', 'Owner', 'Rosa Garcia', '09182221001', 'Block 16, Lot 21, Africa Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 573, 584, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
+(53, 'P153', 'Mark', 'A', 'Santos', '09171111005', 'p1.same-name-new-property@example.com', '$2y$10$YDyQe0m7RMo4RlhBI0A8cuoEt4qrTJ9.kPx3tN9M/Yjp2bLUX3j5W', 1, 'Phase 1', 'Block 16 Lot 23', '16', '23', 'Germany Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 5 - SAME NAME ONLY: different email/property; expected normal under current duplicate/property logic.', '1 year', 'Owner', 'Liza Santos', '09182221005', 'Block 16, Lot 23, Germany Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 484, 601, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
+(54, 'P154', 'Paolo', 'J', 'Mendoza', '09170000001', 'p1.same-contact@example.com', '$2y$10$IAKWtk6qTm6/eUfj15LH6ejCfLpOFbhoGmFFpv5JGcr6wiohq6ad6', 1, 'Phase 1', 'Block 16 Lot 25', '16', '25', 'Africa Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 6 - SAME CONTACT ONLY: different email/property; expected normal under current email/property logic.', '3 years', 'Owner', 'Ana Mendoza', '09182221006', 'Block 16, Lot 25, Africa Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 549, 518, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
+(55, 'P155', 'Luis', 'K', 'Ramos', '09171111007', 'p1.batchduplicate@example.com', '$2y$10$y43Nu.oVtlsVI3iX0c5P7.gZXma5/hgUvH0T9RpdyKrk5X69k59eS', 1, 'Phase 1', 'Block 16 Lot 27', '16', '27', 'Hungary Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 7A - FIRST ROW OF SAME-FILE EMAIL DUPLICATE TEST: expected normal if property is vacant.', '2 years', 'Owner', 'Mila Ramos', '09182221007', 'Block 16, Lot 27, Hungary Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 719, 344, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL);
 
 --
 -- Triggers `homeowners`
@@ -843,6 +903,40 @@ INSERT INTO `homeowner_feed_state` (`homeowner_id`, `last_ann_seen`, `last_comme
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `homeowner_import_archive`
+--
+
+CREATE TABLE `homeowner_import_archive` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `source_queue_id` int(11) NOT NULL,
+  `existing_homeowner_id` int(11) DEFAULT NULL,
+  `first_name` varchar(100) DEFAULT NULL,
+  `middle_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) DEFAULT NULL,
+  `contact_number` varchar(50) DEFAULT NULL,
+  `email` varchar(190) DEFAULT NULL,
+  `phase` varchar(50) DEFAULT NULL,
+  `block` int(11) DEFAULT NULL,
+  `lot` int(11) DEFAULT NULL,
+  `street` varchar(190) DEFAULT NULL,
+  `residential_type` varchar(100) DEFAULT NULL,
+  `existing_email` varchar(190) DEFAULT NULL,
+  `archived_by_admin_id` int(11) DEFAULT NULL,
+  `archived_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `homeowner_import_archive`
+--
+
+INSERT INTO `homeowner_import_archive` (`id`, `source_queue_id`, `existing_homeowner_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `phase`, `block`, `lot`, `street`, `residential_type`, `existing_email`, `archived_by_admin_id`, `archived_at`) VALUES
+(1, 4, 50, 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', 'Phase 1', 2, 1, '0', 'Owner', 'phase1.test04@example.com', 2, '2026-09-28 22:13:30'),
+(2, 1, 47, 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', 'Phase 1', 1, 1, '0', 'Owner', 'phase1.test01@example.com', 2, '2026-09-30 03:53:02'),
+(3, 2, 48, 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', 'Phase 1', 1, 2, '0', 'Owner', 'phase1.test02@example.com', 2, '2026-09-30 03:54:20');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `homeowner_import_queue`
 --
 
@@ -881,6 +975,22 @@ CREATE TABLE `homeowner_import_queue` (
   `approved_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `homeowner_import_queue`
+--
+
+INSERT INTO `homeowner_import_queue` (`id`, `source_row`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `phase`, `block`, `lot`, `street`, `map_x`, `map_y`, `house_lot_number`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `exact_location`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `status`, `duplicate_homeowner_id`, `approved_homeowner_id`, `imported_by`, `created_at`, `approved_at`) VALUES
+(1, 2, 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near main gate', 'Block 1, Lot 1, Meridian Ave.', '5 years', 'Owner', 'Ana Dela Cruz', '09180000001', 'duplicate', 47, NULL, 2, '2026-09-28 22:13:10', NULL),
+(2, 3, 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', 'Phase 1', '1', '2', 'Meridian Ave.', 1976, 3147, 'Block 1 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near clubhouse', 'Block 1, Lot 2, Meridian Ave.', '8 years', 'Owner', 'Pedro Garcia', '09180000002', 'duplicate', 48, NULL, 2, '2026-09-28 22:13:10', NULL),
+(3, 4, 'Carlo', 'Mendoza', 'Santos', '09170000003', 'phase1.test03@example.com', 'Phase 1', '1', '3', 'Meridian Ave.', 2104, 3140, 'Block 1 Lot 3', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Corner property', 'Block 1, Lot 3, Meridian Ave.', '3 years', 'Owner', 'Liza Santos', '09180000003', 'duplicate', 49, NULL, 2, '2026-09-28 22:13:10', NULL),
+(4, 5, 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', 'Phase 1', '2', '1', 'Gulf Street', 1677, 3036, 'Block 2 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near basketball court', 'Block 2, Lot 1, Gulf Street', '10 years', 'Owner', 'Ramon Reyes', '09180000004', 'duplicate', 50, NULL, 2, '2026-09-28 22:13:10', NULL),
+(5, 6, 'Miguel', 'Ramos', 'Flores', '09170000005', 'phase1.test05@example.com', 'Phase 1', '2', '2', 'Equator Street', 1786, 3135, 'Block 2 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near subdivision park', 'Block 2, Lot 2, Equator Street', '6 years', 'Owner', 'Elena Flores', '09180000005', 'duplicate', 51, NULL, 2, '2026-09-28 22:13:10', NULL),
+(6, 3, 'Mark', 'A', 'Santos', '09170000001', 'p1_mark.santos@hoa.local', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 2 - EXACT EMAIL DUPLICATE: expected normal duplicate review/archive flow.', 'Block 1, Lot 1, Meridian Ave.', '7 years', 'Owner', 'Maria Santos', '09182221002', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL),
+(7, 4, 'Sofia', 'M', 'Lim', '09171111003', 'p1.transfer.mark@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 3 - POSSIBLE OWNERSHIP TRANSFER: different person/email but Block 1 Lot 1 already has an active owner.', 'Block 1, Lot 1, Meridian Ave.', '1 month', 'Owner', 'Roberto Lim', '09182221003', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL),
+(8, 5, 'Daniel', 'R', 'Cruz', '09171111004', 'p1.transfer.anne@example.com', 'Phase 1', '1', '2', 'Meridian Ave.', 1976, 3147, 'Block 1 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 4 - POSSIBLE OWNERSHIP TRANSFER: different person/email but Block 1 Lot 2 already has an active owner.', 'Block 1, Lot 2, Meridian Ave.', '1 month', 'Owner', 'Elena Cruz', '09182221004', 'duplicate', 2, NULL, 2, '2026-09-30 05:33:40', NULL),
+(9, 9, 'Loren', 'Q', 'Ramos', '09171111008', 'p1.batchduplicate@example.com', 'Phase 1', '16', '29', 'Hungary Street', 668, 363, 'Block 16 Lot 29', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 7B - SECOND ROW WITH SAME EMAIL IN SAME IMPORT: expected duplicate.', 'Block 16, Lot 29, Hungary Street', '2 years', 'Owner', 'Nora Ramos', '09182221008', 'duplicate', 55, NULL, 2, '2026-09-30 05:33:40', NULL),
+(10, 10, 'Mark', 'A', 'Santos', '09171111012', 'p1.mark-new-email@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 8 - SAME PERSON/PROPERTY BUT DIFFERENT EMAIL: expected property conflict/manual review; do not blindly transfer ownership.', 'Block 1, Lot 1, Meridian Ave.', '7 years', 'Owner', 'Maria Santos', '09182221012', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL);
+
 -- --------------------------------------------------------
 
 --
@@ -901,6 +1011,50 @@ CREATE TABLE `homeowner_officer_messages` (
   `is_read_by_admin` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `homeowner_ownership_transfers`
+--
+
+CREATE TABLE `homeowner_ownership_transfers` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `source_type` enum('import_queue','pending_homeowner') NOT NULL DEFAULT 'import_queue',
+  `source_queue_id` int(11) DEFAULT NULL,
+  `source_homeowner_id` int(11) DEFAULT NULL,
+  `previous_homeowner_id` int(11) NOT NULL,
+  `new_homeowner_id` int(11) DEFAULT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `block` varchar(50) NOT NULL,
+  `lot` varchar(50) NOT NULL,
+  `old_email` varchar(255) NOT NULL,
+  `new_email` varchar(255) NOT NULL,
+  `old_token_hash` char(64) DEFAULT NULL,
+  `new_token_hash` char(64) DEFAULT NULL,
+  `token_expires_at` datetime DEFAULT NULL,
+  `old_confirmation` enum('pending','confirmed','denied','manual_verified') NOT NULL DEFAULT 'pending',
+  `new_confirmation` enum('pending','confirmed','denied') NOT NULL DEFAULT 'pending',
+  `status` enum('awaiting_confirmation','ready_for_admin','completed','cancelled','denied') NOT NULL DEFAULT 'awaiting_confirmation',
+  `old_confirmed_at` datetime DEFAULT NULL,
+  `new_confirmed_at` datetime DEFAULT NULL,
+  `old_manual_verified_by_admin_id` int(11) DEFAULT NULL,
+  `old_manual_verified_at` datetime DEFAULT NULL,
+  `documents_verified` tinyint(1) NOT NULL DEFAULT 0,
+  `verification_method` enum('email','office','documents','mixed') DEFAULT NULL,
+  `admin_notes` text DEFAULT NULL,
+  `initiated_by_admin_id` int(11) NOT NULL,
+  `initiated_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `completed_by_admin_id` int(11) DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `homeowner_ownership_transfers`
+--
+
+INSERT INTO `homeowner_ownership_transfers` (`id`, `source_type`, `source_queue_id`, `source_homeowner_id`, `previous_homeowner_id`, `new_homeowner_id`, `phase`, `block`, `lot`, `old_email`, `new_email`, `old_token_hash`, `new_token_hash`, `token_expires_at`, `old_confirmation`, `new_confirmation`, `status`, `old_confirmed_at`, `new_confirmed_at`, `old_manual_verified_by_admin_id`, `old_manual_verified_at`, `documents_verified`, `verification_method`, `admin_notes`, `initiated_by_admin_id`, `initiated_at`, `completed_by_admin_id`, `completed_at`) VALUES
+(1, 'import_queue', 7, NULL, 1, NULL, 'Phase 1', '1', '1', 'p1.president@hoa.local', 'p1.transfer.mark@example.com', '9883f068c137189f908f710622764760212095e8dd5a69ca977db1cfd8a91d4f', '798c9031f12096a365fb3648a95f3fe82a25e166effe632792d042b9717fb835', '2026-10-02 08:03:53', 'pending', 'pending', 'awaiting_confirmation', NULL, NULL, NULL, NULL, 0, NULL, NULL, 2, '2026-09-30 06:03:53', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -1104,8 +1258,8 @@ CREATE TABLE `login_security_state` (
 --
 
 INSERT INTO `login_security_state` (`id`, `account_type`, `account_id`, `email`, `phase`, `failed_attempts`, `cooldown_stage`, `cooldown_until`, `hard_locked`, `hard_locked_at`, `last_failed_at`, `last_failed_ip`, `last_user_agent`, `unlocked_at`, `unlocked_by_admin_id`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 2, 'p1.president@hoa.local', 'Phase 1', 2, 0, NULL, 0, NULL, '2026-09-23 05:31:43', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36', NULL, NULL, '2026-09-23 05:22:29', '2026-09-23 05:31:43'),
-(7, 'homeowner', 46, 'baculpopatrick2440@gmail.com', 'Phase 1', 0, 1, '2026-09-23 05:34:31', 0, NULL, '2026-09-23 05:34:21', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36', NULL, NULL, '2026-09-23 05:34:04', '2026-09-23 05:34:21');
+(1, 'admin', 2, 'p1.president@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:22:29', '2026-09-25 17:33:01'),
+(7, 'homeowner', 46, 'baculpopatrick2440@gmail.com', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:34:04', '2026-09-29 05:15:46');
 
 -- --------------------------------------------------------
 
@@ -1404,6 +1558,13 @@ ALTER TABLE `complaints`
   ADD KEY `idx_complaints_admin` (`admin_id`);
 
 --
+-- Indexes for table `complaint_attachments`
+--
+ALTER TABLE `complaint_attachments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_complaint_attachments_complaint_id` (`complaint_id`);
+
+--
 -- Indexes for table `complaint_messages`
 --
 ALTER TABLE `complaint_messages`
@@ -1565,6 +1726,15 @@ ALTER TABLE `homeowner_feed_state`
   ADD PRIMARY KEY (`homeowner_id`);
 
 --
+-- Indexes for table `homeowner_import_archive`
+--
+ALTER TABLE `homeowner_import_archive`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_homeowner_import_archive_source` (`source_queue_id`),
+  ADD KEY `idx_homeowner_import_archive_phase` (`phase`),
+  ADD KEY `idx_homeowner_import_archive_archived_at` (`archived_at`);
+
+--
 -- Indexes for table `homeowner_import_queue`
 --
 ALTER TABLE `homeowner_import_queue`
@@ -1581,6 +1751,19 @@ ALTER TABLE `homeowner_officer_messages`
   ADD KEY `idx_hom_phase_homeowner_admin` (`phase`,`homeowner_id`,`admin_id`,`created_at`),
   ADD KEY `idx_hom_admin` (`admin_id`),
   ADD KEY `idx_hom_homeowner` (`homeowner_id`);
+
+--
+-- Indexes for table `homeowner_ownership_transfers`
+--
+ALTER TABLE `homeowner_ownership_transfers`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_ownership_transfer_queue` (`source_queue_id`),
+  ADD UNIQUE KEY `uq_ownership_transfer_pending_homeowner` (`source_homeowner_id`),
+  ADD KEY `idx_ownership_transfer_previous` (`previous_homeowner_id`),
+  ADD KEY `idx_ownership_transfer_new` (`new_homeowner_id`),
+  ADD KEY `idx_ownership_transfer_property` (`phase`,`block`,`lot`),
+  ADD KEY `idx_ownership_transfer_status` (`status`),
+  ADD KEY `idx_ownership_transfer_initiated` (`initiated_at`);
 
 --
 -- Indexes for table `homeowner_positions`
@@ -1717,7 +1900,7 @@ ALTER TABLE `access_permissions`
 -- AUTO_INCREMENT for table `activity_logs`
 --
 ALTER TABLE `activity_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `admins`
@@ -1765,13 +1948,19 @@ ALTER TABLE `communication_calls`
 -- AUTO_INCREMENT for table `complaints`
 --
 ALTER TABLE `complaints`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `complaint_attachments`
+--
+ALTER TABLE `complaint_attachments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `complaint_messages`
 --
 ALTER TABLE `complaint_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `election_nominations`
@@ -1861,7 +2050,7 @@ ALTER TABLE `hoa_officers`
 -- AUTO_INCREMENT for table `homeowners`
 --
 ALTER TABLE `homeowners`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=47;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
 
 --
 -- AUTO_INCREMENT for table `homeowner_calls`
@@ -1876,16 +2065,28 @@ ALTER TABLE `homeowner_call_signals`
   MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `homeowner_import_archive`
+--
+ALTER TABLE `homeowner_import_archive`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
 -- AUTO_INCREMENT for table `homeowner_import_queue`
 --
 ALTER TABLE `homeowner_import_queue`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `homeowner_officer_messages`
 --
 ALTER TABLE `homeowner_officer_messages`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `homeowner_ownership_transfers`
+--
+ALTER TABLE `homeowner_ownership_transfers`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `homeowner_positions`
@@ -1915,7 +2116,7 @@ ALTER TABLE `login_security_appeals`
 -- AUTO_INCREMENT for table `login_security_state`
 --
 ALTER TABLE `login_security_state`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `parking_paymongo_checkouts`

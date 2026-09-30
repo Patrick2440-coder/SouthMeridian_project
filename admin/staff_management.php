@@ -952,7 +952,7 @@ $stmt->close();
                 </p>
                 <div class="top-action-bar">
                   <button type="button" class="btn btn-success mobile-full-btn" id="openApplyModal">
-                    <i class="dw dw-add-user"></i> Apply Staff
+                    <i class="dw dw-add-user"></i> Add Staff
                   </button>
                 </div>
               </div>

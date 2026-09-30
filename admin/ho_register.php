@@ -2,6 +2,8 @@
 session_start();
 require_once 'admin_access.php';
 require_once '../config/database.php';
+require_once 'ownership_transfer_common.php';
+require_once 'homeowner_activity_logger.php';
 requireAccess('homeowner_management');
 
 if (!function_exists('esc')) {
@@ -759,6 +761,22 @@ if (
       redirect_with_message('danger', 'Email already exists.');
     }
 
+    /*
+     * A different person/email using a property that already has an
+     * approved homeowner is NOT rejected here. Save the registration as
+     * Pending, then require the ownership-transfer verification flow.
+     */
+    $possibleTransferOwner = otFindApprovedPropertyOwner(
+        $conn,
+        [
+            'phase' => $phase,
+            'block' => $block,
+            'lot' => $lot,
+            'house_lot_number' => $house_lot_number,
+            'email' => $email
+        ]
+    );
+
     // assign admin based on phase
     $assigned_admin_id = null;
     $stmtAdmin = $conn->prepare("
@@ -997,9 +1015,7 @@ if (
         $mlname   = trim((string)($_POST['member_last_name'][$i] ?? ''));
         $relation = trim((string)($_POST['member_relation'][$i] ?? ''));
 
-        $allowedRelations = ['Homeowner','Spouse','Child','Parent','Relative','Tenant','Caretaker'];
-
-        if ($mfname === '' && $mlname === '' && $relation === '') {
+        $allowedRelations = ['Homeowner','Spouse','Child','Parent','Relative','Tenant','Caretaker'];if ($mfname === '' && $mlname === '' && $relation === '') {
           continue;
         }
 
@@ -1016,8 +1032,34 @@ if (
 
     $conn->commit();
 
-    $_SESSION['flash_type'] = 'success';
-    $_SESSION['flash_message'] = 'Done Registering.';
+    if ($possibleTransferOwner && otEmailsDifferent(
+        ['email' => $email],
+        $possibleTransferOwner
+    )) {
+        $oldOwnerName = otFullName($possibleTransferOwner);
+        logHomeownerActivity(
+            $conn,
+            'Possible ownership transfer detected',
+            "Pending homeowner {$public_id} - {$first_name} {$last_name} was registered for {$phase}, Block {$block}, Lot {$lot}, which is currently assigned to {$oldOwnerName} (#" . (int)$possibleTransferOwner['id'] . "). Ownership-transfer verification is required before approval.",
+            $admin_id,
+            $phase
+        );
+
+        $_SESSION['flash_type'] = 'warning';
+        $_SESSION['flash_message'] =
+            'Registration saved as Pending. This Block and Lot already has an active homeowner, so the record was flagged as a Possible Ownership Transfer. Review both homeowners in Household Approval and complete transfer verification before activating the new owner.';
+    } else {
+        logHomeownerActivity(
+            $conn,
+            'Homeowner registered for review',
+            "Pending homeowner {$public_id} - {$first_name} {$last_name} was registered for {$phase}, Block {$block}, Lot {$lot}.",
+            $admin_id,
+            $phase
+        );
+        $_SESSION['flash_type'] = 'success';
+        $_SESSION['flash_message'] = 'Done Registering.';
+    }
+
     header("Location: ho_approval.php");
     exit;
 
@@ -1139,63 +1181,27 @@ try {
 		.page-title-wrap .subtitle{font-size:14px}
 		.step-pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#f8fafc;font-weight:800;font-size:12px}
 
-.access-toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
+		.access-toast {
+		  position: fixed;
+		  top: 20px;
+		  right: 20px;
+		  background: #ef4444;
+		  color: #fff;
+		  padding: 12px 18px;
+		  border-radius: 8px;
+		  font-weight: 600;
+		  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+		  z-index: 99999;
+		  opacity: 0;
+		  transform: translateY(-10px);
+		  transition: all .3s ease;
+		}
 
-    background: #ef4444;
-    color: #fff;
-
-    padding: 12px 18px;
-    border-radius: 8px;
-
-    font-weight: 600;
-
-    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-
-    z-index: 99999;
-
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-
-    transform: translateY(-10px);
-
-    transition:
-        opacity .3s ease,
-        transform .3s ease,
-        visibility .3s ease;
-}
-
-.access-toast.show {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-}
-</style>
-
-<!-- ADMIN DARK MODE -->
-<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
-
-<script>
-(function () {
-    try {
-        const savedTheme = localStorage.getItem('hoa-theme');
-
-        const dark =
-            savedTheme === 'dark' ||
-            (
-                !savedTheme &&
-                window.matchMedia &&
-                window.matchMedia('(prefers-color-scheme: dark)').matches
-            );
-
-        document.documentElement.classList.toggle('dark', dark);
-    } catch (e) {}
-})();
-</script>
-
+		.access-toast.show {
+		  opacity: 1;
+		  transform: translateY(0);
+		}
+	</style>
 </head>
 
 <body>
@@ -1205,20 +1211,8 @@ try {
 			<div class="menu-icon dw dw-menu"></div>
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
-<div class="header-right">
-
-    <!-- DARK MODE TOGGLE -->
-    <div class="admin-theme-switch">
-        <button type="button"
-                id="themeToggle"
-                class="admin-theme-toggle"
-                aria-label="Switch theme"
-                title="Switch theme">
-            <span id="themeIcon">☾</span>
-        </button>
-    </div>
-
-    <div class="user-info-dropdown">
+		<div class="header-right">
+			<div class="user-info-dropdown">
 				<div class="dropdown">
 					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
 						<span class="user-icon">
@@ -1662,11 +1656,10 @@ try {
 
 
         <div
-    class="register-map-preview"
-    style="
-        position:relative;
-        width:100%;
-        max-width:850px;
+            style="
+                position:relative;
+                width:100%;
+                max-width:850px;
                 margin:0 auto;
                 overflow:hidden;
                 border:2px solid var(--brand);
@@ -1764,14 +1757,11 @@ try {
 		</div>
 	</div>
 
-<script src="vendors/scripts/core.js"></script>
-<script src="vendors/scripts/script.min.js"></script>
-<script src="vendors/scripts/process.js"></script>
-<script src="vendors/scripts/layout-settings.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- ADMIN DARK MODE -->
-<script src="vendors/scripts/admin_theme.js"></script>
+	<script src="vendors/scripts/core.js"></script>
+	<script src="vendors/scripts/script.min.js"></script>
+	<script src="vendors/scripts/process.js"></script>
+	<script src="vendors/scripts/layout-settings.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 	<script>
 		function addMember() {

@@ -39,6 +39,7 @@ if (
 
 require_once 'admin_access.php';
 require_once '../config/database.php';
+require_once 'ownership_transfer_common.php';
 
 if (!canAccess('homeowner_management')) {
     respond([
@@ -202,6 +203,9 @@ if ($adminRole === 'superadmin') {
             last_name,
             email,
             phase,
+            block,
+            lot,
+            house_lot_number,
             status,
             valid_id_path
          FROM homeowners
@@ -219,6 +223,9 @@ if ($adminRole === 'superadmin') {
             last_name,
             email,
             phase,
+            block,
+            lot,
+            house_lot_number,
             status,
             valid_id_path
          FROM homeowners
@@ -299,6 +306,16 @@ $fullName = trim(
 
 if ($fullName === '') {
     $fullName = 'Homeowner';
+}
+
+/* Final safety check: never activate a second owner for an occupied property. */
+$activePropertyOwner = otFindApprovedPropertyOwner($conn, $homeowner, $homeownerId);
+if ($activePropertyOwner && otEmailsDifferent($homeowner, $activePropertyOwner)) {
+    [$conflictBlock, $conflictLot] = otBlockLot($homeowner);
+    respond([
+        'success' => false,
+        'message' => "Possible ownership transfer detected for {$homeowner['phase']}, Block {$conflictBlock}, Lot {$conflictLot}. Review both homeowners and complete Ownership Transfer Verification instead of pushing this record directly."
+    ], 409);
 }
 
 $resetToken = bin2hex(random_bytes(32));
