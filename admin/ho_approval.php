@@ -109,6 +109,33 @@ $stmt->close();
 $admin_phase = $admin['phase'] ?? '';
 $admin_role  = $admin['role'] ?? '';
 
+/*
+ * Duplicate imports are never deleted.
+ * A separate archive record is used so the original import queue record and
+ * the existing homeowner record remain intact for audit/history purposes.
+ */
+$conn->query("CREATE TABLE IF NOT EXISTS homeowner_import_archive (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  source_queue_id INT NOT NULL,
+  existing_homeowner_id INT NULL,
+  first_name VARCHAR(100) NULL,
+  middle_name VARCHAR(100) NULL,
+  last_name VARCHAR(100) NULL,
+  contact_number VARCHAR(50) NULL,
+  email VARCHAR(190) NULL,
+  phase VARCHAR(50) NULL,
+  block INT NULL,
+  lot INT NULL,
+  street VARCHAR(190) NULL,
+  residential_type VARCHAR(100) NULL,
+  existing_email VARCHAR(190) NULL,
+  archived_by_admin_id INT NULL,
+  archived_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_homeowner_import_archive_source (source_queue_id),
+  KEY idx_homeowner_import_archive_phase (phase),
+  KEY idx_homeowner_import_archive_archived_at (archived_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 $isHOSection = true;
 
 if (!isset($permissions) || !is_array($permissions)) {
@@ -368,10 +395,10 @@ $mapImageVersion =
         <?php if ($status === 'pending'): ?>
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
-              <h6 class="fw-bold mb-3">Approval Action</h6>
+              <h6 class="fw-bold mb-3">Import Review</h6>
               <div class="d-grid gap-2">
-                <button class="btn btn-success approveHomeowner" data-id="<?= (int)$homeownerId ?>">Approve Homeowner</button>
-                <button class="btn btn-danger rejectHomeowner" data-id="<?= (int)$homeownerId ?>">Reject Homeowner</button>
+                <button class="btn btn-success finalizeImportedHomeowner" data-id="<?= (int)$homeownerId ?>">Push to Homeowner Data</button>
+                <div class="small text-muted mt-2">Double-check the resident information first. This is not an approval step; it only confirms that the imported record is ready to become active homeowner data.</div>
               </div>
             </div>
           </div>
@@ -424,6 +451,7 @@ try {
             FROM homeowner_import_queue q
 
             WHERE q.status='duplicate'
+              AND NOT EXISTS (SELECT 1 FROM homeowner_import_archive a WHERE a.source_queue_id=q.id)
 
 
             UNION ALL
@@ -494,6 +522,7 @@ ORDER BY created_at DESC
 
             WHERE q.status='duplicate'
               AND q.phase=?
+              AND NOT EXISTS (SELECT 1 FROM homeowner_import_archive a WHERE a.source_queue_id=q.id)
 
 
             UNION ALL
@@ -557,15 +586,47 @@ ORDER BY created_at DESC
     );
 }
 
-// pending homeowners
+// Archived duplicate imports (records are preserved, never deleted).
 if ($admin_role === 'superadmin') {
-  $sqlHO = $conn->prepare("SELECT * FROM homeowners WHERE status='pending' ORDER BY created_at DESC");
+  $archiveStmt = $conn->prepare(
+    "SELECT * FROM homeowner_import_archive ORDER BY archived_at DESC"
+  );
 } else {
-  $sqlHO = $conn->prepare("SELECT * FROM homeowners WHERE status='pending' AND phase=? ORDER BY created_at DESC");
-  $sqlHO->bind_param("s", $admin_phase);
+  $archiveStmt = $conn->prepare(
+    "SELECT * FROM homeowner_import_archive WHERE phase=? ORDER BY archived_at DESC"
+  );
+  $archiveStmt->bind_param('s', $admin_phase);
 }
-$sqlHO->execute();
-$resultHO = $sqlHO->get_result();
+$archiveStmt->execute();
+$resultArchivedDuplicates = $archiveStmt->get_result();
+$archiveStmt->close();
+
+/*
+ * Count valid imported homeowners that are still waiting to be pushed.
+ * Duplicate imports are stored in homeowner_import_queue and are not included.
+ */
+if ($admin_role === 'superadmin') {
+  $pendingImportedCountStmt = $conn->prepare(
+    "SELECT COUNT(*) AS total
+     FROM homeowners
+     WHERE status='pending'
+       AND valid_id_path LIKE 'imports/%'"
+  );
+} else {
+  $pendingImportedCountStmt = $conn->prepare(
+    "SELECT COUNT(*) AS total
+     FROM homeowners
+     WHERE status='pending'
+       AND valid_id_path LIKE 'imports/%'
+       AND phase=?"
+  );
+  $pendingImportedCountStmt->bind_param('s', $admin_phase);
+}
+
+$pendingImportedCountStmt->execute();
+$pendingImportedCountRow = $pendingImportedCountStmt->get_result()->fetch_assoc();
+$pendingImportedCount = (int)($pendingImportedCountRow['total'] ?? 0);
+$pendingImportedCountStmt->close();
 ?>
 <!DOCTYPE html>
 <html>
@@ -604,6 +665,31 @@ $resultHO = $sqlHO->get_result();
 		.page-title-wrap{display:flex;align-items:center;justify-content:center;text-align:center;margin-bottom:14px}
 		.page-title-wrap .subtitle{font-size:14px}
 		.card-box{border-radius:14px}
+
+		/* =========================================================
+		   PAGE / FOOTER LAYOUT
+		   Keeps the footer below the content and at the bottom
+		   of the viewport when the page content is short.
+		   ========================================================= */
+		.main-container {
+			min-height: calc(100vh - 70px);
+		}
+
+		.ho-page-shell {
+			min-height: calc(100vh - 70px);
+			display: flex;
+			flex-direction: column;
+		}
+
+		.ho-page-content {
+			flex: 1 0 auto;
+		}
+
+		.ho-footer {
+			flex-shrink: 0;
+			margin-top: 24px;
+			text-align: center;
+		}
 		
 /* ACCESS TOAST */
 .access-toast {
@@ -960,20 +1046,21 @@ html.dark .dataTables_wrapper
 	<div class="mobile-menu-overlay"></div>
 
 	<div class="main-container">
-		<div class="pd-ltr-20">
+		<div class="pd-ltr-20 ho-page-shell">
 
-			<div class="page-title-wrap">
+			<div class="ho-page-content">
+				<div class="page-title-wrap">
 				<div>
-					<h2 class="h4 mb-1">Home Owner Management</h2>
-					<div class="text-muted fw-semibold subtitle">Household Approval</div>
+						<h2 class="h4 mb-1">Home Owner Management</h2>
+						<div class="text-muted fw-semibold subtitle">Import Review & Duplicate Checking</div>
+					</div>
 				</div>
-			</div>
 
-			<div class="card-box p-3">
+				<div class="card-box p-3">
 				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
 					<div>
 						<h5 class="mb-1">Homeowner Import</h5>
-						<small class="text-muted">Upload .xlsx, .xls, or .csv.</small>
+						<small class="text-muted">Upload .xlsx, .xls, or .csv. Imported residents are double-checked before they are pushed to active homeowner data.</small>
 					</div>
 					<div class="d-flex gap-2">
 						<a href="download_homeowner_template.php" class="btn btn-outline-success">Download Excel Template</a>
@@ -989,7 +1076,24 @@ html.dark .dataTables_wrapper
           </div>
         <?php elseif ($resultImportQueue && $resultImportQueue->num_rows > 0): ?>
           <div class="mb-4">
-            <h6 class="fw-bold mb-2">Excel Imported Residents</h6>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <h6 class="fw-bold mb-0">Imported Residents for Review</h6>
+
+              <?php if ($pendingImportedCount > 0): ?>
+                <button
+                  type="button"
+                  class="btn btn-success"
+                  id="pushAllImportedBtn"
+                  data-count="<?= (int)$pendingImportedCount ?>"
+                >
+                  <i class="dw dw-upload1 me-1"></i>
+                  Push All to Homeowner Data
+                  <span class="badge bg-light text-success ms-1"><?= (int)$pendingImportedCount ?></span>
+                </button>
+              <?php endif; ?>
+            </div>
+
+
             <div class="table-responsive">
               <table id="importQueueTable" class="table table-bordered table-striped align-middle" style="width:100%">
                 <thead>
@@ -1069,7 +1173,7 @@ html.dark .dataTables_wrapper
             : (
                 $importStatus === 'rejected'
                     ? 'Rejected'
-                    : 'Awaiting Final Approval'
+                    : 'Ready for Double Check'
             );
     ?>
 
@@ -1120,53 +1224,44 @@ html.dark .dataTables_wrapper
           </div>
         <?php endif; ?>
 
-        <h6 class="fw-bold mb-2">Homeowners Awaiting for Approval</h6>
+        <?php if ($resultArchivedDuplicates && $resultArchivedDuplicates->num_rows > 0): ?>
+          <hr class="my-4">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h6 class="fw-bold mb-0">Archived Duplicate Records</h6>
+            <span class="badge badge-secondary" style="background:#64748b;">Records preserved — no deletion</span>
+          </div>
+          <div class="table-responsive">
+            <table id="archiveTable" class="table table-bordered table-striped align-middle" style="width:100%">
+              <thead>
+                <tr>
+                  <th>Archived</th>
+                  <th>Imported Resident</th>
+                  <th>Email</th>
+                  <th>Phase / Block / Lot</th>
+                  <th>Existing Homeowner ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php while ($arch = $resultArchivedDuplicates->fetch_assoc()): ?>
+                  <tr>
+                    <td><?= esc($arch['archived_at'] ?? '') ?></td>
+                    <td><?= esc(trim(($arch['first_name'] ?? '').' '.($arch['middle_name'] ?? '').' '.($arch['last_name'] ?? ''))) ?></td>
+                    <td><?= esc($arch['email'] ?? '') ?></td>
+                    <td><?= esc(($arch['phase'] ?? '').' / Block '.(int)($arch['block'] ?? 0).' / Lot '.(int)($arch['lot'] ?? 0)) ?></td>
+                    <td><?= esc($arch['existing_homeowner_id'] ?? 'Not found') ?></td>
+                  </tr>
+                <?php endwhile; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
 
-				<div class="table-responsive">
-					<table id="approvalTable" class="display table table-striped table-bordered nowrap" style="width:100%">
-						<thead>
-							<tr>
-								<th>ID</th>
-								<th>Name</th>
-								<th>Address</th>
-								<th>Status</th>
-								<th style="width:180px;">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							<?php while($row = $resultHO->fetch_assoc()): ?>
-								<?php
-									$status = (string)($row['status'] ?? 'pending');
-									$badgeClass = ($status==='pending') ? 'badge-warning' : (($status==='approved') ? 'badge-success' : 'badge-danger');
-									[$rowBlock, $rowLot] = subdivision_block_lot($row);
-
-									$displayId = trim((string)($row['public_id'] ?? ''));
-									if ($displayId === '') {
-										$rowPhase = (string)($row['phase'] ?? $admin_phase);
-										$prefix = phase_prefix($rowPhase);
-										$displayId = $prefix . (int)$row['id'];
-									}
-								?>
-								<tr>
-									<td><?= esc($displayId) ?></td>
-									<td><?= esc(trim(($row['first_name'] ?? '').' '.($row['middle_name'] ?? '').' '.($row['last_name'] ?? ''))) ?></td>
-									<td><?= esc(trim(($row['phase'] ?? '').', Block '.$rowBlock.', Lot '.$rowLot)) ?></td>
-									<td><span class="badge <?= $badgeClass ?>"><?= esc(ucfirst($status)) ?></span></td>
-									<td>
-										<button type="button" class="btn btn-sm btn-info viewHomeownerBtn" data-id="<?= (int)$row['id'] ?>" title="View">
-											<i class="dw dw-eye"></i>
-										</button>
-									</td>
-								</tr>
-							<?php endwhile; ?>
-						</tbody>
-					</table>
 				</div>
 			</div>
 
-			<div class="footer-wrap pd-20 mb-20 card-box">
+			<footer class="footer-wrap pd-20 mb-20 card-box ho-footer">
 				© Copyright South Meridian Homes All Rights Reserved
-			</div>
+			</footer>
 		</div>
 	</div>
 
@@ -1174,12 +1269,12 @@ html.dark .dataTables_wrapper
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
 				<div class="modal-header">
-					<h5 class="modal-title fw-bold" id="actionConfirmTitle">Confirm Action</h5>
+					<h5 class="modal-title fw-bold" id="actionConfirmTitle">Push to Homeowner Data</h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 				</div>
 
 				<div class="modal-body">
-					<p class="mb-3" id="actionConfirmText">Are you sure?</p>
+					<p class="mb-3" id="actionConfirmText">Double-check this imported resident before pushing it to active homeowner data.</p>
 
 					<div id="rejectReasonWrap" style="display:none;">
 						<label class="form-label fw-semibold">Rejection reason</label>
@@ -1197,6 +1292,35 @@ html.dark .dataTables_wrapper
 			</div>
 		</div>
 	</div>
+
+
+  <div class="modal fade" id="pushAllImportedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Push All Imported Homeowners</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="mb-2">
+            Push all valid imported homeowners currently waiting for review to active homeowner data and send each homeowner an account setup email?
+          </p>
+          <div class="alert alert-warning mb-0">
+            <strong>Note:</strong>
+            Duplicate imports will not be pushed. Each valid homeowner must receive the account setup email before that record is finalized.
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-success" id="confirmPushAllImportedBtn">
+            Push All
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 	<div class="modal fade" id="viewHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -1264,7 +1388,7 @@ html.dark .dataTables_wrapper
                     id="notifyDeleteDuplicateBtn"
                     data-id="">
 
-                    Notify & Delete Duplicate
+                    Notify Both & Archive Duplicate
 
                 </button>
 
@@ -1278,7 +1402,7 @@ html.dark .dataTables_wrapper
 </div>
 
 <!-- =====================================================
-     DUPLICATE NOTIFY / DELETE CONFIRMATION MODAL
+     DUPLICATE NOTIFY / ARCHIVE CONFIRMATION MODAL
      ===================================================== -->
 <div
     class="modal fade"
@@ -1296,7 +1420,7 @@ html.dark .dataTables_wrapper
             <div class="modal-header border-0 pb-0">
 
                 <h5 class="modal-title fw-bold">
-                    Confirm Duplicate Removal
+                    Confirm Duplicate Archive
                 </h5>
 
                 <button
@@ -1326,13 +1450,12 @@ html.dark .dataTables_wrapper
 
 
                 <h5 class="fw-bold mb-2">
-                    Notify and remove duplicate?
+                    Notify both parties and archive duplicate?
                 </h5>
 
 
                 <p class="text-muted mb-0">
-                    An email notification will be sent to the imported
-                    resident before the duplicate import record is removed.
+                    Email notifications will be sent to both the imported resident and the existing registered homeowner before the duplicate import record is archived.
                 </p>
 
 
@@ -1340,9 +1463,7 @@ html.dark .dataTables_wrapper
 
                     <strong>Important:</strong>
 
-                    The existing registered homeowner will not be deleted.
-
-                    Only the duplicate imported record will be removed.
+                    No homeowner or imported record will be deleted. The duplicate import will only be moved to the archive for record-keeping and audit history.
 
                 </div>
 
@@ -1367,7 +1488,7 @@ html.dark .dataTables_wrapper
                     class="btn btn-danger px-4"
                     id="duplicateDeleteConfirmBtn"
                 >
-                    Notify &amp; Delete
+                    Notify Both &amp; Archive
                 </button>
 
             </div>
@@ -2176,7 +2297,7 @@ if (!location) {
             */
 
             let summary =
-                `Import finished: ${imported} added to final approval`;
+                `Import finished: ${imported} added for double-checking`;
 
             if (duplicates > 0) {
 
@@ -2209,7 +2330,7 @@ if (!location) {
 
                 setImportStatus(
                     summary +
-                    ' Duplicate residents are listed below for review.',
+                    ' Duplicate residents are listed below for review and archiving.',
                     'warning'
                 );
 
@@ -2254,8 +2375,8 @@ if (!location) {
              * - duplicates appear in the
              *   duplicate table
              *
-             * - valid imports appear in
-             *   final approval
+             * - valid imports remain in the review list
+             *   until they are pushed to active homeowner data
              */
 
             setTimeout(
@@ -2296,6 +2417,103 @@ if (!location) {
 
 
 	$(function () {
+
+        /*
+         * Push every valid pending Excel import in one action.
+         * Duplicate imports are intentionally excluded by the backend.
+         */
+        const pushAllBtn = document.getElementById('pushAllImportedBtn');
+        const pushAllModalEl = document.getElementById('pushAllImportedModal');
+        const confirmPushAllBtn = document.getElementById('confirmPushAllImportedBtn');
+
+        const pushAllModal = pushAllModalEl
+            ? new bootstrap.Modal(pushAllModalEl, {
+                backdrop: 'static',
+                keyboard: false
+            })
+            : null;
+
+        pushAllBtn?.addEventListener('click', function () {
+            pushAllModal?.show();
+        });
+
+        confirmPushAllBtn?.addEventListener('click', async function () {
+            const button = this;
+            const originalText = button.textContent;
+
+            button.disabled = true;
+            button.textContent = 'Pushing all...';
+
+            try {
+                const body = new URLSearchParams();
+                body.set('csrf', homeownerImportCsrf);
+
+                const response = await fetch(
+                    'push_all_imported_homeowners.php',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type':
+                                'application/x-www-form-urlencoded;charset=UTF-8',
+                            'Accept': 'application/json'
+                        },
+                        body: body.toString()
+                    }
+                );
+
+                const responseText = await response.text();
+                let data = null;
+
+                try {
+                    data = JSON.parse(responseText);
+                } catch (error) {
+                    console.error('Raw bulk push response:', responseText);
+                    throw new Error('Server returned an invalid response.');
+                }
+
+                if (!response.ok || !data || !data.success) {
+                    throw new Error(
+                        data && data.message
+                            ? data.message
+                            : 'Unable to push all imported homeowners.'
+                    );
+                }
+
+                pushAllModal?.hide();
+
+                showToast(
+                    data.message ||
+                    `${Number(data.pushed || 0)} imported homeowner(s) pushed successfully.`,
+                    Number(data.failed || 0) > 0
+                        ? 'warning'
+                        : 'success'
+                );
+
+                setTimeout(function () {
+                    location.reload();
+                }, 900);
+
+            } catch (error) {
+                console.error('Bulk push error:', error);
+
+                showToast(
+                    error.message ||
+                    'Unable to push all imported homeowners.',
+                    'error'
+                );
+
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        });
+
+        pushAllModalEl?.addEventListener('hidden.bs.modal', function () {
+            if (confirmPushAllBtn) {
+                confirmPushAllBtn.disabled = false;
+                confirmPushAllBtn.textContent = 'Push All';
+            }
+        });
+
         if (
             $.fn.DataTable &&
             $('#importQueueTable').length &&
@@ -2311,10 +2529,11 @@ if (!location) {
             });
         }
 
-		if ($.fn.DataTable && $('#approvalTable').length && !$.fn.DataTable.isDataTable('#approvalTable')) {
-			$('#approvalTable').DataTable({
+		if ($.fn.DataTable && $('#archiveTable').length && !$.fn.DataTable.isDataTable('#archiveTable')) {
+			$('#archiveTable').DataTable({
 				responsive: true,
-				columnDefs: [{ orderable: false, targets: 4 }]
+				pageLength: 10,
+				order: [[0, 'desc']]
 			});
 		}
 
@@ -2334,34 +2553,22 @@ if (!location) {
 			focus: true
 		});
 
-		$(document).on('click', '.approveHomeowner, .rejectHomeowner', function (e) {
+		$(document).on('click', '.finalizeImportedHomeowner', function (e) {
 			e.preventDefault();
 
 			const id = $(this).data('id');
-			const status = $(this).hasClass('approveHomeowner') ? 'approved' : 'rejected';
 			if (!id) return;
 
-			pendingAction = { id, status };
+			pendingAction = { id, status: 'approved' };
 
-			if (status === 'approved') {
-				confirmTitleEl.textContent = 'Approve Homeowner';
-				confirmTextEl.textContent  = 'This will approve the homeowner. Continue?';
-				confirmBtnEl.classList.remove('btn-danger');
-				confirmBtnEl.classList.add('btn-success');
-				confirmBtnEl.textContent = 'Approve';
-				reasonWrapEl.style.display = 'none';
-				reasonErrorEl.style.display = 'none';
-				reasonInputEl.value = '';
-			} else {
-				confirmTitleEl.textContent = 'Reject Homeowner';
-				confirmTextEl.textContent  = 'Please provide a rejection reason. This will be saved and sent.';
-				confirmBtnEl.classList.remove('btn-success');
-				confirmBtnEl.classList.add('btn-danger');
-				confirmBtnEl.textContent = 'Reject';
-				reasonWrapEl.style.display = 'block';
-				reasonErrorEl.style.display = 'none';
-				reasonInputEl.value = '';
-			}
+			confirmTitleEl.textContent = 'Push to Homeowner Data';
+			confirmTextEl.textContent  = 'You have double-checked this imported resident. Push this record to active homeowner data and send the homeowner an account setup email?';
+			confirmBtnEl.classList.remove('btn-danger');
+			confirmBtnEl.classList.add('btn-success');
+			confirmBtnEl.textContent = 'Push to Homeowner Data';
+			reasonWrapEl.style.display = 'none';
+			reasonErrorEl.style.display = 'none';
+			reasonInputEl.value = '';
 
 			confirmModal.show();
 
@@ -2370,11 +2577,7 @@ if (!location) {
 				if (backdrops.length > 1) {
 					backdrops[backdrops.length - 1].classList.add('confirm-top');
 				}
-				if (status === 'rejected') {
-					reasonInputEl.focus();
-				} else {
-					confirmBtnEl.focus();
-				}
+				confirmBtnEl.focus();
 			}, 120);
 		});
 
@@ -2382,229 +2585,98 @@ if (!location) {
 
     const { id, status } = pendingAction;
 
-    if (!id || !status) {
+    if (!id || status !== 'approved') {
         return;
-    }
-
-    let reason = '';
-
-    if (status === 'rejected') {
-
-        reason =
-            (reasonInputEl.value || '')
-                .trim();
-
-        if (!reason) {
-
-            reasonErrorEl.style.display =
-                'block';
-
-            reasonInputEl.focus();
-
-            return;
-        }
     }
 
     confirmBtnEl.disabled = true;
 
-    const oldText =
-        confirmBtnEl.textContent;
+    const oldText = confirmBtnEl.textContent;
+    confirmBtnEl.textContent = 'Pushing...';
 
-    confirmBtnEl.textContent =
-        status === 'approved'
-            ? 'Approving...'
-            : 'Rejecting...';
-
-
+    /*
+     * IMPORTANT:
+     * The database still uses status="approved" for compatibility with the
+     * rest of the existing South Meridian system. In the UI this is no longer
+     * an approval workflow. It simply means the imported record has passed
+     * double-checking and is now pushed to active homeowner data.
+     */
     $.ajax({
 
-        url:
-            'update_homeowner_status_email.php',
-
-        type:
-            'POST',
-
-        dataType:
-            'json',
+        url: 'finalize_migrated_homeowner.php',
+        type: 'POST',
+        dataType: 'json',
 
         data: {
             id: id,
-            status: status,
-            reason: reason,
             csrf: homeownerImportCsrf
         },
-
 
         success: function (res) {
 
             if (!res || !res.success) {
-
                 showToast(
                     res && res.message
                         ? res.message
-                        : 'Action failed.',
+                        : 'Unable to push the imported resident.',
                     'error'
                 );
 
-                confirmBtnEl.disabled =
-                    false;
-
-                confirmBtnEl.textContent =
-                    oldText;
-
+                confirmBtnEl.disabled = false;
+                confirmBtnEl.textContent = oldText;
                 return;
             }
 
-
             showToast(
-                res.message ||
-                'Updated successfully.',
+                res.message || 'Imported resident was pushed to homeowner data and the account setup email was sent successfully.',
                 'success'
             );
 
-
             confirmModal.hide();
 
-
-            const viewModalEl =
-                document.getElementById(
-                    'viewHomeownerModal'
-                );
-
-
-            const viewModalInstance =
-                bootstrap.Modal.getInstance(
-                    viewModalEl
-                );
-
+            const viewModalEl = document.getElementById('viewHomeownerModal');
+            const viewModalInstance = bootstrap.Modal.getInstance(viewModalEl);
 
             if (viewModalInstance) {
                 viewModalInstance.hide();
             }
 
-
-            setTimeout(
-                function () {
-                    location.reload();
-                },
-                800
-            );
+            setTimeout(function () {
+                location.reload();
+            }, 800);
         },
-
 
         error: function (xhr) {
 
-            console.error(
-                'Approval request failed.'
-            );
+            console.error('Push to homeowner data request failed.');
+            console.error('HTTP Status:', xhr.status);
+            console.error('Server Response:', xhr.responseText);
 
-            console.error(
-                'HTTP Status:',
-                xhr.status
-            );
+            let message = 'Unable to push the imported resident. Please try again.';
 
-            console.error(
-                'Server Response:',
-                xhr.responseText
-            );
-
-
-            let message =
-                'Request failed. Please try again.';
-
-
-            /*
-             * Try to read JSON returned by PHP.
-             */
             if (xhr.responseText) {
-
                 try {
-
-                    const data =
-                        JSON.parse(
-                            xhr.responseText
-                        );
-
-
-                    if (
-                        data &&
-                        data.message
-                    ) {
-
-                        message =
-                            data.message;
+                    const data = JSON.parse(xhr.responseText);
+                    if (data && data.message) {
+                        message = data.message;
                     }
-
                 } catch (error) {
-
-                    /*
-                     * PHP returned HTML/text
-                     * instead of JSON.
-                     */
-
                     if (xhr.status === 401) {
-
-                        message =
-                            'Your admin session expired. Please login again.';
-
+                        message = 'Your admin session expired. Please login again.';
                     } else if (xhr.status === 403) {
-
-                        message =
-                            'Access denied or security token expired. Refresh the page and try again.';
-
+                        message = 'Access denied or security token expired. Refresh the page and try again.';
                     } else if (xhr.status === 404) {
-
-                        message =
-                            'Homeowner or approval endpoint was not found.';
-
+                        message = 'The homeowner update endpoint was not found.';
                     } else if (xhr.status === 500) {
-
-                        message =
-                            'Server error occurred while approving the homeowner. Check the PHP error log or email configuration.';
-
-                    } else {
-
-                        const cleanResponse =
-                            String(
-                                xhr.responseText
-                            )
-                            .replace(
-                                /<[^>]*>/g,
-                                ' '
-                            )
-                            .replace(
-                                /\s+/g,
-                                ' '
-                            )
-                            .trim();
-
-
-                        if (cleanResponse) {
-
-                            message =
-                                cleanResponse.substring(
-                                    0,
-                                    300
-                                );
-                        }
+                        message = 'Server error occurred while pushing the imported resident. Check the PHP error log or email configuration.';
                     }
                 }
             }
 
-
-            showToast(
-                message,
-                'error'
-            );
-
-
-            confirmBtnEl.disabled =
-                false;
-
-            confirmBtnEl.textContent =
-                oldText;
+            showToast(message, 'error');
+            confirmBtnEl.disabled = false;
+            confirmBtnEl.textContent = oldText;
         }
-
     });
 
 });
@@ -2612,7 +2684,7 @@ if (!location) {
 		confirmModalEl.addEventListener('hidden.bs.modal', function () {
 			pendingAction = { id: null, status: null };
 			confirmBtnEl.disabled = false;
-			confirmBtnEl.textContent = 'Confirm';
+			confirmBtnEl.textContent = 'Push to Homeowner Data';
 			reasonErrorEl.style.display = 'none';
 			reasonInputEl.value = '';
 
@@ -2859,7 +2931,7 @@ $(document).on(
 
                 <div class="alert alert-warning">
                     The imported email address is already registered in the system.
-                    Review both records before removing the duplicate import.
+                    Review both records before archiving the duplicate import.
                 </div>
 
                 <div class="row g-3">
@@ -3015,7 +3087,7 @@ $(document).on(
     }
 );
 /* =========================================================
-   DUPLICATE DELETE CONFIRMATION MODAL
+   DUPLICATE ARCHIVE CONFIRMATION MODAL
    ========================================================= */
 
 const duplicateDeleteConfirmModalEl =
@@ -3056,7 +3128,7 @@ let pendingDuplicateDeleteId = 0;
 
 /*
 |--------------------------------------------------------------------------
-| Click Notify & Delete from duplicate profile
+| Click Notify Both & Archive from duplicate profile
 |--------------------------------------------------------------------------
 */
 
@@ -3113,7 +3185,7 @@ notifyDeleteDuplicateBtn?.addEventListener(
 
 /*
 |--------------------------------------------------------------------------
-| Cancel confirmation
+| Cancel archive confirmation
 |--------------------------------------------------------------------------
 */
 
@@ -3164,7 +3236,7 @@ duplicateDeleteCloseBtn
 
 /*
 |--------------------------------------------------------------------------
-| Confirm Notify & Delete
+| Confirm Notify Both & Archive
 |--------------------------------------------------------------------------
 */
 
@@ -3223,7 +3295,7 @@ duplicateDeleteConfirmBtn
 
                 const response =
                     await fetch(
-                        'notify_delete_duplicate_homeowner.php',
+                        'notify_archive_duplicate_homeowner.php',
                         {
                             method:
                                 'POST',
@@ -3280,7 +3352,7 @@ duplicateDeleteConfirmBtn
 
                     throw new Error(
                         data.message ||
-                        'Failed to process duplicate.'
+                        'Failed to archive duplicate.'
                     );
                 }
 
@@ -3311,7 +3383,7 @@ duplicateDeleteConfirmBtn
 
                     showToast(
                         data.message ||
-                        'Duplicate processed, but the email could not be sent.',
+                        'Duplicate archived, but one or both email notifications could not be sent.',
                         'warning'
                     );
 
@@ -3319,15 +3391,15 @@ duplicateDeleteConfirmBtn
 
                     showToast(
                         data.message ||
-                        'Duplicate resident was notified and removed successfully.',
+                        'Both parties were notified and the duplicate record was archived successfully.',
                         'success'
                     );
                 }
 
 
                 /*
-                 * Reload page so removed duplicate
-                 * disappears from the table.
+                 * Reload page so the archived duplicate
+                 * leaves the active duplicate review list.
                  */
                 setTimeout(
                     function () {
@@ -3342,14 +3414,14 @@ duplicateDeleteConfirmBtn
             } catch (error) {
 
                 console.error(
-                    'Duplicate delete error:',
+                    'Duplicate archive error:',
                     error
                 );
 
 
                 showToast(
                     error.message ||
-                    'Unable to process duplicate.',
+                    'Unable to archive duplicate.',
                     'error'
                 );
 
@@ -3383,7 +3455,7 @@ duplicateDeleteConfirmModalEl
                     false;
 
                 duplicateDeleteConfirmBtn.textContent =
-                    'Notify & Delete';
+                    'Notify Both & Archive';
             }
         }
     );

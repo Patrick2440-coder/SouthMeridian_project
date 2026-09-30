@@ -113,6 +113,22 @@ function complaint_priority_icon(string $priority): string
 }
 
 
+function complaint_priority_for_category(string $category): string
+{
+    return match ($category) {
+        'security',
+        'noise',
+        'neighbor' => 'urgent',
+
+        'maintenance',
+        'parking',
+        'billing' => 'high',
+
+        default => 'normal',
+    };
+}
+
+
 function display_datetime(?string $value): string
 {
     if (
@@ -449,11 +465,8 @@ $formCategory =
     );
 
 $formPriority =
-    trim(
-        (string)(
-            $_POST['priority']
-            ?? 'normal'
-        )
+    complaint_priority_for_category(
+        $formCategory
     );
 
 $formDescription =
@@ -625,7 +638,9 @@ if (
         $formCategory;
 
     $priority =
-        $formPriority;
+        complaint_priority_for_category(
+            $category
+        );
 
     $description =
         $formDescription;
@@ -641,13 +656,102 @@ if (
         'billing',
         'other'
     ];
+    /*
+    |--------------------------------------------------------------------------
+    | Required complaint proof (image or video)
+    |--------------------------------------------------------------------------
+    */
 
-    $allowedPriorities = [
-        'low',
-        'normal',
-        'high',
-        'urgent'
-    ];
+    $proofError = '';
+    $proofMeta = null;
+
+    $proofFile =
+        $_FILES['proof_file']
+        ?? null;
+
+    if (
+        !is_array($proofFile) ||
+        (int)($proofFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE
+    ) {
+
+        $proofError =
+            'Proof / Evidence is required. Please attach a picture or video.';
+
+    } else {
+
+        $uploadError =
+            (int)($proofFile['error'] ?? UPLOAD_ERR_NO_FILE);
+
+        $proofSize =
+            (int)($proofFile['size'] ?? 0);
+
+        $proofTmp =
+            (string)($proofFile['tmp_name'] ?? '');
+
+        $proofOriginalName =
+            trim((string)($proofFile['name'] ?? 'proof'));
+
+
+        if ($uploadError !== UPLOAD_ERR_OK) {
+
+            $proofError =
+                'The proof file could not be uploaded. Please choose the file again.';
+
+        } elseif (
+            $proofSize <= 0 ||
+            $proofSize > (50 * 1024 * 1024)
+        ) {
+
+            $proofError =
+                'Proof must be an image or video no larger than 50 MB.';
+
+        } elseif (
+            $proofTmp === '' ||
+            !is_uploaded_file($proofTmp)
+        ) {
+
+            $proofError =
+                'The selected proof file is invalid. Please choose it again.';
+
+        } else {
+
+            $finfo =
+                new finfo(FILEINFO_MIME_TYPE);
+
+            $mime =
+                (string)$finfo->file($proofTmp);
+
+            $allowedProofTypes = [
+                'image/jpeg'      => ['kind' => 'image', 'ext' => 'jpg'],
+                'image/png'       => ['kind' => 'image', 'ext' => 'png'],
+                'image/webp'      => ['kind' => 'image', 'ext' => 'webp'],
+                'image/gif'       => ['kind' => 'image', 'ext' => 'gif'],
+                'video/mp4'       => ['kind' => 'video', 'ext' => 'mp4'],
+                'video/webm'      => ['kind' => 'video', 'ext' => 'webm'],
+                'video/quicktime' => ['kind' => 'video', 'ext' => 'mov']
+            ];
+
+
+            if (!isset($allowedProofTypes[$mime])) {
+
+                $proofError =
+                    'Unsupported proof format. Use JPG, PNG, WEBP, GIF, MP4, WEBM, or MOV.';
+
+            } else {
+
+                $proofMeta = [
+                    'tmp_name'      => $proofTmp,
+                    'original_name' => $proofOriginalName !== ''
+                        ? $proofOriginalName
+                        : 'proof.' . $allowedProofTypes[$mime]['ext'],
+                    'mime_type'     => $mime,
+                    'file_kind'     => $allowedProofTypes[$mime]['kind'],
+                    'extension'     => $allowedProofTypes[$mime]['ext'],
+                    'file_size'     => $proofSize
+                ];
+            }
+        }
+    }
 
 
     if (
@@ -670,107 +774,218 @@ if (
             'Invalid category selected.';
 
     } elseif (
-        !in_array(
-            $priority,
-            $allowedPriorities,
-            true
-        )
+        $description === ''
     ) {
 
         $err =
-            'Invalid priority selected.';
+            'Complaint details are required.';
 
-    } elseif (
-        $description === '' ||
-        mb_strlen($description) < 10
-    ) {
+    } elseif ($proofError !== '') {
 
         $err =
-            'Complaint description must be at least 10 characters.';
+            $proofError;
 
     } else {
 
-        $stmt = $conn->prepare("
-            INSERT INTO complaints
-            (
-                homeowner_id,
-                phase,
-                admin_id,
-                subject,
-                category,
-                description,
-                status,
-                priority
-            )
-            VALUES
-            (
-                ?, ?, ?, ?, ?, ?,
-                'open',
-                ?
-            )
-        ");
+        $savedProofAbsolutePath = null;
 
-        $stmt->bind_param(
-            "isissss",
-            $hid,
-            $phase,
-            $phaseAdminId,
-            $subject,
-            $category,
-            $description,
-            $priority
-        );
+        try {
 
-        $stmt->execute();
-
-        $complaintId =
-            (int)$stmt->insert_id;
-
-        $stmt->close();
+            $conn->begin_transaction();
 
 
-        $stmt = $conn->prepare("
-            INSERT INTO complaint_messages
-            (
-                complaint_id,
-                sender_type,
-                sender_homeowner_id,
-                message
-            )
-            VALUES
-            (
-                ?,
-                'homeowner',
-                ?,
-                ?
-            )
-        ");
+            $stmt = $conn->prepare("
+                INSERT INTO complaints
+                (
+                    homeowner_id,
+                    phase,
+                    admin_id,
+                    subject,
+                    category,
+                    description,
+                    status,
+                    priority
+                )
+                VALUES
+                (
+                    ?, ?, ?, ?, ?, ?,
+                    'open',
+                    ?
+                )
+            ");
 
-        $stmt->bind_param(
-            "iis",
-            $complaintId,
-            $hid,
-            $description
-        );
+            $stmt->bind_param(
+                "isissss",
+                $hid,
+                $phase,
+                $phaseAdminId,
+                $subject,
+                $category,
+                $description,
+                $priority
+            );
 
-        $stmt->execute();
-        $stmt->close();
+            $stmt->execute();
+
+            $complaintId =
+                (int)$stmt->insert_id;
+
+            $stmt->close();
 
 
-        $okMsg =
-            'Complaint filed successfully.';
+            if ($proofMeta !== null) {
 
-        $formSubject =
-            '';
+                $uploadDirectory =
+                    dirname(__DIR__) .
+                    DIRECTORY_SEPARATOR .
+                    'uploads' .
+                    DIRECTORY_SEPARATOR .
+                    'complaints';
 
-        $formCategory =
-            'general';
 
-        $formPriority =
-            'normal';
+                if (
+                    !is_dir($uploadDirectory) &&
+                    !mkdir($uploadDirectory, 0775, true) &&
+                    !is_dir($uploadDirectory)
+                ) {
+                    throw new RuntimeException(
+                        'Unable to create the complaint upload directory.'
+                    );
+                }
 
-        $formDescription =
-            '';
+
+                $storedFileName =
+                    'complaint_' .
+                    $complaintId .
+                    '_' .
+                    bin2hex(random_bytes(12)) .
+                    '.' .
+                    $proofMeta['extension'];
+
+                $savedProofAbsolutePath =
+                    $uploadDirectory .
+                    DIRECTORY_SEPARATOR .
+                    $storedFileName;
+
+
+                if (
+                    !move_uploaded_file(
+                        $proofMeta['tmp_name'],
+                        $savedProofAbsolutePath
+                    )
+                ) {
+                    throw new RuntimeException(
+                        'Unable to save the uploaded complaint proof.'
+                    );
+                }
+
+
+                $savedProofRelativePath =
+                    'uploads/complaints/' .
+                    $storedFileName;
+
+                $stmt = $conn->prepare("
+                    INSERT INTO complaint_attachments
+                    (
+                        complaint_id,
+                        file_path,
+                        original_name,
+                        mime_type,
+                        file_kind,
+                        file_size
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+
+                $stmt->bind_param(
+                    "issssi",
+                    $complaintId,
+                    $savedProofRelativePath,
+                    $proofMeta['original_name'],
+                    $proofMeta['mime_type'],
+                    $proofMeta['file_kind'],
+                    $proofMeta['file_size']
+                );
+
+                $stmt->execute();
+                $stmt->close();
+            }
+
+
+            $stmt = $conn->prepare("
+                INSERT INTO complaint_messages
+                (
+                    complaint_id,
+                    sender_type,
+                    sender_homeowner_id,
+                    message
+                )
+                VALUES
+                (
+                    ?,
+                    'homeowner',
+                    ?,
+                    ?
+                )
+            ");
+
+            $stmt->bind_param(
+                "iis",
+                $complaintId,
+                $hid,
+                $description
+            );
+
+            $stmt->execute();
+            $stmt->close();
+
+
+            $conn->commit();
+
+            $savedProofAbsolutePath = null;
+
+            $okMsg =
+                'Complaint filed successfully.';
+
+            $formSubject =
+                '';
+
+            $formCategory =
+                'general';
+
+            $formPriority =
+                complaint_priority_for_category(
+                    $formCategory
+                );
+
+            $formDescription =
+                '';
+
+        } catch (Throwable $e) {
+
+            try {
+                $conn->rollback();
+            } catch (Throwable $rollbackError) {
+                // Ignore rollback failure and keep the original error.
+            }
+
+
+            if (
+                $savedProofAbsolutePath !== null &&
+                is_file($savedProofAbsolutePath)
+            ) {
+                @unlink($savedProofAbsolutePath);
+            }
+
+
+            error_log(
+                'Complaint submission error: ' .
+                $e->getMessage()
+            );
+
+            $err =
+                'Unable to submit the complaint right now. Please try again.';
+        }
     }
 }
 
@@ -843,6 +1058,11 @@ $stmt = $conn->prepare("
     SELECT
         c.*,
         a.full_name AS admin_name,
+        ca.file_path AS proof_path,
+        ca.original_name AS proof_original_name,
+        ca.mime_type AS proof_mime_type,
+        ca.file_kind AS proof_kind,
+        ca.file_size AS proof_file_size,
         (
             SELECT MAX(cm.created_at)
             FROM complaint_messages cm
@@ -851,6 +1071,12 @@ $stmt = $conn->prepare("
     FROM complaints c
     LEFT JOIN admins a
         ON a.id = c.admin_id
+    LEFT JOIN complaint_attachments ca
+        ON ca.id = (
+            SELECT MAX(ca2.id)
+            FROM complaint_attachments ca2
+            WHERE ca2.complaint_id = c.id
+        )
     WHERE c.homeowner_id = ?
     ORDER BY
         c.updated_at DESC,
@@ -2012,7 +2238,9 @@ $chatOpen =
 
 
                 <form
+                    id="complaintForm"
                     method="POST"
+                    enctype="multipart/form-data"
                     autocomplete="off"
                     class="p-5"
                 >
@@ -2181,11 +2409,10 @@ $chatOpen =
 
                         </div>
 
-
                         <div>
 
                             <label
-                                for="priority"
+                                for="priorityDisplay"
                                 class="
                                     mb-2
                                     block
@@ -2200,60 +2427,37 @@ $chatOpen =
                                 Priority
                             </label>
 
-                            <select
-                                id="priority"
-                                name="priority"
-                                required
+                            <div
+                                id="priorityDisplay"
+                                data-priority="<?= esc($formPriority) ?>"
                                 class="
+                                    flex
                                     min-h-12
                                     w-full
+                                    items-center
+                                    gap-2
 
                                     rounded-xl
 
-                                    border border-slate-300
-                                    bg-white
+                                    border
 
                                     px-3
 
-                                    text-base
-                                    text-slate-800
-
-                                    outline-none
-                                    transition
-
-                                    focus:border-emerald-500
-                                    focus:ring-4
-                                    focus:ring-emerald-100
-
-                                    dark:border-slate-700
-                                    dark:bg-slate-800
-                                    dark:text-slate-100
-                                    dark:focus:ring-emerald-950
+                                    text-sm
+                                    font-bold
+                                    transition-colors
                                 "
+                                aria-live="polite"
                             >
-                                <?php
-                                $priorityOptions = [
-                                    'low'    => 'Low',
-                                    'normal' => 'Normal',
-                                    'high'   => 'High',
-                                    'urgent' => 'Urgent'
-                                ];
-                                ?>
+                                <i id="priorityDisplayIcon" class="bi bi-circle-fill"></i>
+                                <span id="priorityDisplayText">
+                                    <?= esc(ucfirst($formPriority)) ?>
+                                </span>
+                                <span class="ml-auto text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                 
+                                </span>
+                            </div>
 
-                                <?php foreach ($priorityOptions as $value => $label): ?>
-
-                                    <option
-                                        value="<?= esc($value) ?>"
-                                        <?= $formPriority === $value
-                                            ? 'selected'
-                                            : ''
-                                        ?>
-                                    >
-                                        <?= esc($label) ?>
-                                    </option>
-
-                                <?php endforeach; ?>
-                            </select>
 
                         </div>
 
@@ -2307,7 +2511,6 @@ $chatOpen =
                             name="description"
                             rows="7"
                             maxlength="3000"
-                            minlength="10"
                             required
                             placeholder="Describe what happened, where it happened, and any details the HOA should know."
                             class="
@@ -2342,6 +2545,220 @@ $chatOpen =
                                 dark:focus:ring-emerald-950
                             "
                         ><?= esc($formDescription) ?></textarea>
+
+                    </div>
+
+
+                    <!-- Proof / Evidence -->
+                    <div class="mt-4">
+
+                        <div
+                            class="
+                                mb-2
+                                flex
+                                items-center
+                                justify-between
+                                gap-3
+                            "
+                        >
+                            <label
+                                for="proof_file"
+                                class="
+                                    text-sm
+                                    font-bold
+                                    text-slate-700
+                                    dark:text-slate-300
+                                "
+                            >
+                                Proof / Evidence
+                            </label>
+
+                            <span
+                                class="
+                                    rounded-md
+                                    bg-red-50
+                                    px-2
+                                    py-1
+                                    text-xs
+                                    font-bold
+                                    text-red-600
+                                    ring-1
+                                    ring-red-200
+                                    dark:bg-red-950/40
+                                    dark:text-red-300
+                                    dark:ring-red-900
+                                "
+                            >
+                                Required
+                            </span>
+                        </div>
+
+
+                        <label
+                            for="proof_file"
+                            id="proofDropArea"
+                            class="
+                                flex
+                                min-h-32
+                                cursor-pointer
+                                flex-col
+                                items-center
+                                justify-center
+                                gap-2
+
+                                rounded-xl
+                                border-2
+                                border-dashed
+                                border-slate-300
+                                bg-slate-50
+
+                                px-4
+                                py-5
+
+                                text-center
+                                transition
+
+                                hover:border-emerald-400
+                                hover:bg-emerald-50/60
+
+                                dark:border-slate-700
+                                dark:bg-slate-800/60
+                                dark:hover:border-emerald-700
+                                dark:hover:bg-emerald-950/20
+                            "
+                        >
+                            <span
+                                class="
+                                    flex
+                                    h-11
+                                    w-11
+                                    items-center
+                                    justify-center
+                                    rounded-xl
+                                    bg-emerald-100
+                                    text-xl
+                                    text-emerald-700
+
+                                    dark:bg-emerald-950/60
+                                    dark:text-emerald-300
+                                "
+                            >
+                                <i class="bi bi-paperclip"></i>
+                            </span>
+
+                            <span class="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                Add a picture or video
+                            </span>
+
+                            <span class="text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                JPG, PNG, WEBP, GIF, MP4, WEBM, or MOV • Max 50 MB
+                            </span>
+
+                            <input
+                                type="file"
+                                id="proof_file"
+                                name="proof_file"
+                                accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                                aria-required="true"
+                                class="hidden"
+                            >
+                        </label>
+
+
+                        <p
+                            id="proofClientError"
+                            class="
+                                mt-2
+                                hidden
+                                text-xs
+                                font-semibold
+                                text-red-600
+                                dark:text-red-400
+                            "
+                        ></p>
+
+
+                        <div
+                            id="proofPreviewWrap"
+                            class="
+                                mt-3
+                                hidden
+                                overflow-hidden
+                                rounded-xl
+                                border
+                                border-slate-200
+                                bg-white
+
+                                dark:border-slate-700
+                                dark:bg-slate-800
+                            "
+                        >
+                            <div
+                                class="
+                                    flex
+                                    items-center
+                                    justify-between
+                                    gap-3
+                                    border-b
+                                    border-slate-200
+                                    px-3
+                                    py-2.5
+
+                                    dark:border-slate-700
+                                "
+                            >
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Preview
+                                    </p>
+                                    <p
+                                        id="proofFileMeta"
+                                        class="truncate text-xs font-semibold text-slate-600 dark:text-slate-300"
+                                    ></p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    id="removeProofButton"
+                                    class="
+                                        inline-flex
+                                        h-9
+                                        w-9
+                                        shrink-0
+                                        items-center
+                                        justify-center
+                                        rounded-lg
+                                        text-slate-500
+                                        transition
+
+                                        hover:bg-red-50
+                                        hover:text-red-600
+
+                                        dark:text-slate-400
+                                        dark:hover:bg-red-950/40
+                                        dark:hover:text-red-300
+                                    "
+                                    aria-label="Remove selected proof"
+                                    title="Remove selected proof"
+                                >
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+
+                            <div
+                                id="proofPreview"
+                                class="
+                                    flex
+                                    min-h-48
+                                    items-center
+                                    justify-center
+                                    bg-slate-100
+                                    p-3
+
+                                    dark:bg-slate-950/60
+                                "
+                            ></div>
+                        </div>
 
                     </div>
 
@@ -2873,6 +3290,94 @@ $chatOpen =
                                             dark:text-slate-300
                                         "
                                     ><?= esc($c['description']) ?></p>
+
+
+                                    <?php if (!empty($c['proof_path'])): ?>
+
+                                        <?php
+                                        $proofUrl =
+                                            '../' .
+                                            ltrim(
+                                                (string)$c['proof_path'],
+                                                '/'
+                                            );
+                                        ?>
+
+                                        <div
+                                            class="
+                                                mt-4
+                                                overflow-hidden
+                                                rounded-xl
+                                                border
+                                                border-slate-200
+                                                bg-white
+
+                                                dark:border-slate-700
+                                                dark:bg-slate-900
+                                            "
+                                        >
+                                            <div
+                                                class="
+                                                    flex
+                                                    items-center
+                                                    gap-2
+                                                    border-b
+                                                    border-slate-200
+                                                    px-3
+                                                    py-2.5
+                                                    text-xs
+                                                    font-bold
+                                                    text-slate-600
+
+                                                    dark:border-slate-700
+                                                    dark:text-slate-300
+                                                "
+                                            >
+                                                <i class="bi bi-paperclip text-emerald-700 dark:text-emerald-400"></i>
+                                                Attached Proof
+                                            </div>
+
+                                            <div class="bg-slate-100 p-3 dark:bg-slate-950/60">
+                                                <?php if (($c['proof_kind'] ?? '') === 'image'): ?>
+
+                                                    <a
+                                                        href="<?= esc($proofUrl) ?>"
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        class="block"
+                                                    >
+                                                        <img
+                                                            src="<?= esc($proofUrl) ?>"
+                                                            alt="Complaint proof"
+                                                            class="max-h-96 w-full rounded-lg object-contain"
+                                                        >
+                                                    </a>
+
+                                                <?php elseif (($c['proof_kind'] ?? '') === 'video'): ?>
+
+                                                    <video
+                                                        controls
+                                                        preload="metadata"
+                                                        class="max-h-96 w-full rounded-lg bg-black"
+                                                    >
+                                                        <source
+                                                            src="<?= esc($proofUrl) ?>"
+                                                            type="<?= esc((string)($c['proof_mime_type'] ?? 'video/mp4')) ?>"
+                                                        >
+                                                        Your browser does not support video playback.
+                                                    </video>
+
+                                                <?php endif; ?>
+                                            </div>
+
+                                            <?php if (!empty($c['proof_original_name'])): ?>
+                                                <div class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                                                    <?= esc((string)$c['proof_original_name']) ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+
+                                    <?php endif; ?>
 
 
                                     <div
@@ -3735,6 +4240,384 @@ document
             );
         }
     );
+
+
+/*
+|--------------------------------------------------------------------------
+| Automatic complaint priority
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const category =
+        document.getElementById('category');
+
+    const display =
+        document.getElementById('priorityDisplay');
+
+    const text =
+        document.getElementById('priorityDisplayText');
+
+    const icon =
+        document.getElementById('priorityDisplayIcon');
+
+
+    if (!category || !display || !text || !icon) {
+        return;
+    }
+
+
+    function getPriority(value) {
+
+        if (
+            value === 'security' ||
+            value === 'noise' ||
+            value === 'neighbor'
+        ) {
+            return 'urgent';
+        }
+
+        if (
+            value === 'maintenance' ||
+            value === 'parking' ||
+            value === 'billing'
+        ) {
+            return 'high';
+        }
+
+        return 'normal';
+    }
+
+
+    function paintPriority() {
+
+        const priority =
+            getPriority(category.value);
+
+        display.dataset.priority = priority;
+
+        text.textContent =
+            priority.charAt(0).toUpperCase() +
+            priority.slice(1);
+
+        display.classList.remove(
+            'border-red-200',
+            'bg-red-50',
+            'text-red-700',
+            'border-orange-200',
+            'bg-orange-50',
+            'text-orange-700',
+            'border-blue-200',
+            'bg-blue-50',
+            'text-blue-700',
+            'dark:border-red-900',
+            'dark:bg-red-950/40',
+            'dark:text-red-300',
+            'dark:border-orange-900',
+            'dark:bg-orange-950/40',
+            'dark:text-orange-300',
+            'dark:border-blue-900',
+            'dark:bg-blue-950/40',
+            'dark:text-blue-300'
+        );
+
+        icon.className = 'bi';
+
+        if (priority === 'urgent') {
+
+            display.classList.add(
+                'border-red-200',
+                'bg-red-50',
+                'text-red-700',
+                'dark:border-red-900',
+                'dark:bg-red-950/40',
+                'dark:text-red-300'
+            );
+
+            icon.classList.add(
+                'bi-exclamation-octagon-fill'
+            );
+
+        } else if (priority === 'high') {
+
+            display.classList.add(
+                'border-orange-200',
+                'bg-orange-50',
+                'text-orange-700',
+                'dark:border-orange-900',
+                'dark:bg-orange-950/40',
+                'dark:text-orange-300'
+            );
+
+            icon.classList.add(
+                'bi-exclamation-triangle-fill'
+            );
+
+        } else {
+
+            display.classList.add(
+                'border-blue-200',
+                'bg-blue-50',
+                'text-blue-700',
+                'dark:border-blue-900',
+                'dark:bg-blue-950/40',
+                'dark:text-blue-300'
+            );
+
+            icon.classList.add(
+                'bi-circle-fill'
+            );
+        }
+    }
+
+
+    category.addEventListener(
+        'change',
+        paintPriority
+    );
+
+    paintPriority();
+
+})();
+
+
+/*
+|--------------------------------------------------------------------------
+| Complaint proof preview
+|--------------------------------------------------------------------------
+*/
+
+(function () {
+
+    const input =
+        document.getElementById('proof_file');
+
+    const previewWrap =
+        document.getElementById('proofPreviewWrap');
+
+    const preview =
+        document.getElementById('proofPreview');
+
+    const fileMeta =
+        document.getElementById('proofFileMeta');
+
+    const removeButton =
+        document.getElementById('removeProofButton');
+
+    const errorBox =
+        document.getElementById('proofClientError');
+
+
+    if (
+        !input ||
+        !previewWrap ||
+        !preview ||
+        !fileMeta ||
+        !removeButton ||
+        !errorBox
+    ) {
+        return;
+    }
+
+
+    const maxBytes =
+        50 * 1024 * 1024;
+
+    const allowedTypes = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'video/mp4',
+        'video/webm',
+        'video/quicktime'
+    ];
+
+    let objectUrl = null;
+
+
+    function revokePreviewUrl() {
+
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        }
+    }
+
+
+    function clearPreview(clearInput = true) {
+
+        revokePreviewUrl();
+
+        preview.innerHTML = '';
+        fileMeta.textContent = '';
+
+        previewWrap.classList.add('hidden');
+        errorBox.classList.add('hidden');
+        errorBox.textContent = '';
+
+        document
+            .getElementById('proofDropArea')
+            ?.classList.remove(
+                'border-red-400',
+                'bg-red-50',
+                'dark:border-red-800',
+                'dark:bg-red-950/20'
+            );
+
+        if (clearInput) {
+            input.value = '';
+        }
+    }
+
+
+    function formatBytes(bytes) {
+
+        if (bytes < 1024 * 1024) {
+            return (bytes / 1024).toFixed(1) + ' KB';
+        }
+
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+
+    function showClientError(message) {
+
+        clearPreview(false);
+
+        errorBox.textContent = message;
+        errorBox.classList.remove('hidden');
+    }
+
+
+    input.addEventListener(
+        'change',
+        function () {
+
+            const file =
+                input.files && input.files[0]
+                    ? input.files[0]
+                    : null;
+
+
+            if (!file) {
+                clearPreview(false);
+                return;
+            }
+
+
+            if (!allowedTypes.includes(file.type)) {
+                showClientError(
+                    'Unsupported file. Please choose a JPG, PNG, WEBP, GIF, MP4, WEBM, or MOV file.'
+                );
+                input.value = '';
+                return;
+            }
+
+
+            if (file.size > maxBytes) {
+                showClientError(
+                    'The selected proof is larger than 50 MB.'
+                );
+                input.value = '';
+                return;
+            }
+
+
+            clearPreview(false);
+
+            objectUrl =
+                URL.createObjectURL(file);
+
+            let media;
+
+            if (file.type.startsWith('image/')) {
+
+                media = document.createElement('img');
+                media.src = objectUrl;
+                media.alt = 'Selected complaint proof preview';
+                media.className =
+                    'max-h-80 w-full rounded-lg object-contain';
+
+            } else {
+
+                media = document.createElement('video');
+                media.src = objectUrl;
+                media.controls = true;
+                media.preload = 'metadata';
+                media.className =
+                    'max-h-80 w-full rounded-lg bg-black';
+            }
+
+
+            preview.appendChild(media);
+
+            fileMeta.textContent =
+                file.name +
+                ' • ' +
+                formatBytes(file.size);
+
+            previewWrap.classList.remove('hidden');
+        }
+    );
+
+
+    const complaintForm =
+        document.getElementById('complaintForm');
+
+    const proofDropArea =
+        document.getElementById('proofDropArea');
+
+
+    complaintForm?.addEventListener(
+        'submit',
+        function (event) {
+
+            const file =
+                input.files && input.files[0]
+                    ? input.files[0]
+                    : null;
+
+            if (!file) {
+
+                event.preventDefault();
+
+                errorBox.textContent =
+                    'Proof / Evidence is required. Please attach a picture or video.';
+
+                errorBox.classList.remove('hidden');
+
+                proofDropArea?.classList.add(
+                    'border-red-400',
+                    'bg-red-50',
+                    'dark:border-red-800',
+                    'dark:bg-red-950/20'
+                );
+
+                proofDropArea?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        }
+    );
+
+
+    removeButton.addEventListener(
+        'click',
+        function () {
+            clearPreview(true);
+        }
+    );
+
+
+    window.addEventListener(
+        'beforeunload',
+        revokePreviewUrl
+    );
+
+})();
 
 
 /*

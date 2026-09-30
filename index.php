@@ -1234,6 +1234,630 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     }
 
 
+
+    /* =========================================================
+       MARKETING-STYLE LANDING PAGE
+       Light-mode redesign only. Existing dark-mode palette and
+       theme behavior remain unchanged below.
+       ========================================================= */
+
+    /* Marketing layout helpers used by both themes */
+    .landing-trust-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px 18px;
+      margin-top:2px;
+    }
+
+    .landing-trust-item{
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .landing-trust-item i{
+      font-size:15px;
+    }
+
+    .landing-image-badge{
+      position:absolute;
+      z-index:4;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-radius:15px;
+      backdrop-filter:blur(12px);
+    }
+
+    .landing-image-badge-top{
+      top:28px;
+      right:-22px;
+    }
+
+    .landing-image-badge-icon{
+      width:38px;
+      height:38px;
+      display:grid;
+      place-items:center;
+      flex:0 0 38px;
+      border-radius:11px;
+      font-size:18px;
+    }
+
+    .landing-image-badge small,
+    .landing-image-badge strong{
+      display:block;
+    }
+
+    .landing-image-badge small{
+      margin-bottom:2px;
+      font-size:10px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+
+    .landing-image-badge strong{
+      font-size:12px;
+      line-height:1.3;
+    }
+
+    .landing-inline-cta{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:24px;
+      font-size:13px;
+      font-weight:800;
+    }
+
+    .landing-inline-cta i{
+      transition:transform .2s ease;
+    }
+
+    .landing-inline-cta:hover i{
+      transform:translateX(4px);
+    }
+
+    .landing-feature-tag{
+      display:inline-flex;
+      align-items:center;
+      width:max-content;
+      padding:6px 9px;
+      margin-bottom:18px;
+      border-radius:50px;
+      font-size:9px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .landing-feature-cta{
+      margin-top:34px;
+      padding:24px 26px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:18px;
+      border-radius:20px;
+    }
+
+    .landing-feature-cta span,
+    .landing-feature-cta strong{
+      display:block;
+    }
+
+    .landing-feature-cta span{
+      margin-bottom:4px;
+      font-size:11px;
+      font-weight:700;
+    }
+
+    .landing-feature-cta strong{
+      font-size:18px;
+      line-height:1.35;
+    }
+
+    .landing-app-logo-box{
+      position:relative;
+      isolation:isolate;
+    }
+
+    .landing-app-ring{
+      position:absolute;
+      inset:18px;
+      z-index:-1;
+      border-radius:50%;
+      border:1px dashed rgba(255,255,255,.22);
+      animation:landingSpin 22s linear infinite;
+    }
+
+    @keyframes landingSpin{
+      to{ transform:rotate(360deg); }
+    }
+
+    /* SHARED MARKETING PRESENTATION: same UI structure in light and dark */
+    body.index-page{
+      background:#ffffff;
+    }
+
+    #header{
+      padding:8px 0;
+      background:rgba(255,255,255,.96);
+      border-bottom:1px solid #e7eee9;
+      box-shadow:0 8px 30px rgba(21,57,38,.06);
+      backdrop-filter:blur(14px);
+    }
+
+    #header .sitename{
+      color:#153d2b;
+    }
+
+    .landing-theme-toggle{
+      color:var(--smh-green);
+      background:#f3f8f5;
+      border-color:#d9e8df;
+    }
+
+    .landing-theme-toggle:hover,
+    .landing-theme-toggle:focus{
+      color:var(--smh-green-dark);
+      background:#eaf5ee;
+      border-color:#bfd8c9;
+    }
+
+    @media(min-width:1200px){
+      #navmenu a,
+      #navmenu a:focus{
+        color:#5d7066;
+      }
+
+      #navmenu a:hover,
+      #navmenu .active{
+        color:var(--smh-green);
+        background:#eff7f2;
+      }
+
+      #navmenu .landing-login{
+        color:#fff !important;
+        background:var(--smh-green) !important;
+        box-shadow:0 10px 24px rgba(7,127,70,.18);
+      }
+
+      #navmenu .landing-login:hover{
+        color:#fff !important;
+        background:var(--smh-green-dark) !important;
+      }
+    }
+
+    #hero{
+      position:relative;
+      overflow:hidden;
+      padding:96px 0 50px;
+      background:
+        radial-gradient(circle at 12% 12%, rgba(7,127,70,.08), transparent 25%),
+        radial-gradient(circle at 88% 20%, rgba(132,190,153,.18), transparent 27%),
+        linear-gradient(180deg,#fbfefc 0%,#f4faf6 100%);
+    }
+
+    #hero::after{
+      content:"";
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:1px;
+      background:#e8efe9;
+    }
+
+    .landing-hero-copy{
+      max-width:660px;
+    }
+
+    .landing-eyebrow{
+      margin-bottom:22px;
+      padding:8px 12px;
+      color:#087845;
+      background:#edf8f1;
+      border-color:#d6eadf;
+      box-shadow:none;
+    }
+
+    .landing-hero-title{
+      max-width:720px;
+      margin-bottom:22px;
+      color:#113c29;
+      font-size:clamp(3rem,5.6vw,5rem);
+      line-height:.98;
+      letter-spacing:-.06em;
+    }
+
+    .landing-hero-title span{
+      position:relative;
+      color:var(--smh-green);
+      white-space:nowrap;
+    }
+
+    .landing-hero-title span::after{
+      content:"";
+      position:absolute;
+      left:3px;
+      right:0;
+      bottom:-5px;
+      height:8px;
+      z-index:-1;
+      border-radius:50px;
+      background:rgba(7,127,70,.13);
+      transform:rotate(-1deg);
+    }
+
+    .landing-hero-text{
+      max-width:610px;
+      margin-bottom:26px;
+      color:#64756c;
+      font-size:1.05rem;
+      line-height:1.8;
+    }
+
+    .landing-primary-btn,
+    .landing-secondary-btn{
+      min-height:52px;
+      padding:0 22px;
+      border-radius:13px;
+    }
+
+    .landing-primary-btn{
+      box-shadow:0 14px 28px rgba(7,127,70,.20);
+    }
+
+    .landing-secondary-btn{
+      color:#244b39;
+      background:#fff;
+      border-color:#dce8e1;
+      box-shadow:0 8px 22px rgba(21,57,38,.04);
+    }
+
+    .landing-trust-item{
+      color:#677a70;
+    }
+
+    .landing-trust-item i{
+      color:var(--smh-green);
+    }
+
+    .landing-hero-image{
+      max-width:590px;
+      padding:22px 0 20px 20px;
+    }
+
+    .landing-hero-image::before{
+      content:"";
+      position:absolute;
+      inset:0 22px 0 0;
+      z-index:0;
+      border-radius:36px;
+      background:linear-gradient(145deg,#dfeee5,#eef7f1);
+      transform:rotate(2.5deg);
+    }
+
+    .landing-hero-image-main{
+      position:relative;
+      z-index:1;
+      height:530px;
+      border:7px solid #fff;
+      border-radius:32px;
+      box-shadow:0 30px 70px rgba(19,63,41,.16);
+    }
+
+    .landing-image-badge{
+      color:#214735;
+      background:rgba(255,255,255,.94);
+      border:1px solid #e0eae4;
+      box-shadow:0 16px 38px rgba(18,55,37,.12);
+    }
+
+    .landing-image-badge-icon{
+      color:#fff;
+      background:var(--smh-green);
+      box-shadow:0 8px 16px rgba(7,127,70,.18);
+    }
+
+    .landing-image-badge small{
+      color:#819188;
+    }
+
+    .landing-community-card{
+      z-index:3;
+      left:-15px;
+      bottom:2px;
+      max-width:320px;
+      background:rgba(255,255,255,.97);
+      box-shadow:0 20px 46px rgba(18,55,37,.16);
+    }
+
+    .landing-community-card strong{
+      font-size:11px;
+    }
+
+    .landing-stats{
+      position:relative;
+      z-index:2;
+      max-width:none;
+      margin-top:52px;
+      grid-template-columns:repeat(3,1fr);
+      border:1px solid #e0e9e3;
+      border-radius:18px;
+      box-shadow:0 16px 36px rgba(22,63,41,.05);
+    }
+
+    .landing-stat{
+      padding:22px 26px;
+    }
+
+    .landing-stat strong{
+      font-size:30px;
+    }
+
+    #about{
+      padding:100px 0;
+    }
+
+    .landing-about-image{
+      height:520px;
+      border-radius:28px;
+      box-shadow:0 28px 65px rgba(22,62,41,.12);
+    }
+
+    .landing-about-image::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:1;
+      background:linear-gradient(180deg,transparent 55%,rgba(9,59,37,.32) 100%);
+      pointer-events:none;
+    }
+
+    .landing-about-note{
+      z-index:2;
+      left:20px;
+      right:20px;
+      bottom:20px;
+      padding:17px 18px;
+      background:rgba(8,88,51,.92);
+      border:1px solid rgba(255,255,255,.13);
+    }
+
+    .landing-about-content{
+      padding-left:42px;
+    }
+
+    .landing-section-label{
+      margin-bottom:12px;
+    }
+
+    .landing-section-title{
+      color:#153e2c;
+      font-size:clamp(2.2rem,3.8vw,3.35rem);
+      line-height:1.08;
+    }
+
+    .landing-about-points{
+      margin-top:30px;
+      gap:12px;
+    }
+
+    .landing-about-point{
+      padding:16px;
+      background:#fff;
+      border-color:#e2ebe5;
+      box-shadow:0 8px 24px rgba(23,59,40,.035);
+    }
+
+    .landing-inline-cta{
+      color:var(--smh-green);
+    }
+
+    .landing-inline-cta:hover{
+      color:var(--smh-green-dark);
+    }
+
+    #features{
+      padding:100px 0;
+      background:#f5f9f6 !important;
+      border-top:1px solid #edf2ee;
+      border-bottom:1px solid #edf2ee;
+    }
+
+    .landing-feature-card{
+      position:relative;
+      overflow:hidden;
+      min-height:270px;
+      padding:25px;
+      background:#fff;
+      border-color:#e1eae4;
+      border-radius:20px;
+      box-shadow:0 8px 28px rgba(25,64,42,.035);
+    }
+
+    .landing-feature-card::before{
+      content:"";
+      position:absolute;
+      left:0;
+      top:0;
+      width:100%;
+      height:3px;
+      background:linear-gradient(90deg,var(--smh-green),#8cc8a4);
+      transform:scaleX(0);
+      transform-origin:left;
+      transition:transform .25s ease;
+    }
+
+    .landing-feature-card:hover::before{
+      transform:scaleX(1);
+    }
+
+    .landing-feature-card:hover{
+      transform:translateY(-7px);
+      border-color:#c8dfd1;
+      box-shadow:0 22px 44px rgba(24,64,42,.09);
+    }
+
+    .landing-feature-tag{
+      color:#6d8075;
+      background:#f3f7f4;
+      border:1px solid #e4ece7;
+    }
+
+    .landing-feature-icon{
+      margin-bottom:17px;
+      width:50px;
+      height:50px;
+      border-radius:14px;
+    }
+
+    .landing-feature-card h5{
+      font-size:17px;
+    }
+
+    .landing-feature-card p{
+      font-size:12.5px;
+      line-height:1.75;
+    }
+
+    .landing-feature-cta{
+      color:#244b39;
+      background:#fff;
+      border:1px solid #dfe9e3;
+      box-shadow:0 12px 32px rgba(24,64,42,.05);
+    }
+
+    .landing-feature-cta span{
+      color:#7b8c82;
+    }
+
+    #download-app{
+      padding:100px 0;
+    }
+
+    .landing-app-wrap{
+      position:relative;
+      overflow:hidden;
+      padding:54px;
+      border-radius:30px;
+    }
+
+    .landing-app-wrap::before,
+    .landing-app-wrap::after{
+      content:"";
+      position:absolute;
+      border-radius:50%;
+      background:rgba(255,255,255,.06);
+      pointer-events:none;
+    }
+
+    .landing-app-wrap::before{
+      width:320px;
+      height:320px;
+      right:-80px;
+      top:-150px;
+    }
+
+    .landing-app-wrap::after{
+      width:220px;
+      height:220px;
+      right:170px;
+      bottom:-150px;
+    }
+
+    .landing-app-copy,
+    .landing-app-logo-box{
+      position:relative;
+      z-index:2;
+    }
+
+    #footer{
+      background:#076d3e;
+    }
+
+    @media(max-width:1199px){
+      .theme-toggle-item .landing-theme-toggle{
+        color:#fff;
+        background:#0f6f42;
+        border-color:#0f6f42;
+      }
+    }
+
+    @media(max-width:991px){
+      .landing-image-badge-top{
+        right:10px;
+      }
+
+      .landing-feature-cta{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+
+      .landing-about-content{
+        padding-left:0;
+      }
+    }
+
+    @media(max-width:767px){
+      #hero{
+        padding:68px 0 38px;
+      }
+
+      .landing-hero-title{
+        font-size:clamp(2.55rem,13vw,3.6rem);
+      }
+
+      .landing-hero-image{
+        padding:10px 0 20px;
+      }
+
+      .landing-hero-image::before{
+        inset:0 8px 10px 8px;
+      }
+
+      .landing-hero-image-main{
+        height:420px;
+      }
+
+      .landing-image-badge-top{
+        top:22px;
+        right:12px;
+      }
+
+      .landing-community-card{
+        left:10px;
+        right:10px;
+        bottom:0;
+        max-width:none;
+      }
+
+      .landing-stats{
+        margin-top:36px;
+        grid-template-columns:1fr;
+      }
+
+      #about,
+      #features,
+      #download-app{
+        padding:76px 0;
+      }
+
+      .landing-about-image{
+        height:420px;
+      }
+
+      .landing-app-wrap{
+        padding:34px 22px;
+      }
+    }
+
     /* =========================================================
        LANDING PAGE DARK MODE
        Uses html.dark + localStorage key: hoa-theme
@@ -1267,7 +1891,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       box-shadow:0 8px 28px rgba(0,0,0,.24);
     }
 
-    /* Theme toggle */
+    /* Theme toggle - shared shape, light mode colors by default */
     .landing-theme-toggle{
       width:42px;
       height:42px;
@@ -1275,23 +1899,41 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       align-items:center;
       justify-content:center;
       padding:0;
-      border:1px solid rgba(255,255,255,.28);
+      border:1px solid rgba(7,127,70,.24);
       border-radius:50%;
-      background:rgba(255,255,255,.10);
-      color:#fff;
+      background:#f1f8f4;
+      color:var(--smh-green);
       font-size:18px;
       line-height:1;
       transition:.22s ease;
       cursor:pointer;
+      box-shadow:0 5px 14px rgba(7,127,70,.08);
     }
 
     .landing-theme-toggle:hover,
     .landing-theme-toggle:focus{
       color:#fff;
-      background:rgba(255,255,255,.18);
-      border-color:rgba(255,255,255,.45);
+      background:var(--smh-green);
+      border-color:var(--smh-green);
       transform:translateY(-1px);
       outline:none;
+      box-shadow:0 8px 18px rgba(7,127,70,.18);
+    }
+
+    /* Dark mode changes only the toggle colors, not its layout */
+    html.dark .landing-theme-toggle{
+      color:#fff;
+      background:rgba(255,255,255,.10);
+      border-color:rgba(255,255,255,.28);
+      box-shadow:none;
+    }
+
+    html.dark .landing-theme-toggle:hover,
+    html.dark .landing-theme-toggle:focus{
+      color:#fff;
+      background:rgba(255,255,255,.18);
+      border-color:rgba(255,255,255,.45);
+      box-shadow:none;
     }
 
     @media(min-width:1200px){
@@ -1589,13 +2231,125 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
         width:100%;
         height:44px;
         border-radius:12px;
-        background:#0f6f42;
-        border-color:#0f6f42;
+        color:var(--smh-green);
+        background:#f1f8f4;
+        border-color:#cfe3d7;
+      }
+
+      .theme-toggle-item .landing-theme-toggle:hover,
+      .theme-toggle-item .landing-theme-toggle:focus{
+        color:#fff;
+        background:var(--smh-green);
+        border-color:var(--smh-green);
       }
 
       html.dark .theme-toggle-item .landing-theme-toggle{
+        color:#fff;
         background:#173225;
         border-color:#315340;
+      }
+
+      html.dark .theme-toggle-item .landing-theme-toggle:hover,
+      html.dark .theme-toggle-item .landing-theme-toggle:focus{
+        background:#21442f;
+        border-color:#3b654d;
+      }
+    }
+
+    /* Dark mode changes color only; marketing layout stays identical */
+    html.dark #header .sitename{
+      color:#ffffff;
+    }
+
+    @media(min-width:1200px){
+      html.dark #navmenu a,
+      html.dark #navmenu a:focus{
+        color:rgba(255,255,255,.78);
+      }
+
+      html.dark #navmenu a:hover,
+      html.dark #navmenu .active{
+        color:#ffffff;
+        background:rgba(255,255,255,.10);
+      }
+
+      html.dark #navmenu .landing-login{
+        color:#075f38 !important;
+        background:#ffffff !important;
+        box-shadow:0 10px 24px rgba(0,0,0,.16);
+      }
+
+      html.dark #navmenu .landing-login:hover{
+        color:#064f30 !important;
+        background:#f2f8f5 !important;
+      }
+    }
+
+    html.dark #hero::after{
+      background:#23372d;
+    }
+
+    html.dark .landing-hero-title span::after{
+      background:rgba(85,215,148,.14);
+    }
+
+    html.dark .landing-hero-image::before{
+      background:linear-gradient(145deg,#13221b,#0f1b16);
+    }
+
+    /* Marketing elements: dark-mode compatibility using the existing palette */
+    html.dark .landing-trust-item{
+      color:#9fb0a7;
+    }
+
+    html.dark .landing-trust-item i{
+      color:#62dda0;
+    }
+
+    html.dark .landing-image-badge{
+      color:#e5f4ec;
+      background:rgba(16,25,21,.96);
+      border:1px solid #2a4035;
+      box-shadow:0 18px 42px rgba(0,0,0,.30);
+    }
+
+    html.dark .landing-image-badge-icon{
+      color:#b8f1d1;
+      background:rgba(47,194,123,.12);
+    }
+
+    html.dark .landing-image-badge small{
+      color:#8ea198;
+    }
+
+    html.dark .landing-inline-cta{
+      color:#62dda0;
+    }
+
+    html.dark .landing-inline-cta:hover{
+      color:#9ce8bd;
+    }
+
+    html.dark .landing-feature-tag{
+      color:#9fb0a7;
+      background:#0f1814;
+      border:1px solid #263a31;
+    }
+
+    html.dark .landing-feature-cta{
+      color:#e8f5ee;
+      background:#121d18;
+      border:1px solid #263a31;
+      box-shadow:0 18px 38px rgba(0,0,0,.18);
+    }
+
+    html.dark .landing-feature-cta span{
+      color:#98aaa0;
+    }
+
+    @media(max-width:767px){
+      .landing-image-badge{
+        max-width:220px;
       }
     }
   </style>
@@ -1700,66 +2454,64 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
         <div class="row align-items-center gy-5 gx-lg-5">
 
-          <div class="col-lg-7">
+          <div class="col-lg-6">
             <div class="landing-hero-copy" data-aos="fade-up" data-aos-delay="150">
 
               <div class="landing-eyebrow">
-                <i class="bi bi-house-heart"></i>
-                South Meridian Homeowners Association
+                <i class="bi bi-stars"></i>
+                Built for South Meridian residents
               </div>
 
               <h1 class="landing-hero-title">
-                Welcome to <span>South Meridian Homes</span>
+                One community. <span>One portal.</span> Everything you need.
               </h1>
 
               <p class="landing-hero-text">
-                One secure digital platform for the South Meridian Homes community.
-                Access HOA payments, parking permits, facility reservations, announcements,
-                complaints, community voting, and other resident services in one place.
+                Skip unnecessary office trips and manage everyday HOA services from one secure platform.
+                Pay dues, reserve facilities, manage parking, receive announcements, submit concerns,
+                and participate in community activities online.
               </p>
 
               <div class="landing-hero-actions">
                 <a href="#" class="landing-primary-btn" data-bs-toggle="modal" data-bs-target="#loginModal">
-                  <i class="bi bi-person-circle"></i>
-                  Member Login
+                  Get Started
+                  <i class="bi bi-arrow-right"></i>
                 </a>
 
                 <a href="#features" class="landing-secondary-btn">
-                  Explore Services
-                  <i class="bi bi-arrow-down"></i>
+                  See What You Can Do
+                  <i class="bi bi-play-circle"></i>
                 </a>
               </div>
 
-              <div class="landing-stats" data-aos="fade-up" data-aos-delay="250">
-
-                <div class="landing-stat">
-                  <strong>
-                    <span data-purecounter-start="0" data-purecounter-end="3" data-purecounter-duration="1" class="purecounter"></span>
-                  </strong>
-                  <span>Community Phases</span>
+              <div class="landing-trust-list">
+                <div class="landing-trust-item">
+                  <i class="bi bi-shield-check"></i>
+                  <span>Secure member access</span>
                 </div>
-
-                <div class="landing-stat">
-                  <strong>
-                    <span data-purecounter-start="0" data-purecounter-end="8" data-purecounter-duration="1" class="purecounter"></span>+
-                  </strong>
-                  <span>Integrated Modules</span>
+                <div class="landing-trust-item">
+                  <i class="bi bi-houses"></i>
+                  <span>Built for all 3 phases</span>
                 </div>
-
-                <div class="landing-stat">
-                  <strong>
-                    <span data-purecounter-start="0" data-purecounter-end="100" data-purecounter-duration="1" class="purecounter"></span>%
-                  </strong>
-                  <span>Online HOA Services</span>
+                <div class="landing-trust-item">
+                  <i class="bi bi-phone"></i>
+                  <span>Web and mobile access</span>
                 </div>
-
               </div>
 
             </div>
           </div>
 
-          <div class="col-lg-5">
+          <div class="col-lg-6">
             <div class="landing-hero-image" data-aos="fade-left" data-aos-delay="250">
+
+              <div class="landing-image-badge landing-image-badge-top">
+                <span class="landing-image-badge-icon"><i class="bi bi-check2-circle"></i></span>
+                <div>
+                  <small>Resident services</small>
+                  <strong>Available in one place</strong>
+                </div>
+              </div>
 
               <div class="landing-hero-image-main">
                 <img src="assets/img/real-estate/property-exterior-8.webp" alt="South Meridian Homes Community">
@@ -1768,14 +2520,35 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
               <div class="landing-community-card">
                 <img src="assets/img/sm_logo.png" alt="SMH">
                 <div>
-                  <span>Community Portal</span>
-                  <strong>Salitran 4, Dasmariñas, Cavite</strong>
+                  <span>South Meridian Homes</span>
+                  <strong>Connected community services for residents and HOA officers</strong>
                 </div>
               </div>
 
             </div>
           </div>
 
+        </div>
+
+        <div class="landing-stats" data-aos="fade-up" data-aos-delay="300">
+          <div class="landing-stat">
+            <strong>
+              <span data-purecounter-start="0" data-purecounter-end="3" data-purecounter-duration="1" class="purecounter"></span>
+            </strong>
+            <span>Community Phases</span>
+          </div>
+
+          <div class="landing-stat">
+            <strong>
+              <span data-purecounter-start="0" data-purecounter-end="8" data-purecounter-duration="1" class="purecounter"></span>+
+            </strong>
+            <span>Integrated Services</span>
+          </div>
+
+          <div class="landing-stat">
+            <strong>1</strong>
+            <span>Unified Community Portal</span>
+          </div>
         </div>
 
       </div>
@@ -1788,74 +2561,78 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
         <div class="row align-items-center gy-5 gx-lg-5">
 
-          <div class="col-lg-5" data-aos="fade-right">
+          <div class="col-lg-6" data-aos="fade-right">
 
             <div class="landing-about-image">
               <img src="assets/img/real-estate/property-exterior-1.webp" alt="South Meridian Homes">
 
               <div class="landing-about-note">
-                <i class="bi bi-shield-check"></i>
+                <i class="bi bi-lightning-charge"></i>
                 <div>
-                  <strong>Built for the South Meridian community</strong>
-                  <span>Simple, secure, and organized HOA services.</span>
+                  <strong>Less waiting. More convenient service.</strong>
+                  <span>Designed around the everyday needs of the community.</span>
                 </div>
               </div>
             </div>
 
           </div>
 
-          <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
 
             <div class="landing-about-content">
 
-              <span class="landing-section-label">About South Meridian Homes</span>
+              <span class="landing-section-label">Why the platform matters</span>
 
               <h2 class="landing-section-title">
-                Community management made simpler and more accessible.
+                HOA services should be easier to access, track, and manage.
               </h2>
 
               <p class="landing-section-text">
-                South Meridian Homes is a residential community located in Salitran 4,
-                Dasmariñas, Cavite. The HOA management platform centralizes essential
-                community services so homeowners, tenants, and administrators can manage
-                requests and records through one organized system.
+                Instead of relying on separate manual processes, South Meridian Homes brings essential
+                community transactions into one organized digital experience for homeowners, tenants,
+                officers, and administrators.
               </p>
 
               <div class="landing-about-points">
 
                 <div class="landing-about-point">
-                  <i class="bi bi-megaphone"></i>
+                  <i class="bi bi-clock-history"></i>
                   <div>
-                    <strong>Communication</strong>
-                    <span>Announcements, messaging, and complaint tracking.</span>
+                    <strong>Save time</strong>
+                    <span>Handle common HOA transactions without unnecessary back-and-forth.</span>
                   </div>
                 </div>
 
                 <div class="landing-about-point">
-                  <i class="bi bi-credit-card"></i>
+                  <i class="bi bi-bell"></i>
                   <div>
-                    <strong>Payments</strong>
-                    <span>Online dues and organized transaction records.</span>
+                    <strong>Stay informed</strong>
+                    <span>See announcements and important community updates in one place.</span>
                   </div>
                 </div>
 
                 <div class="landing-about-point">
-                  <i class="bi bi-calendar-check"></i>
+                  <i class="bi bi-folder-check"></i>
                   <div>
-                    <strong>Reservations</strong>
-                    <span>Request and manage community facility schedules.</span>
+                    <strong>Keep records organized</strong>
+                    <span>Track requests, payments, permits, reservations, and other activity.</span>
                   </div>
                 </div>
 
                 <div class="landing-about-point">
-                  <i class="bi bi-check2-square"></i>
+                  <i class="bi bi-people"></i>
                   <div>
-                    <strong>Community Participation</strong>
-                    <span>Secure voting and community-wide updates.</span>
+                    <strong>Stay connected</strong>
+                    <span>Make resident-to-HOA communication simpler and more accessible.</span>
                   </div>
                 </div>
 
               </div>
+
+              <a href="#features" class="landing-inline-cta">
+                Explore community services
+                <i class="bi bi-arrow-right"></i>
+              </a>
 
             </div>
 
@@ -1871,12 +2648,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     <section id="features" class="section">
       <div class="container" data-aos="fade-up">
 
-        <div class="row justify-content-center text-center mb-5">
-          <div class="col-lg-8">
-            <span class="landing-section-label">What the System Offers</span>
-            <h2 class="landing-section-title">Complete HOA Management in One Platform</h2>
-            <p class="landing-section-text">
-              Essential community services are grouped into one accessible system for residents and administrators.
+        <div class="row align-items-end justify-content-between mb-5 gy-3">
+          <div class="col-lg-7">
+            <span class="landing-section-label">Everything in one place</span>
+            <h2 class="landing-section-title mb-0">Designed around the services residents use most.</h2>
+          </div>
+          <div class="col-lg-4">
+            <p class="landing-section-text mb-0">
+              One platform connects essential HOA services so residents can complete tasks with fewer steps.
             </p>
           </div>
         </div>
@@ -1885,76 +2664,96 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
+              <span class="landing-feature-tag">Access</span>
               <div class="landing-feature-icon"><i class="bi bi-shield-lock"></i></div>
-              <h5>User Authentication</h5>
-              <p>Secure account access for homeowners, tenants, administrators, and other authorized users.</p>
+              <h5>Secure Member Access</h5>
+              <p>Role-based login keeps homeowners, tenants, officers, and administrators in the right experience.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
-              <div class="landing-feature-icon"><i class="bi bi-chat-dots"></i></div>
-              <h5>Communication & Complaints</h5>
-              <p>Announcements, community chat, private messaging, and structured complaint tracking.</p>
-            </div>
-          </div>
-
-          <div class="col-lg-4 col-md-6">
-            <div class="landing-feature-card">
+              <span class="landing-feature-tag">Payments</span>
               <div class="landing-feature-icon"><i class="bi bi-wallet2"></i></div>
-              <h5>Payment Management</h5>
-              <p>Process HOA dues and other fees online with organized payment and transaction records.</p>
+              <h5>Manage HOA Dues</h5>
+              <p>View payment information and keep community financial transactions organized in one system.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
+              <span class="landing-feature-tag">Reservations</span>
+              <div class="landing-feature-icon"><i class="bi bi-calendar2-check"></i></div>
+              <h5>Reserve Facilities</h5>
+              <p>Request available community facilities and keep reservation schedules easier to track.</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <span class="landing-feature-tag">Parking</span>
               <div class="landing-feature-icon"><i class="bi bi-car-front"></i></div>
-              <h5>Parking Management</h5>
-              <p>Manage registered vehicles, parking permits, renewals, and related approvals.</p>
+              <h5>Manage Parking</h5>
+              <p>Handle vehicle registration, parking permit applications, renewals, and related records.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
-              <div class="landing-feature-icon"><i class="bi bi-calendar-check"></i></div>
-              <h5>Facility Rental</h5>
-              <p>Reserve courts, tables, function areas, and other available community facilities.</p>
+              <span class="landing-feature-tag">Communication</span>
+              <div class="landing-feature-icon"><i class="bi bi-chat-square-text"></i></div>
+              <h5>Stay Updated & Connected</h5>
+              <p>Receive announcements, use community communication tools, and stay informed about HOA activity.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
+              <span class="landing-feature-tag">Concerns</span>
+              <div class="landing-feature-icon"><i class="bi bi-clipboard2-check"></i></div>
+              <h5>Submit & Track Complaints</h5>
+              <p>Send concerns through a structured process and keep communication easier to follow.</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6">
+            <div class="landing-feature-card">
+              <span class="landing-feature-tag">Participation</span>
               <div class="landing-feature-icon"><i class="bi bi-check2-square"></i></div>
-              <h5>Voting Management</h5>
-              <p>Participate in secure HOA elections with automated vote and result management.</p>
+              <h5>Community Voting</h5>
+              <p>Support HOA elections and community participation through organized digital voting tools.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
+              <span class="landing-feature-tag">Management</span>
               <div class="landing-feature-icon"><i class="bi bi-people"></i></div>
-              <h5>Homeowner & User Management</h5>
-              <p>Manage resident profiles, account information, properties, and community records.</p>
+              <h5>Resident & Property Records</h5>
+              <p>Keep homeowner, tenant, household, and property information organized for authorized users.</p>
             </div>
           </div>
 
           <div class="col-lg-4 col-md-6">
             <div class="landing-feature-card">
+              <span class="landing-feature-tag">Reports</span>
               <div class="landing-feature-icon"><i class="bi bi-graph-up-arrow"></i></div>
-              <h5>Financial & Reporting</h5>
-              <p>Support transparent HOA operations through financial records and organized reports.</p>
+              <h5>Financial & HOA Reporting</h5>
+              <p>Support clearer community operations with organized records, monitoring, and reports.</p>
             </div>
           </div>
 
-          <div class="col-lg-4 col-md-6">
-            <div class="landing-feature-card">
-              <div class="landing-feature-icon"><i class="bi bi-phone"></i></div>
-              <h5>Mobile Application</h5>
-              <p>Access important South Meridian Homes services using a compatible mobile device.</p>
-            </div>
-          </div>
+        </div>
 
+        <div class="landing-feature-cta" data-aos="fade-up" data-aos-delay="100">
+          <div>
+            <span>Already a South Meridian member?</span>
+            <strong>Your community services are ready when you are.</strong>
+          </div>
+          <a href="#" class="landing-primary-btn" data-bs-toggle="modal" data-bs-target="#loginModal">
+            Member Login
+            <i class="bi bi-arrow-right"></i>
+          </a>
         </div>
 
       </div>
@@ -1974,17 +2773,17 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
               <div class="landing-app-copy">
                 <span class="landing-section-label" style="color:#b6d9a1;">South Meridian Mobile</span>
 
-                <h2>Keep your community services within reach.</h2>
+                <h2>Take your community services with you.</h2>
 
                 <p>
-                  Access HOA services using your mobile device and stay connected to
-                  important South Meridian Homes updates wherever you are.
+                  Stay connected to South Meridian Homes from your mobile device and access
+                  essential resident services wherever you need them.
                 </p>
 
                 <div class="landing-app-benefits">
-                  <span><i class="bi bi-check-circle-fill"></i> Resident access</span>
-                  <span><i class="bi bi-check-circle-fill"></i> HOA services</span>
-                  <span><i class="bi bi-check-circle-fill"></i> Community updates</span>
+                  <span><i class="bi bi-check-circle-fill"></i> Quick resident access</span>
+                  <span><i class="bi bi-check-circle-fill"></i> HOA services on mobile</span>
+                  <span><i class="bi bi-check-circle-fill"></i> Community updates anywhere</span>
                 </div>
 
                 <div class="landing-download-buttons">
@@ -2015,6 +2814,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
             <div class="col-lg-5">
               <div class="landing-app-logo-box">
+                <div class="landing-app-ring"></div>
                 <img src="assets/img/sm_logo.png" alt="South Meridian Homes App">
               </div>
             </div>

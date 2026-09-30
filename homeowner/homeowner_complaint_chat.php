@@ -560,6 +560,19 @@ if (
             $err =
                 'Complaint not found.';
 
+        } elseif (
+            in_array(
+                (string)$cCheck['status'],
+                ['resolved', 'closed'],
+                true
+            )
+        ) {
+
+            $err =
+                'This complaint is already ' .
+                complaint_status_label((string)$cCheck['status']) .
+                '. The conversation is now read-only.';
+
         } else {
 
             $stmt = $conn->prepare("
@@ -590,44 +603,18 @@ if (
             $stmt->close();
 
 
-            if (
-                in_array(
-                    $cCheck['status'],
-                    ['resolved', 'closed'],
-                    true
-                )
-            ) {
+            $stmt = $conn->prepare("
+                UPDATE complaints
+                SET updated_at = NOW()
+                WHERE id = ?
+                  AND homeowner_id = ?
+            ");
 
-                $stmt = $conn->prepare("
-                    UPDATE complaints
-                    SET
-                        status = 'in_progress',
-                        updated_at = NOW()
-                    WHERE id = ?
-                      AND homeowner_id = ?
-                ");
-
-                $stmt->bind_param(
-                    "ii",
-                    $complaintId,
-                    $hid
-                );
-
-            } else {
-
-                $stmt = $conn->prepare("
-                    UPDATE complaints
-                    SET updated_at = NOW()
-                    WHERE id = ?
-                      AND homeowner_id = ?
-                ");
-
-                $stmt->bind_param(
-                    "ii",
-                    $complaintId,
-                    $hid
-                );
-            }
+            $stmt->bind_param(
+                "ii",
+                $complaintId,
+                $hid
+            );
 
             $stmt->execute();
             $stmt->close();
@@ -2486,7 +2473,85 @@ $chatOpen =
                     </div>
 
 
-                    <!-- Composer -->
+                    <!-- Composer / read-only state -->
+                    <?php if (
+                        in_array(
+                            $selectedStatus,
+                            ['resolved', 'closed'],
+                            true
+                        )
+                    ): ?>
+
+                        <div
+                            class="
+                                border-t
+                                border-slate-200
+                                bg-white
+                                p-4
+                                dark:border-slate-800
+                                dark:bg-slate-900
+                            "
+                        >
+                            <div
+                                class="
+                                    flex
+                                    items-start
+                                    gap-3
+                                    rounded-xl
+                                    border
+                                    border-slate-200
+                                    bg-slate-50
+                                    p-4
+                                    dark:border-slate-700
+                                    dark:bg-slate-800/60
+                                "
+                            >
+                                <div
+                                    class="
+                                        flex
+                                        h-10
+                                        w-10
+                                        shrink-0
+                                        items-center
+                                        justify-center
+                                        rounded-xl
+                                        bg-slate-200
+                                        text-slate-600
+                                        dark:bg-slate-700
+                                        dark:text-slate-300
+                                    "
+                                >
+                                    <i class="bi bi-lock-fill"></i>
+                                </div>
+
+                                <div class="min-w-0 flex-1">
+                                    <p
+                                        class="
+                                            font-bold
+                                            text-slate-800
+                                            dark:text-slate-100
+                                        "
+                                    >
+                                        This complaint is <?= esc(strtolower(complaint_status_label($selectedStatus))) ?>
+                                    </p>
+
+                                    <p
+                                        class="
+                                            mt-1
+                                            text-sm
+                                            leading-6
+                                            text-slate-600
+                                            dark:text-slate-400
+                                        "
+                                    >
+                                        This conversation is now read-only. You can still review the previous messages, but you can no longer send new replies.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                    <?php else: ?>
+
                     <form
                         method="POST"
                         autocomplete="off"
@@ -2662,55 +2727,12 @@ $chatOpen =
                         </div>
 
 
-                        <?php if (
-                            in_array(
-                                $selectedStatus,
-                                ['resolved', 'closed'],
-                                true
-                            )
-                        ): ?>
 
-                            <div
-                                class="
-                                    mt-3
-
-                                    flex
-                                    items-start
-                                    gap-2
-
-                                    rounded-xl
-
-                                    bg-amber-50
-
-                                    p-3
-
-                                    text-xs
-                                    leading-5
-                                    text-amber-800
-
-                                    dark:bg-amber-950/40
-                                    dark:text-amber-300
-                                "
-                            >
-                                <i
-                                    class="
-                                        bi
-                                        bi-info-circle-fill
-
-                                        mt-0.5
-                                        shrink-0
-                                    "
-                                ></i>
-
-                                <span>
-                                    Sending a new message will reopen this
-                                    complaint as In Progress.
-                                </span>
-                            </div>
-
-                        <?php endif; ?>
 
                     </form>
+
+
+                    <?php endif; ?>
 
                 <?php endif; ?>
 
