@@ -1159,18 +1159,7 @@ $showSettings             = canAccess('settings', $allowedModules);
 
 
               </li>
-<li>
-    <a
-        href="complaint_alert_monitor.php"
-        target="_blank"
-        class="dropdown-toggle no-arrow"
-    >
-        <span class="micon dw dw-bell"></span>
-        <span class="mtext">
-            Complaint Alert Monitor
-        </span>
-    </a>
-</li>
+
 
 
             </ul>
@@ -1547,35 +1536,45 @@ $showSettings             = canAccess('settings', $allowedModules);
 
         <?php if ($showCctv): ?>
 
+          <li class="dropdown">
 
-
-          <li>
-
-
-
-            <a href="cctv_monitoring.php"
-
-
-
-               class="dropdown-toggle no-arrow <?= $currentPage === 'cctv_monitoring.php' ? 'active' : '' ?>">
-
-
+            <a
+              href="javascript:;"
+              class="dropdown-toggle <?= isMenuActive(['cctv_monitoring.php', 'cctv_archive.php']) ? 'active' : '' ?>"
+            >
 
               <span class="micon dw dw-video-camera"></span>
 
-
-
-              <span class="mtext">CCTV Monitoring</span>
-
-
+              <span class="mtext">CCTV</span>
 
             </a>
 
+            <ul
+              class="submenu"
+              style="<?= isMenuActive(['cctv_monitoring.php', 'cctv_archive.php']) ? 'display:block;' : '' ?>"
+            >
 
+              <li>
+                <a
+                  href="cctv_monitoring.php"
+                  class="<?= $currentPage === 'cctv_monitoring.php' ? 'active' : '' ?>"
+                >
+                  Live Monitoring
+                </a>
+              </li>
+
+              <li>
+                <a
+                  href="cctv_archive.php"
+                  class="<?= $currentPage === 'cctv_archive.php' ? 'active' : '' ?>"
+                >
+                  CCTV Archive
+                </a>
+              </li>
+
+            </ul>
 
           </li>
-
-
 
         <?php endif; ?>
 
@@ -1807,11 +1806,7 @@ $showSettings             = canAccess('settings', $allowedModules);
 
       </ul>
 
-<script
-    src="vendors/scripts/global_complaint_notifications.js?v=4"
-    data-complaint-api="admin_complaints_realtime_api.php"
-    defer>
-</script>
+
 
     </div>
 

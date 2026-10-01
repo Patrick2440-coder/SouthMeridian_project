@@ -2352,7 +2352,346 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
         max-width:220px;
       }
     }
-  </style>
+  
+
+    /* =========================================================
+       MOBILE HEADER + INDEPENDENT MOBILE DRAWER
+       Does not depend on assets/js/main.js mobile navigation.
+       ========================================================= */
+
+    .landing-mobile-login,
+    .landing-mobile-menu-button,
+    .landing-mobile-overlay,
+    .landing-mobile-drawer{
+      display:none;
+    }
+
+    @media (max-width:1199.98px){
+
+      #header{
+        min-height:70px;
+      }
+
+      #header .container-fluid{
+        gap:10px;
+      }
+
+      #navmenu{
+        display:flex;
+        align-items:center;
+        justify-content:flex-end;
+        gap:8px;
+        margin-left:auto;
+      }
+
+      /* Keep the template desktop <ul> out of the custom mobile drawer. */
+      #navmenu > ul{
+        display:none !important;
+      }
+
+      #navmenu .landing-mobile-login{
+        display:inline-flex !important;
+        align-items:center;
+        justify-content:center;
+        min-height:40px;
+        padding:8px 15px;
+        margin:0;
+        color:#fff !important;
+        background:var(--smh-green) !important;
+        border:1px solid var(--smh-green);
+        border-radius:50px;
+        font-size:13px;
+        font-weight:800;
+        line-height:1;
+        text-decoration:none;
+        box-shadow:0 7px 18px rgba(7,127,70,.16);
+        position:relative;
+        z-index:1001;
+      }
+
+      #navmenu .landing-mobile-login:hover,
+      #navmenu .landing-mobile-login:focus{
+        color:#fff !important;
+        background:var(--smh-green-dark) !important;
+        border-color:var(--smh-green-dark);
+      }
+
+      #navmenu .landing-mobile-menu-button{
+        width:42px;
+        height:42px;
+        display:inline-grid !important;
+        place-items:center;
+        flex:0 0 42px;
+        margin:0;
+        padding:0;
+        color:#173d2b;
+        background:transparent;
+        border:0;
+        border-radius:10px;
+        font-size:29px;
+        line-height:1;
+        cursor:pointer;
+        position:relative;
+        z-index:1001;
+      }
+
+      #navmenu .landing-mobile-menu-button:hover,
+      #navmenu .landing-mobile-menu-button:focus{
+        color:var(--smh-green);
+        background:#edf7f1;
+        outline:none;
+      }
+
+      .landing-mobile-overlay{
+        display:block;
+        position:fixed;
+        inset:0;
+        z-index:99980;
+        background:rgba(3,16,10,.58);
+        opacity:0;
+        visibility:hidden;
+        pointer-events:none;
+        transition:opacity .22s ease, visibility .22s ease;
+        backdrop-filter:blur(2px);
+      }
+
+      .landing-mobile-drawer{
+        display:flex;
+        flex-direction:column;
+        position:fixed;
+        top:0;
+        right:0;
+        bottom:0;
+        z-index:99990;
+        width:min(88vw,360px);
+        padding:20px;
+        background:#ffffff;
+        border-left:1px solid #e1ebe5;
+        box-shadow:-24px 0 60px rgba(11,53,31,.18);
+        transform:translateX(105%);
+        visibility:hidden;
+        transition:transform .25s ease, visibility .25s ease;
+        overflow-y:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+
+      .landing-mobile-menu-open .landing-mobile-overlay{
+        opacity:1;
+        visibility:visible;
+        pointer-events:auto;
+      }
+
+      .landing-mobile-menu-open .landing-mobile-drawer{
+        transform:translateX(0);
+        visibility:visible;
+      }
+
+      body.landing-mobile-menu-open{
+        overflow:hidden;
+      }
+
+      .landing-mobile-drawer-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:14px;
+        padding-bottom:18px;
+        margin-bottom:10px;
+        border-bottom:1px solid #e7eee9;
+      }
+
+      .landing-mobile-drawer-kicker{
+        display:block;
+        margin-bottom:3px;
+        color:#7c8d84;
+        font-size:10px;
+        font-weight:800;
+        letter-spacing:.07em;
+        text-transform:uppercase;
+      }
+
+      .landing-mobile-drawer-head strong{
+        display:block;
+        color:#153d2b;
+        font-size:20px;
+      }
+
+      .landing-mobile-drawer-close{
+        width:42px;
+        height:42px;
+        display:grid;
+        place-items:center;
+        flex:0 0 42px;
+        color:#244b39;
+        background:#f2f7f4;
+        border:1px solid #deebe3;
+        border-radius:12px;
+        font-size:20px;
+      }
+
+      .landing-mobile-drawer-nav{
+        display:flex;
+        flex-direction:column;
+        gap:7px;
+        padding-top:4px;
+      }
+
+      .landing-mobile-drawer-link,
+      .landing-mobile-theme-row{
+        width:100%;
+        min-height:50px;
+        display:flex;
+        align-items:center;
+        gap:12px;
+        padding:11px 14px;
+        margin:0;
+        color:#334c40 !important;
+        background:transparent;
+        border:0;
+        border-radius:12px;
+        font-size:14px;
+        font-weight:750;
+        text-align:left;
+        text-decoration:none;
+        cursor:pointer;
+      }
+
+      .landing-mobile-drawer-link i,
+      .landing-mobile-theme-row i{
+        width:24px;
+        color:var(--smh-green);
+        font-size:18px;
+        text-align:center;
+      }
+
+      .landing-mobile-drawer-link:hover,
+      .landing-mobile-drawer-link:focus,
+      .landing-mobile-theme-row:hover,
+      .landing-mobile-theme-row:focus,
+      .landing-mobile-drawer-link.active{
+        color:var(--smh-green) !important;
+        background:#edf7f1;
+        outline:none;
+      }
+
+      .landing-mobile-drawer-login{
+        min-height:50px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:9px;
+        margin-top:10px;
+        padding:12px 16px;
+        color:#fff !important;
+        background:var(--smh-green);
+        border:1px solid var(--smh-green);
+        border-radius:12px;
+        font-size:14px;
+        font-weight:800;
+        text-decoration:none;
+        box-shadow:0 10px 24px rgba(7,127,70,.17);
+      }
+
+      .landing-mobile-drawer-login:hover,
+      .landing-mobile-drawer-login:focus{
+        color:#fff !important;
+        background:var(--smh-green-dark);
+      }
+
+      /* Dark mode */
+      html.dark #navmenu .landing-mobile-login{
+        color:#075f38 !important;
+        background:#fff !important;
+        border-color:#fff !important;
+      }
+
+      html.dark #navmenu .landing-mobile-menu-button{
+        color:#fff;
+      }
+
+      html.dark #navmenu .landing-mobile-menu-button:hover,
+      html.dark #navmenu .landing-mobile-menu-button:focus{
+        color:#72dfa8;
+        background:rgba(255,255,255,.08);
+      }
+
+      html.dark .landing-mobile-drawer{
+        background:#111a16;
+        border-left-color:#293d33;
+        box-shadow:-24px 0 60px rgba(0,0,0,.40);
+      }
+
+      html.dark .landing-mobile-drawer-head{
+        border-bottom-color:#293d33;
+      }
+
+      html.dark .landing-mobile-drawer-kicker{
+        color:#91a49a;
+      }
+
+      html.dark .landing-mobile-drawer-head strong{
+        color:#e8f5ee;
+      }
+
+      html.dark .landing-mobile-drawer-close{
+        color:#e8f5ee;
+        background:#18271f;
+        border-color:#2c4538;
+      }
+
+      html.dark .landing-mobile-drawer-link,
+      html.dark .landing-mobile-theme-row{
+        color:#dcebe3 !important;
+      }
+
+      html.dark .landing-mobile-drawer-link i,
+      html.dark .landing-mobile-theme-row i{
+        color:#62dda0;
+      }
+
+      html.dark .landing-mobile-drawer-link:hover,
+      html.dark .landing-mobile-drawer-link:focus,
+      html.dark .landing-mobile-theme-row:hover,
+      html.dark .landing-mobile-theme-row:focus,
+      html.dark .landing-mobile-drawer-link.active{
+        color:#72dfa8 !important;
+        background:#18271f;
+      }
+    }
+
+    @media (max-width:575.98px){
+
+      #header .logo img{
+        width:44px !important;
+        height:44px !important;
+      }
+
+      #header .sitename{
+        max-width:155px;
+        font-size:15px !important;
+        line-height:1.1;
+      }
+
+      #navmenu .landing-mobile-login{
+        min-height:38px;
+        padding:7px 11px;
+        font-size:12px;
+      }
+
+      #navmenu .landing-mobile-menu-button{
+        width:38px;
+        height:38px;
+        flex-basis:38px;
+        font-size:27px;
+      }
+
+      .landing-mobile-drawer{
+        width:min(90vw,340px);
+        padding:18px;
+      }
+    }
+
+</style>
 </head>
 
 <body class="index-page">
@@ -2390,11 +2729,98 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             </a>
           </li>
         </ul>
-        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+
+        <!-- Mobile-only header Login button -->
+        <a
+          href="#"
+          class="landing-mobile-login d-xl-none"
+          data-bs-toggle="modal"
+          data-bs-target="#loginModal"
+        >
+          Log in
+        </a>
+
+        <!-- Independent mobile hamburger button -->
+        <button
+          type="button"
+          id="landingMobileMenuButton"
+          class="landing-mobile-menu-button d-xl-none"
+          aria-label="Open navigation menu"
+          aria-expanded="false"
+          aria-controls="landingMobileDrawer"
+        >
+          <i class="bi bi-list"></i>
+        </button>
       </nav>
 
     </div>
   </header>
+
+  <!-- Independent mobile navigation drawer -->
+  <div id="landingMobileOverlay" class="landing-mobile-overlay d-xl-none" aria-hidden="true"></div>
+
+  <aside
+    id="landingMobileDrawer"
+    class="landing-mobile-drawer d-xl-none"
+    aria-hidden="true"
+  >
+    <div class="landing-mobile-drawer-head">
+      <div>
+        <span class="landing-mobile-drawer-kicker">South Meridian Homes</span>
+        <strong>Menu</strong>
+      </div>
+
+      <button
+        type="button"
+        id="landingMobileMenuClose"
+        class="landing-mobile-drawer-close"
+        aria-label="Close navigation menu"
+      >
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <nav class="landing-mobile-drawer-nav" aria-label="Mobile navigation">
+      <a href="#hero" class="landing-mobile-drawer-link active">
+        <i class="bi bi-house-door"></i>
+        <span>Home</span>
+      </a>
+
+      <a href="#about" class="landing-mobile-drawer-link">
+        <i class="bi bi-info-circle"></i>
+        <span>About</span>
+      </a>
+
+      <a href="#features" class="landing-mobile-drawer-link">
+        <i class="bi bi-grid"></i>
+        <span>Features</span>
+      </a>
+
+      <a href="#download-app" class="landing-mobile-drawer-link">
+        <i class="bi bi-phone"></i>
+        <span>Download App</span>
+      </a>
+
+      <button
+        type="button"
+        id="landingMobileThemeToggle"
+        class="landing-mobile-drawer-link landing-mobile-theme-row"
+      >
+        <i id="landingMobileThemeIcon" class="bi bi-moon-stars-fill"></i>
+        <span id="landingMobileThemeText">Dark Mode</span>
+      </button>
+
+      <a
+        href="#"
+        class="landing-mobile-drawer-login"
+        data-bs-toggle="modal"
+        data-bs-target="#loginModal"
+      >
+        <i class="bi bi-box-arrow-in-right"></i>
+        <span>Log in</span>
+      </a>
+    </nav>
+  </aside>
 
 
   <!-- LOGIN MODAL -->
@@ -2953,6 +3379,146 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
   <script src="assets/js/main.js"></script>
 
+
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+
+    const body = document.body;
+    const menuButton = document.getElementById('landingMobileMenuButton');
+    const closeButton = document.getElementById('landingMobileMenuClose');
+    const overlay = document.getElementById('landingMobileOverlay');
+    const drawer = document.getElementById('landingMobileDrawer');
+    const drawerLinks = document.querySelectorAll('.landing-mobile-drawer-link');
+    const drawerLogin = document.querySelector('.landing-mobile-drawer-login');
+    const mobileThemeToggle = document.getElementById('landingMobileThemeToggle');
+    const mobileThemeIcon = document.getElementById('landingMobileThemeIcon');
+    const mobileThemeText = document.getElementById('landingMobileThemeText');
+
+    function isMenuOpen() {
+      return body.classList.contains('landing-mobile-menu-open');
+    }
+
+    function openMenu() {
+      body.classList.add('landing-mobile-menu-open');
+
+      if (menuButton) {
+        menuButton.setAttribute('aria-expanded', 'true');
+      }
+
+      if (drawer) {
+        drawer.setAttribute('aria-hidden', 'false');
+      }
+
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'false');
+      }
+    }
+
+    function closeMenu() {
+      body.classList.remove('landing-mobile-menu-open');
+
+      if (menuButton) {
+        menuButton.setAttribute('aria-expanded', 'false');
+      }
+
+      if (drawer) {
+        drawer.setAttribute('aria-hidden', 'true');
+      }
+
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function syncMobileTheme() {
+      const dark = document.documentElement.classList.contains('dark');
+
+      if (mobileThemeIcon) {
+        mobileThemeIcon.className = dark
+          ? 'bi bi-sun-fill'
+          : 'bi bi-moon-stars-fill';
+      }
+
+      if (mobileThemeText) {
+        mobileThemeText.textContent = dark
+          ? 'Light Mode'
+          : 'Dark Mode';
+      }
+    }
+
+    if (menuButton) {
+      menuButton.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (isMenuOpen()) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+    }
+
+    if (closeButton) {
+      closeButton.addEventListener('click', closeMenu);
+    }
+
+    if (overlay) {
+      overlay.addEventListener('click', closeMenu);
+    }
+
+    drawerLinks.forEach(function (link) {
+      link.addEventListener('click', closeMenu);
+    });
+
+    if (drawerLogin) {
+      drawerLogin.addEventListener('click', closeMenu);
+    }
+
+    if (mobileThemeToggle) {
+      mobileThemeToggle.addEventListener('click', function () {
+        const desktopThemeToggle = document.getElementById('landingThemeToggle');
+
+        if (desktopThemeToggle) {
+          desktopThemeToggle.click();
+        } else {
+          const root = document.documentElement;
+          const nextDark = !root.classList.contains('dark');
+          root.classList.toggle('dark', nextDark);
+
+          try {
+            localStorage.setItem('hoa-theme', nextDark ? 'dark' : 'light');
+          } catch (e) {}
+        }
+
+        syncMobileTheme();
+      });
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && isMenuOpen()) {
+        closeMenu();
+      }
+    });
+
+    window.addEventListener('resize', function () {
+      if (window.innerWidth >= 1200 && isMenuOpen()) {
+        closeMenu();
+      }
+    });
+
+    syncMobileTheme();
+
+    /* Re-sync after the desktop theme button changes the shared theme. */
+    const desktopThemeToggle = document.getElementById('landingThemeToggle');
+    if (desktopThemeToggle) {
+      desktopThemeToggle.addEventListener('click', function () {
+        window.setTimeout(syncMobileTheme, 0);
+      });
+    }
+  });
+  </script>
 
   <script>
   (function () {
