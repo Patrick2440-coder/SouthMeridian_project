@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 30, 2026 at 12:21 PM
+-- Generation Time: Oct 01, 2026 at 10:25 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -302,6 +302,37 @@ CREATE TABLE `announcement_recipients` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `cctv_saved_clips`
+--
+
+CREATE TABLE `cctv_saved_clips` (
+  `id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `camera_id` varchar(50) NOT NULL,
+  `camera_name` varchar(150) NOT NULL,
+  `camera_location` varchar(180) DEFAULT NULL,
+  `source_type` enum('youtube_reference','video_file') NOT NULL DEFAULT 'youtube_reference',
+  `source_video_id` varchar(60) DEFAULT NULL,
+  `clip_title` varchar(180) NOT NULL,
+  `notes` varchar(1000) DEFAULT NULL,
+  `start_seconds` decimal(10,3) NOT NULL,
+  `end_seconds` decimal(10,3) NOT NULL,
+  `duration_seconds` decimal(10,3) NOT NULL,
+  `file_path` varchar(500) DEFAULT NULL,
+  `recorded_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `cctv_saved_clips`
+--
+
+INSERT INTO `cctv_saved_clips` (`id`, `phase`, `camera_id`, `camera_name`, `camera_location`, `source_type`, `source_video_id`, `clip_title`, `notes`, `start_seconds`, `end_seconds`, `duration_seconds`, `file_path`, `recorded_by_admin_id`, `created_at`) VALUES
+(3, 'Phase 1', 'CAM-02', 'Phase Entrance', 'Phase 1 Entrance', 'youtube_reference', 'Far_aDIwAyw', 'Phase Entrance Clip - 10/1/2026, 4:16:59 PM', '', 1199066.350, 1199073.136, 6.786, NULL, 5, '2026-10-01 08:17:00');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `communication_calls`
 --
 
@@ -345,7 +376,7 @@ CREATE TABLE `complaints` (
 --
 
 INSERT INTO `complaints` (`id`, `homeowner_id`, `phase`, `admin_id`, `subject`, `category`, `description`, `status`, `priority`, `created_at`, `updated_at`) VALUES
-(1, 46, 'Phase 1', 2, 'May sunog', 'neighbor', 'May nasusunog!!', 'resolved', 'urgent', '2026-09-28 21:50:08', '2026-09-28 21:57:43');
+(18, 46, 'Phase 1', 2, 'awdadawd', 'security', 'awdad', 'open', 'urgent', '2026-09-30 17:14:06', '2026-09-30 17:14:06');
 
 -- --------------------------------------------------------
 
@@ -369,7 +400,7 @@ CREATE TABLE `complaint_attachments` (
 --
 
 INSERT INTO `complaint_attachments` (`id`, `complaint_id`, `file_path`, `original_name`, `mime_type`, `file_kind`, `file_size`, `created_at`) VALUES
-(1, 1, 'uploads/complaints/complaint_1_395be10a47065e866da3a53f.png', 'abs.png', 'image/png', 'image', 3015337, '2026-09-28 21:50:08');
+(18, 18, 'uploads/complaints/complaint_18_9bbfd97df887c77b03b37c54.png', 'bg.png', 'image/png', 'image', 2559995, '2026-09-30 17:14:06');
 
 -- --------------------------------------------------------
 
@@ -392,12 +423,7 @@ CREATE TABLE `complaint_messages` (
 --
 
 INSERT INTO `complaint_messages` (`id`, `complaint_id`, `sender_type`, `sender_homeowner_id`, `sender_admin_id`, `message`, `created_at`) VALUES
-(1, 1, 'homeowner', 46, NULL, 'May nasusunog!!', '2026-09-28 21:50:08'),
-(2, 1, 'admin', NULL, 2, 'comming', '2026-09-28 21:50:47'),
-(3, 1, 'admin', NULL, 2, 'Complaint status updated to CLOSED.', '2026-09-28 21:50:57'),
-(4, 1, 'admin', NULL, 2, 'Complaint status updated to RESOLVED.', '2026-09-28 21:51:11'),
-(5, 1, 'homeowner', 46, NULL, 'awdasda', '2026-09-28 21:51:35'),
-(6, 1, 'admin', NULL, 2, 'Complaint status updated to RESOLVED.', '2026-09-28 21:57:43');
+(23, 18, 'homeowner', 46, NULL, 'awdad', '2026-09-30 17:14:06');
 
 -- --------------------------------------------------------
 
@@ -501,6 +527,36 @@ CREATE TABLE `facility_rental_requests` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `finance_audit_logs`
+--
+
+CREATE TABLE `finance_audit_logs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `admin_id` int(11) DEFAULT NULL,
+  `phase` varchar(50) DEFAULT NULL,
+  `action` varchar(150) NOT NULL,
+  `entity_type` varchar(100) NOT NULL,
+  `entity_id` bigint(20) DEFAULT NULL,
+  `batch_id` varchar(64) DEFAULT NULL,
+  `details` varchar(1000) DEFAULT NULL,
+  `before_data` longtext DEFAULT NULL,
+  `after_data` longtext DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `finance_audit_logs`
+--
+
+INSERT INTO `finance_audit_logs` (`id`, `admin_id`, `phase`, `action`, `entity_type`, `entity_id`, `batch_id`, `details`, `before_data`, `after_data`, `ip_address`, `user_agent`, `created_at`) VALUES
+(1, 5, 'Phase 1', 'Monthly dues setting changed', 'finance_dues_setting', NULL, NULL, 'Monthly dues for Phase 1 changed from 0.00 to 200.00.', '{\"monthly_dues\":0}', '{\"monthly_dues\":200}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36', '2026-09-30 14:44:16'),
+(2, 5, 'Phase 1', 'Expense recorded', 'expense', 1, NULL, 'Documented finance expense recorded with required proof.', NULL, '{\"phase\":\"Phase 1\",\"category\":\"security\",\"detail_type\":\"general\",\"vendor_payee\":\"adwasdaw\",\"reference_no\":\"wasdawda\",\"payment_method\":\"gcash\",\"description\":\"awdasdawd\",\"notes\":\"\",\"amount\":2500,\"expense_date\":\"2026-09-30\",\"proof_path\":\"uploads/finance/receipts/b321c51ae40831c2df122e6d73b7a785.png\",\"proof_original_name\":\"bot.png\",\"items\":[]}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36', '2026-09-30 14:48:49');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `finance_donations`
 --
 
@@ -516,6 +572,49 @@ CREATE TABLE `finance_donations` (
   `message` varchar(255) DEFAULT NULL,
   `created_by_admin_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_dues_import_queue`
+--
+
+CREATE TABLE `finance_dues_import_queue` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `batch_id` varchar(64) NOT NULL,
+  `source_row` int(11) NOT NULL,
+  `source_filename` varchar(255) DEFAULT NULL,
+  `raw_row_data` longtext DEFAULT NULL,
+  `homeowner_name` varchar(255) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `block` varchar(50) NOT NULL,
+  `lot` varchar(50) NOT NULL,
+  `street_address` varchar(255) DEFAULT NULL,
+  `mobile_number` varchar(50) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `pay_year` int(11) NOT NULL,
+  `pay_month` tinyint(4) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `paid_at` datetime NOT NULL,
+  `reference_no` varchar(100) DEFAULT NULL,
+  `notes` varchar(255) DEFAULT NULL,
+  `source_reference` varchar(255) DEFAULT NULL,
+  `matched_homeowner_id` int(11) DEFAULT NULL,
+  `match_method` varchar(100) DEFAULT NULL,
+  `match_score` int(11) NOT NULL DEFAULT 0,
+  `match_note` varchar(255) DEFAULT NULL,
+  `existing_payment_id` int(11) DEFAULT NULL,
+  `finalized_payment_id` int(11) DEFAULT NULL,
+  `status` enum('ready','duplicate','conflict','unmatched','needs_review','finalized','skipped') NOT NULL DEFAULT 'unmatched',
+  `imported_by_admin_id` int(11) NOT NULL,
+  `imported_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `finalized_by_admin_id` int(11) DEFAULT NULL,
+  `finalized_at` datetime DEFAULT NULL,
+  `is_archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived_by_admin_id` int(11) DEFAULT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  `archive_reason` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -537,7 +636,7 @@ CREATE TABLE `finance_dues_settings` (
 --
 
 INSERT INTO `finance_dues_settings` (`id`, `phase`, `monthly_dues`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 'Phase 1', 0.00, 2, '2026-09-22 21:20:40'),
+(1, 'Phase 1', 200.00, 5, '2026-09-30 14:44:16'),
 (2, 'Phase 2', 0.00, 13, '2026-09-22 21:20:40'),
 (3, 'Phase 3', 0.00, 24, '2026-09-22 21:20:40');
 
@@ -551,11 +650,46 @@ CREATE TABLE `finance_expenses` (
   `id` int(11) NOT NULL,
   `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
   `category` enum('maintenance','security','utilities','other') NOT NULL DEFAULT 'other',
+  `detail_type` enum('general','tools_materials') NOT NULL DEFAULT 'general',
+  `vendor_payee` varchar(150) DEFAULT NULL,
+  `requested_by` varchar(150) DEFAULT NULL,
+  `project_name` varchar(180) DEFAULT NULL,
+  `reference_no` varchar(100) DEFAULT NULL,
+  `payment_method` enum('cash','gcash','bank_transfer','check','other') DEFAULT NULL,
   `description` varchar(255) NOT NULL,
+  `notes` text DEFAULT NULL,
   `amount` decimal(10,2) NOT NULL,
   `expense_date` date NOT NULL,
   `receipt_path` varchar(255) DEFAULT NULL,
+  `proof_original_name` varchar(255) DEFAULT NULL,
+  `proof_mime` varchar(100) DEFAULT NULL,
+  `proof_size_bytes` int(10) UNSIGNED DEFAULT NULL,
   `created_by_admin_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `finance_expenses`
+--
+
+INSERT INTO `finance_expenses` (`id`, `phase`, `category`, `detail_type`, `vendor_payee`, `requested_by`, `project_name`, `reference_no`, `payment_method`, `description`, `notes`, `amount`, `expense_date`, `receipt_path`, `proof_original_name`, `proof_mime`, `proof_size_bytes`, `created_by_admin_id`, `created_at`) VALUES
+(1, 'Phase 1', 'security', 'general', 'adwasdaw', NULL, NULL, 'wasdawda', 'gcash', 'awdasdawd', '', 2500.00, '2026-09-30', 'uploads/finance/receipts/b321c51ae40831c2df122e6d73b7a785.png', 'bot.png', 'image/png', 2898348, 5, '2026-09-30 14:48:49');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finance_expense_items`
+--
+
+CREATE TABLE `finance_expense_items` (
+  `id` int(11) NOT NULL,
+  `expense_id` int(11) NOT NULL,
+  `item_name` varchar(150) NOT NULL,
+  `quantity` decimal(10,2) NOT NULL DEFAULT 1.00,
+  `unit` varchar(30) NOT NULL DEFAULT 'pc',
+  `unit_cost` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `line_total` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `notes` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -637,8 +771,17 @@ CREATE TABLE `finance_paymongo_checkouts` (
 CREATE TABLE `finance_report_requests` (
   `id` int(11) NOT NULL,
   `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `report_type` varchar(40) NOT NULL DEFAULT 'full_summary',
+  `report_title` varchar(180) DEFAULT NULL,
   `report_year` int(11) NOT NULL,
   `report_month` tinyint(4) NOT NULL,
+  `date_from` date DEFAULT NULL,
+  `date_to` date DEFAULT NULL,
+  `target_type` varchar(40) DEFAULT NULL,
+  `target_id` int(11) DEFAULT NULL,
+  `project_name` varchar(180) DEFAULT NULL,
+  `request_purpose` varchar(500) DEFAULT NULL,
+  `scope_hash` char(64) DEFAULT NULL,
   `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   `requested_by_admin_id` int(11) DEFAULT NULL,
   `requested_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -1152,60 +1295,69 @@ CREATE TABLE `household_members` (
   `first_name` varchar(100) NOT NULL,
   `middle_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) NOT NULL,
-  `relation` enum('Homeowner','Spouse','Child','Parent','Relative','Tenant','Caretaker') NOT NULL
+  `relation` enum('Homeowner','Spouse','Child','Parent','Relative','Tenant','Caretaker') NOT NULL,
+  `relationship_detail` varchar(50) DEFAULT NULL,
+  `birth_date` date DEFAULT NULL,
+  `contact_number` varchar(20) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `address` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `household_members`
 --
 
-INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_name`, `last_name`, `relation`) VALUES
-(1, 1, 'Adrian', 'M.', 'Reyes', 'Homeowner'),
-(2, 2, 'Bianca', 'L.', 'Santos', 'Homeowner'),
-(3, 3, 'Carlo', 'D.', 'Mendoza', 'Homeowner'),
-(4, 4, 'Diana', 'P.', 'Cruz', 'Homeowner'),
-(5, 5, 'Ethan', 'R.', 'Flores', 'Homeowner'),
-(6, 6, 'Fiona', 'G.', 'Garcia', 'Homeowner'),
-(7, 7, 'Gabriel', 'T.', 'Navarro', 'Homeowner'),
-(8, 8, 'Hannah', 'C.', 'Lim', 'Homeowner'),
-(9, 9, 'Ivan', 'J.', 'Torres', 'Homeowner'),
-(10, 10, 'Julia', 'A.', 'Ramos', 'Homeowner'),
-(11, 11, 'Kevin', 'B.', 'Bautista', 'Homeowner'),
-(12, 12, 'Liam', 'C.', 'Domingo', 'Homeowner'),
-(13, 13, 'Mia', 'R.', 'Salazar', 'Homeowner'),
-(14, 14, 'Noah', 'P.', 'Evangelista', 'Homeowner'),
-(15, 15, 'Olivia', 'T.', 'Mercado', 'Homeowner'),
-(16, 16, 'Lara', 'S.', 'Villanueva', 'Homeowner'),
-(17, 17, 'Marco', 'V.', 'Aquino', 'Homeowner'),
-(18, 18, 'Nina', 'F.', 'Castillo', 'Homeowner'),
-(19, 19, 'Owen', 'M.', 'Pascual', 'Homeowner'),
-(20, 20, 'Paula', 'K.', 'Dizon', 'Homeowner'),
-(21, 21, 'Rafael', 'L.', 'Chua', 'Homeowner'),
-(22, 22, 'Sofia', 'D.', 'Valdez', 'Homeowner'),
-(23, 23, 'Tristan', 'R.', 'Lopez', 'Homeowner'),
-(24, 24, 'Ursula', 'P.', 'Tan', 'Homeowner'),
-(25, 25, 'Victor', 'N.', 'Ong', 'Homeowner'),
-(26, 26, 'Wendy', 'C.', 'Yu', 'Homeowner'),
-(27, 27, 'Peter', 'A.', 'Dominguez', 'Homeowner'),
-(28, 28, 'Queenie', 'L.', 'Sarmiento', 'Homeowner'),
-(29, 29, 'Ryan', 'M.', 'Andrada', 'Homeowner'),
-(30, 30, 'Sarah', 'D.', 'Manalo', 'Homeowner'),
-(31, 31, 'Xavier', 'A.', 'Delgado', 'Homeowner'),
-(32, 32, 'Yvonne', 'S.', 'Bautista', 'Homeowner'),
-(33, 33, 'Zachary', 'P.', 'Flores', 'Homeowner'),
-(34, 34, 'Angela', 'M.', 'Mercado', 'Homeowner'),
-(35, 35, 'Brandon', 'L.', 'Gomez', 'Homeowner'),
-(36, 36, 'Camille', 'A.', 'Sison', 'Homeowner'),
-(37, 37, 'Daniel', 'M.', 'Herrera', 'Homeowner'),
-(38, 38, 'Erica', 'G.', 'Pineda', 'Homeowner'),
-(39, 39, 'Francis', 'C.', 'Marquez', 'Homeowner'),
-(40, 40, 'Grace', 'R.', 'Velasco', 'Homeowner'),
-(41, 41, 'Henry', 'T.', 'Fernandez', 'Homeowner'),
-(42, 42, 'Theo', 'G.', 'Rosales', 'Homeowner'),
-(43, 43, 'Uma', 'P.', 'Serrano', 'Homeowner'),
-(44, 44, 'Vince', 'R.', 'Padilla', 'Homeowner'),
-(45, 45, 'Wella', 'M.', 'Alcantara', 'Homeowner'),
-(46, 46, 'Erick', 'Alva', 'Rez', 'Relative');
+INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_name`, `last_name`, `relation`, `relationship_detail`, `birth_date`, `contact_number`, `email`, `address`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 1, 'Adrian', 'M.', 'Reyes', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(2, 2, 'Bianca', 'L.', 'Santos', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(3, 3, 'Carlo', 'D.', 'Mendoza', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(4, 4, 'Diana', 'P.', 'Cruz', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(5, 5, 'Ethan', 'R.', 'Flores', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(6, 6, 'Fiona', 'G.', 'Garcia', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(7, 7, 'Gabriel', 'T.', 'Navarro', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(8, 8, 'Hannah', 'C.', 'Lim', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(9, 9, 'Ivan', 'J.', 'Torres', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(10, 10, 'Julia', 'A.', 'Ramos', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(11, 11, 'Kevin', 'B.', 'Bautista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(12, 12, 'Liam', 'C.', 'Domingo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(13, 13, 'Mia', 'R.', 'Salazar', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(14, 14, 'Noah', 'P.', 'Evangelista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(15, 15, 'Olivia', 'T.', 'Mercado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(16, 16, 'Lara', 'S.', 'Villanueva', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(17, 17, 'Marco', 'V.', 'Aquino', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(18, 18, 'Nina', 'F.', 'Castillo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(19, 19, 'Owen', 'M.', 'Pascual', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(20, 20, 'Paula', 'K.', 'Dizon', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(21, 21, 'Rafael', 'L.', 'Chua', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(22, 22, 'Sofia', 'D.', 'Valdez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(23, 23, 'Tristan', 'R.', 'Lopez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(24, 24, 'Ursula', 'P.', 'Tan', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(25, 25, 'Victor', 'N.', 'Ong', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(26, 26, 'Wendy', 'C.', 'Yu', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(27, 27, 'Peter', 'A.', 'Dominguez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(28, 28, 'Queenie', 'L.', 'Sarmiento', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(29, 29, 'Ryan', 'M.', 'Andrada', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(30, 30, 'Sarah', 'D.', 'Manalo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(31, 31, 'Xavier', 'A.', 'Delgado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(32, 32, 'Yvonne', 'S.', 'Bautista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(33, 33, 'Zachary', 'P.', 'Flores', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(34, 34, 'Angela', 'M.', 'Mercado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(35, 35, 'Brandon', 'L.', 'Gomez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(36, 36, 'Camille', 'A.', 'Sison', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(37, 37, 'Daniel', 'M.', 'Herrera', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(38, 38, 'Erica', 'G.', 'Pineda', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(39, 39, 'Francis', 'C.', 'Marquez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(40, 40, 'Grace', 'R.', 'Velasco', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(41, 41, 'Henry', 'T.', 'Fernandez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(42, 42, 'Theo', 'G.', 'Rosales', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(43, 43, 'Uma', 'P.', 'Serrano', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(44, 44, 'Vince', 'R.', 'Padilla', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(45, 45, 'Wella', 'M.', 'Alcantara', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(46, 46, 'Erick', 'Alva', 'Rez', 'Relative', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
+(47, 46, 'Janna', 'Marcos', 'Eroles', 'Relative', 'Father', '2003-11-24', '09916963390', 'janna@gmail.com', 'hahahaha', 'eto na to', '2026-09-30 10:55:03', '2026-09-30 10:55:03');
 
 -- --------------------------------------------------------
 
@@ -1259,7 +1411,8 @@ CREATE TABLE `login_security_state` (
 
 INSERT INTO `login_security_state` (`id`, `account_type`, `account_id`, `email`, `phase`, `failed_attempts`, `cooldown_stage`, `cooldown_until`, `hard_locked`, `hard_locked_at`, `last_failed_at`, `last_failed_ip`, `last_user_agent`, `unlocked_at`, `unlocked_by_admin_id`, `created_at`, `updated_at`) VALUES
 (1, 'admin', 2, 'p1.president@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:22:29', '2026-09-25 17:33:01'),
-(7, 'homeowner', 46, 'baculpopatrick2440@gmail.com', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:34:04', '2026-09-29 05:15:46');
+(7, 'homeowner', 46, 'baculpopatrick2440@gmail.com', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:34:04', '2026-09-29 05:15:46'),
+(38, 'admin', 5, 'p1.treasurer@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 21:42:13', '2026-09-30 21:42:13');
 
 -- --------------------------------------------------------
 
@@ -1540,6 +1693,15 @@ ALTER TABLE `announcement_recipients`
   ADD KEY `idx_ar_type` (`recipient_type`);
 
 --
+-- Indexes for table `cctv_saved_clips`
+--
+ALTER TABLE `cctv_saved_clips`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_cctv_clips_phase_created` (`phase`,`created_at`),
+  ADD KEY `idx_cctv_clips_camera` (`phase`,`camera_id`,`created_at`),
+  ADD KEY `idx_cctv_clips_admin` (`recorded_by_admin_id`);
+
+--
 -- Indexes for table `communication_calls`
 --
 ALTER TABLE `communication_calls`
@@ -1621,6 +1783,16 @@ ALTER TABLE `facility_rental_requests`
   ADD KEY `idx_approved_lookup` (`phase`,`facility`,`status`,`start_dt`,`end_dt`);
 
 --
+-- Indexes for table `finance_audit_logs`
+--
+ALTER TABLE `finance_audit_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_finance_audit_phase_created` (`phase`,`created_at`),
+  ADD KEY `idx_finance_audit_entity` (`entity_type`,`entity_id`),
+  ADD KEY `idx_finance_audit_admin` (`admin_id`),
+  ADD KEY `idx_finance_audit_batch` (`batch_id`);
+
+--
 -- Indexes for table `finance_donations`
 --
 ALTER TABLE `finance_donations`
@@ -1628,6 +1800,17 @@ ALTER TABLE `finance_donations`
   ADD KEY `idx_phase_date` (`phase`,`donation_date`),
   ADD KEY `fk_don_admin` (`created_by_admin_id`),
   ADD KEY `idx_finance_donations_homeowner` (`homeowner_id`);
+
+--
+-- Indexes for table `finance_dues_import_queue`
+--
+ALTER TABLE `finance_dues_import_queue`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_finance_dues_import_batch_row` (`batch_id`,`source_row`),
+  ADD KEY `idx_finance_dues_import_phase_status` (`phase`,`status`),
+  ADD KEY `idx_finance_dues_import_homeowner` (`matched_homeowner_id`),
+  ADD KEY `idx_finance_dues_import_period` (`phase`,`pay_year`,`pay_month`),
+  ADD KEY `idx_finance_dues_import_batch` (`batch_id`);
 
 --
 -- Indexes for table `finance_dues_settings`
@@ -1643,7 +1826,15 @@ ALTER TABLE `finance_dues_settings`
 ALTER TABLE `finance_expenses`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_phase_date` (`phase`,`expense_date`),
-  ADD KEY `fk_exp_admin` (`created_by_admin_id`);
+  ADD KEY `fk_exp_admin` (`created_by_admin_id`),
+  ADD KEY `idx_fin_exp_project` (`phase`,`project_name`,`expense_date`);
+
+--
+-- Indexes for table `finance_expense_items`
+--
+ALTER TABLE `finance_expense_items`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_finance_expense_items_expense` (`expense_id`);
 
 --
 -- Indexes for table `finance_opening_balance`
@@ -1676,16 +1867,17 @@ ALTER TABLE `finance_paymongo_checkouts`
 --
 ALTER TABLE `finance_report_requests`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uniq_phase_month` (`phase`,`report_year`,`report_month`),
-  ADD KEY `fk_rep_admin` (`requested_by_admin_id`);
+  ADD KEY `fk_rep_admin` (`requested_by_admin_id`),
+  ADD KEY `idx_fin_report_phase_status` (`phase`,`status`),
+  ADD KEY `idx_fin_report_type` (`phase`,`report_type`),
+  ADD KEY `idx_fin_report_scope_hash` (`phase`,`scope_hash`,`status`);
 
 --
 -- Indexes for table `finance_report_snapshots`
 --
 ALTER TABLE `finance_report_snapshots`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uniq_finance_snapshot_request` (`report_request_id`),
-  ADD UNIQUE KEY `uniq_finance_snapshot_period` (`phase`,`report_year`,`report_month`);
+  ADD UNIQUE KEY `uniq_finance_snapshot_request` (`report_request_id`);
 
 --
 -- Indexes for table `hoa_officers`
@@ -1786,7 +1978,8 @@ ALTER TABLE `homeowner_private_messages`
 -- Indexes for table `household_members`
 --
 ALTER TABLE `household_members`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_household_members_homeowner` (`homeowner_id`);
 
 --
 -- Indexes for table `login_security_appeals`
@@ -1939,6 +2132,12 @@ ALTER TABLE `announcement_recipients`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `cctv_saved_clips`
+--
+ALTER TABLE `cctv_saved_clips`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
 -- AUTO_INCREMENT for table `communication_calls`
 --
 ALTER TABLE `communication_calls`
@@ -1948,19 +2147,19 @@ ALTER TABLE `communication_calls`
 -- AUTO_INCREMENT for table `complaints`
 --
 ALTER TABLE `complaints`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `complaint_attachments`
 --
 ALTER TABLE `complaint_attachments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `complaint_messages`
 --
 ALTER TABLE `complaint_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- AUTO_INCREMENT for table `election_nominations`
@@ -1993,21 +2192,39 @@ ALTER TABLE `facility_rental_requests`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `finance_audit_logs`
+--
+ALTER TABLE `finance_audit_logs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
 -- AUTO_INCREMENT for table `finance_donations`
 --
 ALTER TABLE `finance_donations`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `finance_dues_import_queue`
+--
+ALTER TABLE `finance_dues_import_queue`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `finance_dues_settings`
 --
 ALTER TABLE `finance_dues_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `finance_expenses`
 --
 ALTER TABLE `finance_expenses`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `finance_expense_items`
+--
+ALTER TABLE `finance_expense_items`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -2104,7 +2321,7 @@ ALTER TABLE `homeowner_private_messages`
 -- AUTO_INCREMENT for table `household_members`
 --
 ALTER TABLE `household_members`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=47;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=48;
 
 --
 -- AUTO_INCREMENT for table `login_security_appeals`
@@ -2116,7 +2333,7 @@ ALTER TABLE `login_security_appeals`
 -- AUTO_INCREMENT for table `login_security_state`
 --
 ALTER TABLE `login_security_state`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
 
 --
 -- AUTO_INCREMENT for table `parking_paymongo_checkouts`
@@ -2271,6 +2488,12 @@ ALTER TABLE `finance_dues_settings`
 --
 ALTER TABLE `finance_expenses`
   ADD CONSTRAINT `fk_exp_admin` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admins` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `finance_expense_items`
+--
+ALTER TABLE `finance_expense_items`
+  ADD CONSTRAINT `fk_finance_expense_items_expense` FOREIGN KEY (`expense_id`) REFERENCES `finance_expenses` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `finance_opening_balance`
