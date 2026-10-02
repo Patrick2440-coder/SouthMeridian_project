@@ -1,3 +1,33 @@
+-- ============================================================
+-- SOUTH MERIDIAN HOMES HOA
+-- FRESH START DATABASE
+-- Baseline: user's current database exported October 2, 2026
+--
+-- Preserved:
+--   * Current schema, indexes, triggers and foreign keys
+--   * Access module / permission configuration
+--   * Facility rental pricing defaults
+--   * Clean zero-value finance configuration
+--   * Superadmin account ONLY
+--
+-- Cleared:
+--   * Homeowners / tenants / HOA officers
+--   * Admin/officer accounts other than Superadmin
+--   * Complaints, chats, calls, announcements
+--   * Finance transactions/import queues/audit logs
+--   * Parking, facility requests, CCTV clips
+--   * Voting/election data and voting requests
+--   * Login-security states and appeals
+--   * Realtime/test/activity data
+--
+-- Added from latest other-window SQL:
+--   * voting_request_candidates
+--
+-- IMPORTANT:
+-- Import this into a SEPARATE fresh/defense database.
+-- Do not overwrite the development database unless intentionally resetting it.
+-- ============================================================
+
 -- phpMyAdmin SQL Dump
 -- version 5.2.1
 -- https://www.phpmyadmin.net/
@@ -157,11 +187,7 @@ CREATE TABLE `activity_logs` (
 -- Dumping data for table `activity_logs`
 --
 
-INSERT INTO `activity_logs` (`id`, `admin_id`, `phase`, `action`, `module_key`, `details`, `ip_address`, `created_at`) VALUES
-(1, 2, 'Phase 1', 'Excel import processed', 'homeowner_management', '4 resident(s) added for review; 1 duplicate-account record(s); 4 possible ownership transfer(s); 0 row(s) skipped.', '::1', '2026-09-30 05:33:40'),
-(2, 2, 'Phase 1', 'Ownership transfer verification started', 'homeowner_management', 'Transfer #1: Phase 1, Block 1, Lot 1. Current homeowner: Adrian M. Reyes. Incoming homeowner: Sofia M Lim. Verification email(s) sent.', '::1', '2026-09-30 06:04:04'),
-(3, 1, 'Phase 1', 'Officer account issued', 'user_management', 'homeowner_id=1; admin_id=2; position=President; shared_login_email=p1.president@hoa.local', '::1', '2026-10-02 03:53:42'),
-(4, 1, 'Phase 1', 'Officer account issued', 'user_management', 'homeowner_id=1; admin_id=2; position=President; shared_login_email=p1.president@hoa.local', '::1', '2026-10-02 03:53:56');
+-- Fresh start: data intentionally cleared from `activity_logs`.
 
 -- --------------------------------------------------------
 
@@ -190,41 +216,10 @@ CREATE TABLE `admins` (
 -- Dumping data for table `admins`
 --
 
-INSERT INTO `admins` (`id`, `homeowner_id`, `email`, `full_name`, `password`, `phase`, `role`, `position`, `account_enabled`, `account_issued_at`, `account_issued_by_admin_id`, `must_change_password`, `password_setup_token`, `password_setup_expires`) VALUES
-(1, NULL, 'superadmin@gmail.com', 'System Superadmin', '12345678', 'Superadmin', 'superadmin', 'Superadmin', 0, NULL, NULL, 0, NULL, NULL),
-(2, 1, 'p1.president@hoa.local', 'Adrian M. Reyes', '12345678', 'Phase 1', 'admin', 'President', 1, '2026-10-02 11:53:56', 1, 1, '8ba05c1857be840ebc5d7ff69dfa60e7d70dbaaac7ecb16713a8beb850fd3175', NULL),
-(3, 2, 'p1.vicepresident@hoa.local', 'Bianca L. Santos', '12345678', 'Phase 1', 'admin', 'Vice President', 0, NULL, NULL, 0, NULL, NULL),
-(4, 3, 'p1.secretary@hoa.local', 'Carlo D. Mendoza', '12345678', 'Phase 1', 'admin', 'Secretary', 0, NULL, NULL, 0, NULL, NULL),
-(5, 4, 'p1.treasurer@hoa.local', 'Diana P. Cruz', '12345678', 'Phase 1', 'admin', 'Treasurer', 0, NULL, NULL, 0, NULL, NULL),
-(6, 5, 'p1.auditor@hoa.local', 'Ethan R. Flores', '12345678', 'Phase 1', 'admin', 'Auditor', 0, NULL, NULL, 0, NULL, NULL),
-(7, 6, 'p1.board1@hoa.local', 'Fiona G. Garcia', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(8, 7, 'p1.board2@hoa.local', 'Gabriel T. Navarro', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(9, 8, 'p1.board3@hoa.local', 'Hannah C. Lim', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(10, 9, 'p1.board4@hoa.local', 'Ivan J. Torres', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(11, 10, 'p1.board5@hoa.local', 'Julia A. Ramos', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(12, 11, 'p1.board6@hoa.local', 'Kevin B. Bautista', '12345678', 'Phase 1', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(13, 16, 'p2.president@hoa.local', 'Lara S. Villanueva', '12345678', 'Phase 2', 'admin', 'President', 0, NULL, NULL, 0, NULL, NULL),
-(14, 17, 'p2.vicepresident@hoa.local', 'Marco V. Aquino', '12345678', 'Phase 2', 'admin', 'Vice President', 0, NULL, NULL, 0, NULL, NULL),
-(15, 18, 'p2.secretary@hoa.local', 'Nina F. Castillo', '12345678', 'Phase 2', 'admin', 'Secretary', 0, NULL, NULL, 0, NULL, NULL),
-(16, 19, 'p2.treasurer@hoa.local', 'Owen M. Pascual', '12345678', 'Phase 2', 'admin', 'Treasurer', 0, NULL, NULL, 0, NULL, NULL),
-(17, 20, 'p2.auditor@hoa.local', 'Paula K. Dizon', '12345678', 'Phase 2', 'admin', 'Auditor', 0, NULL, NULL, 0, NULL, NULL),
-(18, 21, 'p2.board1@hoa.local', 'Rafael L. Chua', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(19, 22, 'p2.board2@hoa.local', 'Sofia D. Valdez', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(20, 23, 'p2.board3@hoa.local', 'Tristan R. Lopez', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(21, 24, 'p2.board4@hoa.local', 'Ursula P. Tan', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(22, 25, 'p2.board5@hoa.local', 'Victor N. Ong', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(23, 26, 'p2.board6@hoa.local', 'Wendy C. Yu', '12345678', 'Phase 2', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(24, 31, 'p3.president@hoa.local', 'Xavier A. Delgado', '12345678', 'Phase 3', 'admin', 'President', 0, NULL, NULL, 0, NULL, NULL),
-(25, 32, 'p3.vicepresident@hoa.local', 'Yvonne S. Bautista', '12345678', 'Phase 3', 'admin', 'Vice President', 0, NULL, NULL, 0, NULL, NULL),
-(26, 33, 'p3.secretary@hoa.local', 'Zachary P. Flores', '12345678', 'Phase 3', 'admin', 'Secretary', 0, NULL, NULL, 0, NULL, NULL),
-(27, 34, 'p3.treasurer@hoa.local', 'Angela M. Mercado', '12345678', 'Phase 3', 'admin', 'Treasurer', 0, NULL, NULL, 0, NULL, NULL),
-(28, 35, 'p3.auditor@hoa.local', 'Brandon L. Gomez', '12345678', 'Phase 3', 'admin', 'Auditor', 0, NULL, NULL, 0, NULL, NULL),
-(29, 36, 'p3.board1@hoa.local', 'Camille A. Sison', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(30, 37, 'p3.board2@hoa.local', 'Daniel M. Herrera', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(31, 38, 'p3.board3@hoa.local', 'Erica G. Pineda', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(32, 39, 'p3.board4@hoa.local', 'Francis C. Marquez', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(33, 40, 'p3.board5@hoa.local', 'Grace R. Velasco', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL),
-(34, 41, 'p3.board6@hoa.local', 'Henry T. Fernandez', '12345678', 'Phase 3', 'admin', 'Board of Director', 0, NULL, NULL, 0, NULL, NULL);
+INSERT INTO `admins`
+(`id`, `homeowner_id`, `email`, `full_name`, `password`, `phase`, `role`, `position`, `account_enabled`, `account_issued_at`, `account_issued_by_admin_id`, `must_change_password`, `password_setup_token`, `password_setup_expires`)
+VALUES
+(1, NULL, 'superadmin@gmail.com', 'System Superadmin', '12345678', 'Superadmin', 'superadmin', 'Superadmin', 0, NULL, NULL, 0, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -371,8 +366,7 @@ CREATE TABLE `cctv_saved_clips` (
 -- Dumping data for table `cctv_saved_clips`
 --
 
-INSERT INTO `cctv_saved_clips` (`id`, `phase`, `camera_id`, `camera_name`, `camera_location`, `source_type`, `source_video_id`, `clip_title`, `notes`, `start_seconds`, `end_seconds`, `duration_seconds`, `file_path`, `recorded_by_admin_id`, `created_at`) VALUES
-(3, 'Phase 1', 'CAM-02', 'Phase Entrance', 'Phase 1 Entrance', 'youtube_reference', 'Far_aDIwAyw', 'Phase Entrance Clip - 10/1/2026, 4:16:59 PM', '', 1199066.350, 1199073.136, 6.786, NULL, 5, '2026-10-01 08:17:00');
+-- Fresh start: data intentionally cleared from `cctv_saved_clips`.
 
 -- --------------------------------------------------------
 
@@ -419,8 +413,7 @@ CREATE TABLE `complaints` (
 -- Dumping data for table `complaints`
 --
 
-INSERT INTO `complaints` (`id`, `homeowner_id`, `phase`, `admin_id`, `subject`, `category`, `description`, `status`, `priority`, `created_at`, `updated_at`) VALUES
-(18, 46, 'Phase 1', 2, 'awdadawd', 'security', 'awdad', 'resolved', 'urgent', '2026-09-30 17:14:06', '2026-10-02 07:09:39');
+-- Fresh start: data intentionally cleared from `complaints`.
 
 --
 -- Triggers `complaints`
@@ -513,8 +506,7 @@ CREATE TABLE `complaint_attachments` (
 -- Dumping data for table `complaint_attachments`
 --
 
-INSERT INTO `complaint_attachments` (`id`, `complaint_id`, `file_path`, `original_name`, `mime_type`, `file_kind`, `file_size`, `created_at`) VALUES
-(18, 18, 'uploads/complaints/complaint_18_9bbfd97df887c77b03b37c54.png', 'bg.png', 'image/png', 'image', 2559995, '2026-09-30 17:14:06');
+-- Fresh start: data intentionally cleared from `complaint_attachments`.
 
 -- --------------------------------------------------------
 
@@ -536,10 +528,7 @@ CREATE TABLE `complaint_messages` (
 -- Dumping data for table `complaint_messages`
 --
 
-INSERT INTO `complaint_messages` (`id`, `complaint_id`, `sender_type`, `sender_homeowner_id`, `sender_admin_id`, `message`, `created_at`) VALUES
-(23, 18, 'homeowner', 46, NULL, 'awdad', '2026-09-30 17:14:06'),
-(24, 18, 'admin', NULL, 2, 'awdadaw', '2026-10-02 07:09:29'),
-(25, 18, 'admin', NULL, 2, 'Complaint status updated to RESOLVED.', '2026-10-02 07:09:39');
+-- Fresh start: data intentionally cleared from `complaint_messages`.
 
 --
 -- Triggers `complaint_messages`
@@ -763,9 +752,7 @@ CREATE TABLE `finance_audit_logs` (
 -- Dumping data for table `finance_audit_logs`
 --
 
-INSERT INTO `finance_audit_logs` (`id`, `admin_id`, `phase`, `action`, `entity_type`, `entity_id`, `batch_id`, `details`, `before_data`, `after_data`, `ip_address`, `user_agent`, `created_at`) VALUES
-(1, 5, 'Phase 1', 'Monthly dues setting changed', 'finance_dues_setting', NULL, NULL, 'Monthly dues for Phase 1 changed from 0.00 to 200.00.', '{\"monthly_dues\":0}', '{\"monthly_dues\":200}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36', '2026-09-30 14:44:16'),
-(2, 5, 'Phase 1', 'Expense recorded', 'expense', 1, NULL, 'Documented finance expense recorded with required proof.', NULL, '{\"phase\":\"Phase 1\",\"category\":\"security\",\"detail_type\":\"general\",\"vendor_payee\":\"adwasdaw\",\"reference_no\":\"wasdawda\",\"payment_method\":\"gcash\",\"description\":\"awdasdawd\",\"notes\":\"\",\"amount\":2500,\"expense_date\":\"2026-09-30\",\"proof_path\":\"uploads/finance/receipts/b321c51ae40831c2df122e6d73b7a785.png\",\"proof_original_name\":\"bot.png\",\"items\":[]}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36', '2026-09-30 14:48:49');
+-- Fresh start: data intentionally cleared from `finance_audit_logs`.
 
 -- --------------------------------------------------------
 
@@ -869,10 +856,12 @@ CREATE TABLE `finance_dues_settings` (
 -- Dumping data for table `finance_dues_settings`
 --
 
-INSERT INTO `finance_dues_settings` (`id`, `phase`, `monthly_dues`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 'Phase 1', 200.00, 5, '2026-09-30 14:44:16'),
-(2, 'Phase 2', 0.00, 13, '2026-09-22 21:20:40'),
-(3, 'Phase 3', 0.00, 24, '2026-09-22 21:20:40');
+INSERT INTO `finance_dues_settings`
+(`id`, `phase`, `monthly_dues`, `updated_by_admin_id`, `updated_at`)
+VALUES
+(1, 'Phase 1', 0.00, NULL, CURRENT_TIMESTAMP),
+(2, 'Phase 2', 0.00, NULL, CURRENT_TIMESTAMP),
+(3, 'Phase 3', 0.00, NULL, CURRENT_TIMESTAMP);
 
 -- --------------------------------------------------------
 
@@ -906,8 +895,7 @@ CREATE TABLE `finance_expenses` (
 -- Dumping data for table `finance_expenses`
 --
 
-INSERT INTO `finance_expenses` (`id`, `phase`, `category`, `detail_type`, `vendor_payee`, `requested_by`, `project_name`, `reference_no`, `payment_method`, `description`, `notes`, `amount`, `expense_date`, `receipt_path`, `proof_original_name`, `proof_mime`, `proof_size_bytes`, `created_by_admin_id`, `created_at`) VALUES
-(1, 'Phase 1', 'security', 'general', 'adwasdaw', NULL, NULL, 'wasdawda', 'gcash', 'awdasdawd', '', 2500.00, '2026-09-30', 'uploads/finance/receipts/b321c51ae40831c2df122e6d73b7a785.png', 'bot.png', 'image/png', 2898348, 5, '2026-09-30 14:48:49');
+-- Fresh start: data intentionally cleared from `finance_expenses`.
 
 -- --------------------------------------------------------
 
@@ -946,10 +934,12 @@ CREATE TABLE `finance_opening_balance` (
 -- Dumping data for table `finance_opening_balance`
 --
 
-INSERT INTO `finance_opening_balance` (`id`, `phase`, `opening_balance`, `as_of`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 'Phase 1', 0.00, '2026-09-23', 2, '2026-09-22 21:20:40'),
-(2, 'Phase 2', 0.00, '2026-09-23', 13, '2026-09-22 21:20:40'),
-(3, 'Phase 3', 0.00, '2026-09-23', 24, '2026-09-22 21:20:40');
+INSERT INTO `finance_opening_balance`
+(`id`, `phase`, `opening_balance`, `as_of`, `updated_by_admin_id`, `updated_at`)
+VALUES
+(1, 'Phase 1', 0.00, CURRENT_DATE, NULL, CURRENT_TIMESTAMP),
+(2, 'Phase 2', 0.00, CURRENT_DATE, NULL, CURRENT_TIMESTAMP),
+(3, 'Phase 3', 0.00, CURRENT_DATE, NULL, CURRENT_TIMESTAMP);
 
 -- --------------------------------------------------------
 
@@ -998,7 +988,7 @@ CREATE TRIGGER `trg_rt_finance_payment_ai` AFTER INSERT ON `finance_payments` FO
                 'payment_id', NEW.id,
                 'homeowner_id', NEW.homeowner_id,
                 'pay_year', NEW.pay_year,
-                'pay_month', NEW.pay_month,
+'pay_month', NEW.pay_month,
                 'amount', NEW.amount,
                 'reference_no', NEW.reference_no
             )
@@ -1195,40 +1185,7 @@ CREATE TABLE `hoa_officers` (
 -- Dumping data for table `hoa_officers`
 --
 
-INSERT INTO `hoa_officers` (`id`, `homeowner_id`, `phase`, `position`, `officer_name`, `officer_email`, `is_active`, `updated_at`) VALUES
-(1, 1, 'Phase 1', 'President', 'Adrian M. Reyes', 'p1.president@hoa.local', 1, '2026-10-02 02:19:45'),
-(2, 2, 'Phase 1', 'Vice President', 'Bianca L. Santos', 'p1.vicepresident@hoa.local', 1, '2026-10-02 02:19:45'),
-(3, 3, 'Phase 1', 'Secretary', 'Carlo D. Mendoza', 'p1.secretary@hoa.local', 1, '2026-10-02 02:19:45'),
-(4, 4, 'Phase 1', 'Treasurer', 'Diana P. Cruz', 'p1.treasurer@hoa.local', 1, '2026-10-02 02:19:45'),
-(5, 5, 'Phase 1', 'Auditor', 'Ethan R. Flores', 'p1.auditor@hoa.local', 1, '2026-10-02 02:19:45'),
-(6, 6, 'Phase 1', 'Board of Director', 'Fiona G. Garcia', 'p1.board1@hoa.local', 1, '2026-10-02 02:19:45'),
-(7, 7, 'Phase 1', 'Board of Director', 'Gabriel T. Navarro', 'p1.board2@hoa.local', 1, '2026-10-02 02:19:45'),
-(8, 8, 'Phase 1', 'Board of Director', 'Hannah C. Lim', 'p1.board3@hoa.local', 1, '2026-10-02 02:19:45'),
-(9, 9, 'Phase 1', 'Board of Director', 'Ivan J. Torres', 'p1.board4@hoa.local', 1, '2026-10-02 02:19:45'),
-(10, 10, 'Phase 1', 'Board of Director', 'Julia A. Ramos', 'p1.board5@hoa.local', 1, '2026-10-02 02:19:45'),
-(11, 11, 'Phase 1', 'Board of Director', 'Kevin B. Bautista', 'p1.board6@hoa.local', 1, '2026-10-02 02:19:45'),
-(12, 16, 'Phase 2', 'President', 'Lara S. Villanueva', 'p2.president@hoa.local', 1, '2026-10-02 02:19:45'),
-(13, 17, 'Phase 2', 'Vice President', 'Marco V. Aquino', 'p2.vicepresident@hoa.local', 1, '2026-10-02 02:19:45'),
-(14, 18, 'Phase 2', 'Secretary', 'Nina F. Castillo', 'p2.secretary@hoa.local', 1, '2026-10-02 02:19:45'),
-(15, 19, 'Phase 2', 'Treasurer', 'Owen M. Pascual', 'p2.treasurer@hoa.local', 1, '2026-10-02 02:19:45'),
-(16, 20, 'Phase 2', 'Auditor', 'Paula K. Dizon', 'p2.auditor@hoa.local', 1, '2026-10-02 02:19:45'),
-(17, 21, 'Phase 2', 'Board of Director', 'Rafael L. Chua', 'p2.board1@hoa.local', 1, '2026-10-02 02:19:45'),
-(18, 22, 'Phase 2', 'Board of Director', 'Sofia D. Valdez', 'p2.board2@hoa.local', 1, '2026-10-02 02:19:45'),
-(19, 23, 'Phase 2', 'Board of Director', 'Tristan R. Lopez', 'p2.board3@hoa.local', 1, '2026-10-02 02:19:45'),
-(20, 24, 'Phase 2', 'Board of Director', 'Ursula P. Tan', 'p2.board4@hoa.local', 1, '2026-10-02 02:19:45'),
-(21, 25, 'Phase 2', 'Board of Director', 'Victor N. Ong', 'p2.board5@hoa.local', 1, '2026-10-02 02:19:45'),
-(22, 26, 'Phase 2', 'Board of Director', 'Wendy C. Yu', 'p2.board6@hoa.local', 1, '2026-10-02 02:19:45'),
-(23, 31, 'Phase 3', 'President', 'Xavier A. Delgado', 'p3.president@hoa.local', 1, '2026-10-02 02:19:45'),
-(24, 32, 'Phase 3', 'Vice President', 'Yvonne S. Bautista', 'p3.vicepresident@hoa.local', 1, '2026-10-02 02:19:45'),
-(25, 33, 'Phase 3', 'Secretary', 'Zachary P. Flores', 'p3.secretary@hoa.local', 1, '2026-10-02 02:19:45'),
-(26, 34, 'Phase 3', 'Treasurer', 'Angela M. Mercado', 'p3.treasurer@hoa.local', 1, '2026-10-02 02:19:45'),
-(27, 35, 'Phase 3', 'Auditor', 'Brandon L. Gomez', 'p3.auditor@hoa.local', 1, '2026-10-02 02:19:45'),
-(28, 36, 'Phase 3', 'Board of Director', 'Camille A. Sison', 'p3.board1@hoa.local', 1, '2026-10-02 02:19:45'),
-(29, 37, 'Phase 3', 'Board of Director', 'Daniel M. Herrera', 'p3.board2@hoa.local', 1, '2026-10-02 02:19:45'),
-(30, 38, 'Phase 3', 'Board of Director', 'Erica G. Pineda', 'p3.board3@hoa.local', 1, '2026-10-02 02:19:45'),
-(31, 39, 'Phase 3', 'Board of Director', 'Francis C. Marquez', 'p3.board4@hoa.local', 1, '2026-10-02 02:19:45'),
-(32, 40, 'Phase 3', 'Board of Director', 'Grace R. Velasco', 'p3.board5@hoa.local', 1, '2026-10-02 02:19:45'),
-(33, 41, 'Phase 3', 'Board of Director', 'Henry T. Fernandez', 'p3.board6@hoa.local', 1, '2026-10-02 02:19:45');
+-- Fresh start: data intentionally cleared from `hoa_officers`.
 
 -- --------------------------------------------------------
 
@@ -1281,62 +1238,7 @@ CREATE TABLE `homeowners` (
 -- Dumping data for table `homeowners`
 --
 
-INSERT INTO `homeowners` (`id`, `public_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `password`, `must_change_password`, `phase`, `house_lot_number`, `block`, `lot`, `street`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `exact_location`, `valid_id_path`, `proof_of_billing_path`, `profile_picture_path`, `latitude`, `longitude`, `map_x`, `map_y`, `status`, `admin_id`, `created_at`, `reset_token`, `reset_expires`) VALUES
-(1, 'P1H001', 'Adrian', 'M.', 'Reyes', '09171000001', 'p1.president@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 1 Lot 1', '1', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000001', 'Block 1, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(2, 'P1H002', 'Bianca', 'L.', 'Santos', '09171000002', 'p1.vicepresident@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 1 Lot 2', '1', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000002', 'Block 1, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(3, 'P1H003', 'Carlo', 'D.', 'Mendoza', '09171000003', 'p1.secretary@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 1 Lot 3', '1', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000003', 'Block 1, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(4, 'P1H004', 'Diana', 'P.', 'Cruz', '09171000004', 'p1.treasurer@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 2 Lot 1', '2', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000004', 'Block 2, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(5, 'P1H005', 'Ethan', 'R.', 'Flores', '09171000005', 'p1.auditor@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 2 Lot 2', '2', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000005', 'Block 2, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(6, 'P1H006', 'Fiona', 'G.', 'Garcia', '09171000006', 'p1.board1@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 2 Lot 3', '2', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000006', 'Block 2, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(7, 'P1H007', 'Gabriel', 'T.', 'Navarro', '09171000007', 'p1.board2@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 3 Lot 1', '3', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000007', 'Block 3, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(8, 'P1H008', 'Hannah', 'C.', 'Lim', '09171000008', 'p1.board3@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 3 Lot 2', '3', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000008', 'Block 3, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(9, 'P1H009', 'Ivan', 'J.', 'Torres', '09171000009', 'p1.board4@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 3 Lot 3', '3', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000009', 'Block 3, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(10, 'P1H010', 'Julia', 'A.', 'Ramos', '09171000010', 'p1.board5@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 4 Lot 1', '4', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000010', 'Block 4, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(11, 'P1H011', 'Kevin', 'B.', 'Bautista', '09171000011', 'p1.board6@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 4 Lot 2', '4', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000011', 'Block 4, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(12, 'P1H012', 'Liam', 'C.', 'Domingo', '09171000012', 'p1.homeowner12@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 4 Lot 3', '4', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000012', 'Block 4, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(13, 'P1H013', 'Mia', 'R.', 'Salazar', '09171000013', 'p1.homeowner13@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 5 Lot 1', '5', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000013', 'Block 5, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(14, 'P1H014', 'Noah', 'P.', 'Evangelista', '09171000014', 'p1.homeowner14@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 5 Lot 2', '5', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000014', 'Block 5, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(15, 'P1H015', 'Olivia', 'T.', 'Mercado', '09171000015', 'p1.homeowner15@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 1', 'Block 5 Lot 3', '5', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09181000015', 'Block 5, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 2, '2026-09-22 21:20:40', NULL, NULL),
-(16, 'P2H016', 'Lara', 'S.', 'Villanueva', '09172000001', 'p2.president@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 6 Lot 1', '6', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000001', 'Block 6, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(17, 'P2H017', 'Marco', 'V.', 'Aquino', '09172000002', 'p2.vicepresident@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 6 Lot 2', '6', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000002', 'Block 6, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(18, 'P2H018', 'Nina', 'F.', 'Castillo', '09172000003', 'p2.secretary@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 6 Lot 3', '6', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000003', 'Block 6, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(19, 'P2H019', 'Owen', 'M.', 'Pascual', '09172000004', 'p2.treasurer@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 7 Lot 1', '7', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000004', 'Block 7, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(20, 'P2H020', 'Paula', 'K.', 'Dizon', '09172000005', 'p2.auditor@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 7 Lot 2', '7', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000005', 'Block 7, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(21, 'P2H021', 'Rafael', 'L.', 'Chua', '09172000006', 'p2.board1@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 7 Lot 3', '7', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000006', 'Block 7, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(22, 'P2H022', 'Sofia', 'D.', 'Valdez', '09172000007', 'p2.board2@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 8 Lot 1', '8', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000007', 'Block 8, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(23, 'P2H023', 'Tristan', 'R.', 'Lopez', '09172000008', 'p2.board3@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 8 Lot 2', '8', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000008', 'Block 8, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(24, 'P2H024', 'Ursula', 'P.', 'Tan', '09172000009', 'p2.board4@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 8 Lot 3', '8', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000009', 'Block 8, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(25, 'P2H025', 'Victor', 'N.', 'Ong', '09172000010', 'p2.board5@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 9 Lot 1', '9', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000010', 'Block 9, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(26, 'P2H026', 'Wendy', 'C.', 'Yu', '09172000011', 'p2.board6@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 9 Lot 2', '9', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000011', 'Block 9, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(27, 'P2H027', 'Peter', 'A.', 'Dominguez', '09172000012', 'p2.homeowner12@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 9 Lot 3', '9', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000012', 'Block 9, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(28, 'P2H028', 'Queenie', 'L.', 'Sarmiento', '09172000013', 'p2.homeowner13@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 10 Lot 1', '10', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000013', 'Block 10, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(29, 'P2H029', 'Ryan', 'M.', 'Andrada', '09172000014', 'p2.homeowner14@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 10 Lot 2', '10', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000014', 'Block 10, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(30, 'P2H030', 'Sarah', 'D.', 'Manalo', '09172000015', 'p2.homeowner15@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 2', 'Block 10 Lot 3', '10', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09182000015', 'Block 10, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 13, '2026-09-22 21:20:40', NULL, NULL),
-(31, 'P3H031', 'Xavier', 'A.', 'Delgado', '09173000001', 'p3.president@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 11 Lot 1', '11', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000001', 'Block 11, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(32, 'P3H032', 'Yvonne', 'S.', 'Bautista', '09173000002', 'p3.vicepresident@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 11 Lot 2', '11', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000002', 'Block 11, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(33, 'P3H033', 'Zachary', 'P.', 'Flores', '09173000003', 'p3.secretary@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 11 Lot 3', '11', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000003', 'Block 11, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(34, 'P3H034', 'Angela', 'M.', 'Mercado', '09173000004', 'p3.treasurer@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 12 Lot 1', '12', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000004', 'Block 12, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(35, 'P3H035', 'Brandon', 'L.', 'Gomez', '09173000005', 'p3.auditor@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 12 Lot 2', '12', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000005', 'Block 12, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(36, 'P3H036', 'Camille', 'A.', 'Sison', '09173000006', 'p3.board1@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 12 Lot 3', '12', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000006', 'Block 12, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(37, 'P3H037', 'Daniel', 'M.', 'Herrera', '09173000007', 'p3.board2@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 13 Lot 1', '13', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000007', 'Block 13, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(38, 'P3H038', 'Erica', 'G.', 'Pineda', '09173000008', 'p3.board3@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 13 Lot 2', '13', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000008', 'Block 13, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(39, 'P3H039', 'Francis', 'C.', 'Marquez', '09173000009', 'p3.board4@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 13 Lot 3', '13', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000009', 'Block 13, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(40, 'P3H040', 'Grace', 'R.', 'Velasco', '09173000010', 'p3.board5@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 14 Lot 1', '14', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000010', 'Block 14, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(41, 'P3H041', 'Henry', 'T.', 'Fernandez', '09173000011', 'p3.board6@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 14 Lot 2', '14', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000011', 'Block 14, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(42, 'P3H042', 'Theo', 'G.', 'Rosales', '09173000012', 'p3.homeowner12@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 14 Lot 3', '14', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000012', 'Block 14, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(43, 'P3H043', 'Uma', 'P.', 'Serrano', '09173000013', 'p3.homeowner13@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 1', '15', '1', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000013', 'Block 15, Lot 1', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(44, 'P3H044', 'Vince', 'R.', 'Padilla', '09173000014', 'p3.homeowner14@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 2', '15', '2', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000014', 'Block 15, Lot 2', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(45, 'P3H045', 'Wella', 'M.', 'Alcantara', '09173000015', 'p3.homeowner15@hoa.local', '$2y$12$FvEM4JetPahr/U.yzajMuOVSHydVMKPGGHayE0w1J99aXsIgHC85q', 0, 'Phase 3', 'Block 15 Lot 3', '15', '3', NULL, 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', '', '1 year', 'Owner', 'Emergency Contact', '09183000015', 'Block 15, Lot 3', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, NULL, NULL, 'approved', 24, '2026-09-22 21:20:40', NULL, NULL),
-(46, 'P1H046', 'Patrick', 'Justin', 'Baculpo', '09916963390', 'baculpopatrick2440@gmail.com', '$2y$10$.33ysOnY0ACh1RV4SB6Ur.eSOVSvOGpLBt8rH4JnW32zGB2MrWv.W', 0, 'Phase 1', 'Block 9 Lot 4', '9', '4', 'Horizon Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', NULL, NULL, 'Owner', NULL, NULL, NULL, 'uploads/homeowner_documents/homeowner_46_valid_id_20261002_100653_2648800c57.png', 'uploads/a5a3ff1819e4a040ae2c57338ccd4da7_proof.jpg', NULL, NULL, NULL, 1732, 1768, 'approved', 2, '2026-09-22 21:32:56', NULL, NULL),
-(47, 'P1H047', 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', '$2y$10$ElEdyBOnSEuA50kYfMtqw.TB4fVtz06GPDdkeVmzkznmJD/KrZsq6', 1, 'Phase 1', 'Block 1 Lot 1', '1', '1', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near main gate', '5 years', 'Owner', 'Ana Dela Cruz', '09180000001', 'Block 1, Lot 1, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 2134, 3189, 'approved', 2, '2026-09-28 21:55:28', '52d36e2434a8029ac4fffcc93dc91098f0e9c6fe9076533fe57c21a9012ab293', '2026-09-29 01:14:19'),
-(48, 'P1H048', 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', '$2y$10$NvcbJBPczmr8iGrIwmSW/uazaXwx/Q9jPqlvVe2ipAtQVcWlWzmDC', 1, 'Phase 1', 'Block 1 Lot 2', '1', '2', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near clubhouse', '8 years', 'Owner', 'Pedro Garcia', '09180000002', 'Block 1, Lot 2, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1976, 3147, 'approved', 2, '2026-09-28 21:55:28', '1680a52012065c8907288f03942d2bf26bd7a2499e51098625874cae3c06e64c', '2026-09-29 01:14:23'),
-(49, 'P1H049', 'Carlo', 'Mendoza', 'Santos', '09170000003', 'phase1.test03@example.com', '$2y$10$v0gfEGxGSWIR7c6YXjfJ3um6uQJ4nMNtTVhfAwx9R32mUdmlqtJNC', 1, 'Phase 1', 'Block 1 Lot 3', '1', '3', 'Meridian Ave.', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Corner property', '3 years', 'Owner', 'Liza Santos', '09180000003', 'Block 1, Lot 3, Meridian Ave.', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 2104, 3140, 'approved', 2, '2026-09-28 21:55:28', '87f2b0b5dea24415d364e828a910b97287b42ebeb9330e71f15c108344bc46d8', '2026-09-29 01:14:27'),
-(50, 'P1H050', 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', '$2y$10$s1KaSuODvBcCXkr5znIZpe8woUw7Hz4cQ8j7F3DQSW.Ujz9ftwUiW', 1, 'Phase 1', 'Block 2 Lot 1', '2', '1', 'Gulf Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near basketball court', '10 years', 'Owner', 'Ramon Reyes', '09180000004', 'Block 2, Lot 1, Gulf Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1677, 3036, 'approved', 2, '2026-09-28 21:55:28', '19f580d56e87979e737ff82c681e5b799d3965b5bf4d4bf94108669e3a4bf32b', '2026-09-29 01:14:32'),
-(51, 'P1H051', 'Miguel', 'Ramos', 'Flores', '09170000005', 'phase1.test05@example.com', '$2y$10$Kj0F62aqh0hO13fjvojmx.Qmge9BD5KPPJNNE3WJsDbS77RpVX1wS', 1, 'Phase 1', 'Block 2 Lot 2', '2', '2', 'Equator Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near subdivision park', '6 years', 'Owner', 'Elena Flores', '09180000005', 'Block 2, Lot 2, Equator Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 1786, 3135, 'approved', 2, '2026-09-28 21:55:28', '1d797973ff73cb9fbcb997bd5670404ae1b3ea6dac3af491959766cf5fce0631', '2026-09-29 01:14:37'),
-(52, 'P1H052', 'Noel', 'P', 'Garcia', '09171111001', 'p1.normal01@example.com', '$2y$10$dSkQTmRKrNa4d7tQW6XCku80BrrHmv8UehxMg8kq1bpltyUfZvoLG', 1, 'Phase 1', 'Block 16 Lot 21', '16', '21', 'Africa Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 1 - NORMAL NEW HOMEOWNER: unique email + vacant property; expected normal For Review.', '2 years', 'Owner', 'Rosa Garcia', '09182221001', 'Block 16, Lot 21, Africa Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 573, 584, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
-(53, 'P1H053', 'Mark', 'A', 'Santos', '09171111005', 'p1.same-name-new-property@example.com', '$2y$10$YDyQe0m7RMo4RlhBI0A8cuoEt4qrTJ9.kPx3tN9M/Yjp2bLUX3j5W', 1, 'Phase 1', 'Block 16 Lot 23', '16', '23', 'Germany Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 5 - SAME NAME ONLY: different email/property; expected normal under current duplicate/property logic.', '1 year', 'Owner', 'Liza Santos', '09182221005', 'Block 16, Lot 23, Germany Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 484, 601, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
-(54, 'P1H054', 'Paolo', 'J', 'Mendoza', '09170000001', 'p1.same-contact@example.com', '$2y$10$IAKWtk6qTm6/eUfj15LH6ejCfLpOFbhoGmFFpv5JGcr6wiohq6ad6', 1, 'Phase 1', 'Block 16 Lot 25', '16', '25', 'Africa Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 6 - SAME CONTACT ONLY: different email/property; expected normal under current email/property logic.', '3 years', 'Owner', 'Ana Mendoza', '09182221006', 'Block 16, Lot 25, Africa Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 549, 518, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL),
-(55, 'P1H055', 'Luis', 'K', 'Ramos', '09171111007', 'p1.batchduplicate@example.com', '$2y$10$y43Nu.oVtlsVI3iX0c5P7.gZXma5/hgUvH0T9RpdyKrk5X69k59eS', 1, 'Phase 1', 'Block 16 Lot 27', '16', '27', 'Hungary Street', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 7A - FIRST ROW OF SAME-FILE EMAIL DUPLICATE TEST: expected normal if property is vacant.', '2 years', 'Owner', 'Mila Ramos', '09182221007', 'Block 16, Lot 27, Hungary Street', 'imports/not_provided', 'imports/not_provided', NULL, NULL, NULL, 719, 344, 'pending', 2, '2026-09-30 05:33:40', NULL, NULL);
+-- Fresh start: data intentionally cleared from `homeowners`.
 
 --
 -- Triggers `homeowners`
@@ -1522,8 +1424,7 @@ CREATE TABLE `homeowner_feed_state` (
 -- Dumping data for table `homeowner_feed_state`
 --
 
-INSERT INTO `homeowner_feed_state` (`homeowner_id`, `last_ann_seen`, `last_comment_seen`, `created_at`, `updated_at`) VALUES
-(46, '2026-09-23 05:34:04', '2026-09-23 05:34:04', '2026-09-22 21:34:04', '2026-09-22 21:34:04');
+-- Fresh start: data intentionally cleared from `homeowner_feed_state`.
 
 -- --------------------------------------------------------
 
@@ -1554,10 +1455,7 @@ CREATE TABLE `homeowner_import_archive` (
 -- Dumping data for table `homeowner_import_archive`
 --
 
-INSERT INTO `homeowner_import_archive` (`id`, `source_queue_id`, `existing_homeowner_id`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `phase`, `block`, `lot`, `street`, `residential_type`, `existing_email`, `archived_by_admin_id`, `archived_at`) VALUES
-(1, 4, 50, 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', 'Phase 1', 2, 1, '0', 'Owner', 'phase1.test04@example.com', 2, '2026-09-28 22:13:30'),
-(2, 1, 47, 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', 'Phase 1', 1, 1, '0', 'Owner', 'phase1.test01@example.com', 2, '2026-09-30 03:53:02'),
-(3, 2, 48, 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', 'Phase 1', 1, 2, '0', 'Owner', 'phase1.test02@example.com', 2, '2026-09-30 03:54:20');
+-- Fresh start: data intentionally cleared from `homeowner_import_archive`.
 
 -- --------------------------------------------------------
 
@@ -1604,17 +1502,7 @@ CREATE TABLE `homeowner_import_queue` (
 -- Dumping data for table `homeowner_import_queue`
 --
 
-INSERT INTO `homeowner_import_queue` (`id`, `source_row`, `first_name`, `middle_name`, `last_name`, `contact_number`, `email`, `phase`, `block`, `lot`, `street`, `map_x`, `map_y`, `house_lot_number`, `barangay`, `city_municipality`, `province`, `region`, `zip_code`, `country`, `other_location_info`, `exact_location`, `length_of_residency`, `residential_type`, `emergency_contact_person`, `emergency_contact_number`, `status`, `duplicate_homeowner_id`, `approved_homeowner_id`, `imported_by`, `created_at`, `approved_at`) VALUES
-(1, 2, 'Juan', 'Santos', 'Dela Cruz', '09170000001', 'phase1.test01@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near main gate', 'Block 1, Lot 1, Meridian Ave.', '5 years', 'Owner', 'Ana Dela Cruz', '09180000001', 'duplicate', 47, NULL, 2, '2026-09-28 22:13:10', NULL),
-(2, 3, 'Maria', 'Reyes', 'Garcia', '09170000002', 'phase1.test02@example.com', 'Phase 1', '1', '2', 'Meridian Ave.', 1976, 3147, 'Block 1 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near clubhouse', 'Block 1, Lot 2, Meridian Ave.', '8 years', 'Owner', 'Pedro Garcia', '09180000002', 'duplicate', 48, NULL, 2, '2026-09-28 22:13:10', NULL),
-(3, 4, 'Carlo', 'Mendoza', 'Santos', '09170000003', 'phase1.test03@example.com', 'Phase 1', '1', '3', 'Meridian Ave.', 2104, 3140, 'Block 1 Lot 3', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Corner property', 'Block 1, Lot 3, Meridian Ave.', '3 years', 'Owner', 'Liza Santos', '09180000003', 'duplicate', 49, NULL, 2, '2026-09-28 22:13:10', NULL),
-(4, 5, 'Angela', 'Torres', 'Reyes', '09170000004', 'phase1.test04@example.com', 'Phase 1', '2', '1', 'Gulf Street', 1677, 3036, 'Block 2 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near basketball court', 'Block 2, Lot 1, Gulf Street', '10 years', 'Owner', 'Ramon Reyes', '09180000004', 'duplicate', 50, NULL, 2, '2026-09-28 22:13:10', NULL),
-(5, 6, 'Miguel', 'Ramos', 'Flores', '09170000005', 'phase1.test05@example.com', 'Phase 1', '2', '2', 'Equator Street', 1786, 3135, 'Block 2 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'Near subdivision park', 'Block 2, Lot 2, Equator Street', '6 years', 'Owner', 'Elena Flores', '09180000005', 'duplicate', 51, NULL, 2, '2026-09-28 22:13:10', NULL),
-(6, 3, 'Mark', 'A', 'Santos', '09170000001', 'p1_mark.santos@hoa.local', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 2 - EXACT EMAIL DUPLICATE: expected normal duplicate review/archive flow.', 'Block 1, Lot 1, Meridian Ave.', '7 years', 'Owner', 'Maria Santos', '09182221002', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL),
-(7, 4, 'Sofia', 'M', 'Lim', '09171111003', 'p1.transfer.mark@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 3 - POSSIBLE OWNERSHIP TRANSFER: different person/email but Block 1 Lot 1 already has an active owner.', 'Block 1, Lot 1, Meridian Ave.', '1 month', 'Owner', 'Roberto Lim', '09182221003', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL),
-(8, 5, 'Daniel', 'R', 'Cruz', '09171111004', 'p1.transfer.anne@example.com', 'Phase 1', '1', '2', 'Meridian Ave.', 1976, 3147, 'Block 1 Lot 2', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 4 - POSSIBLE OWNERSHIP TRANSFER: different person/email but Block 1 Lot 2 already has an active owner.', 'Block 1, Lot 2, Meridian Ave.', '1 month', 'Owner', 'Elena Cruz', '09182221004', 'duplicate', 2, NULL, 2, '2026-09-30 05:33:40', NULL),
-(9, 9, 'Loren', 'Q', 'Ramos', '09171111008', 'p1.batchduplicate@example.com', 'Phase 1', '16', '29', 'Hungary Street', 668, 363, 'Block 16 Lot 29', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 7B - SECOND ROW WITH SAME EMAIL IN SAME IMPORT: expected duplicate.', 'Block 16, Lot 29, Hungary Street', '2 years', 'Owner', 'Nora Ramos', '09182221008', 'duplicate', 55, NULL, 2, '2026-09-30 05:33:40', NULL),
-(10, 10, 'Mark', 'A', 'Santos', '09171111012', 'p1.mark-new-email@example.com', 'Phase 1', '1', '1', 'Meridian Ave.', 2134, 3189, 'Block 1 Lot 1', 'Salitran IV', 'Dasmarinas City', 'Cavite', 'CALABARZON', '4114', 'Philippines', 'CASE 8 - SAME PERSON/PROPERTY BUT DIFFERENT EMAIL: expected property conflict/manual review; do not blindly transfer ownership.', 'Block 1, Lot 1, Meridian Ave.', '7 years', 'Owner', 'Maria Santos', '09182221012', 'duplicate', 1, NULL, 2, '2026-09-30 05:33:40', NULL);
+-- Fresh start: data intentionally cleared from `homeowner_import_queue`.
 
 -- --------------------------------------------------------
 
@@ -1713,8 +1601,7 @@ CREATE TABLE `homeowner_ownership_transfers` (
 -- Dumping data for table `homeowner_ownership_transfers`
 --
 
-INSERT INTO `homeowner_ownership_transfers` (`id`, `source_type`, `source_queue_id`, `source_homeowner_id`, `previous_homeowner_id`, `new_homeowner_id`, `phase`, `block`, `lot`, `old_email`, `new_email`, `old_token_hash`, `new_token_hash`, `token_expires_at`, `old_confirmation`, `new_confirmation`, `status`, `old_confirmed_at`, `new_confirmed_at`, `old_manual_verified_by_admin_id`, `old_manual_verified_at`, `documents_verified`, `verification_method`, `admin_notes`, `initiated_by_admin_id`, `initiated_at`, `completed_by_admin_id`, `completed_at`) VALUES
-(1, 'import_queue', 7, NULL, 1, NULL, 'Phase 1', '1', '1', 'p1.president@hoa.local', 'p1.transfer.mark@example.com', '9883f068c137189f908f710622764760212095e8dd5a69ca977db1cfd8a91d4f', '798c9031f12096a365fb3648a95f3fe82a25e166effe632792d042b9717fb835', '2026-10-02 08:03:53', 'pending', 'pending', 'awaiting_confirmation', NULL, NULL, NULL, NULL, 0, NULL, NULL, 2, '2026-09-30 06:03:53', NULL, NULL);
+-- Fresh start: data intentionally cleared from `homeowner_ownership_transfers`.
 
 -- --------------------------------------------------------
 
@@ -1735,52 +1622,7 @@ CREATE TABLE `homeowner_positions` (
 -- Dumping data for table `homeowner_positions`
 --
 
-INSERT INTO `homeowner_positions` (`id`, `homeowner_id`, `phase`, `position`, `updated_by_admin_id`, `updated_at`) VALUES
-(1, 1, 'Phase 1', 'President', 2, '2026-10-02 03:52:54'),
-(2, 2, 'Phase 1', 'Vice President', 2, '2026-10-02 03:52:54'),
-(3, 3, 'Phase 1', 'Secretary', 2, '2026-10-02 03:52:54'),
-(4, 4, 'Phase 1', 'Treasurer', 2, '2026-10-02 03:52:54'),
-(5, 5, 'Phase 1', 'Auditor', 2, '2026-10-02 03:52:54'),
-(6, 6, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(7, 7, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(8, 8, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(9, 9, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(10, 10, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(11, 11, 'Phase 1', 'Board of Director', 2, '2026-10-02 03:52:54'),
-(12, 12, 'Phase 1', 'Homeowner', 2, '2026-09-22 21:20:40'),
-(13, 13, 'Phase 1', 'Homeowner', 2, '2026-09-22 21:20:40'),
-(14, 14, 'Phase 1', 'Homeowner', 2, '2026-09-22 21:20:40'),
-(15, 15, 'Phase 1', 'Homeowner', 2, '2026-09-22 21:20:40'),
-(16, 16, 'Phase 2', 'President', 13, '2026-10-02 03:52:54'),
-(17, 17, 'Phase 2', 'Vice President', 13, '2026-10-02 03:52:54'),
-(18, 18, 'Phase 2', 'Secretary', 13, '2026-10-02 03:52:54'),
-(19, 19, 'Phase 2', 'Treasurer', 13, '2026-10-02 03:52:54'),
-(20, 20, 'Phase 2', 'Auditor', 13, '2026-10-02 03:52:54'),
-(21, 21, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(22, 22, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(23, 23, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(24, 24, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(25, 25, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(26, 26, 'Phase 2', 'Board of Director', 13, '2026-10-02 03:52:54'),
-(27, 27, 'Phase 2', 'Homeowner', 13, '2026-09-22 21:20:40'),
-(28, 28, 'Phase 2', 'Homeowner', 13, '2026-09-22 21:20:40'),
-(29, 29, 'Phase 2', 'Homeowner', 13, '2026-09-22 21:20:40'),
-(30, 30, 'Phase 2', 'Homeowner', 13, '2026-09-22 21:20:40'),
-(31, 31, 'Phase 3', 'President', 24, '2026-10-02 03:52:54'),
-(32, 32, 'Phase 3', 'Vice President', 24, '2026-10-02 03:52:54'),
-(33, 33, 'Phase 3', 'Secretary', 24, '2026-10-02 03:52:54'),
-(34, 34, 'Phase 3', 'Treasurer', 24, '2026-10-02 03:52:54'),
-(35, 35, 'Phase 3', 'Auditor', 24, '2026-10-02 03:52:54'),
-(36, 36, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(37, 37, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(38, 38, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(39, 39, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(40, 40, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(41, 41, 'Phase 3', 'Board of Director', 24, '2026-10-02 03:52:54'),
-(42, 42, 'Phase 3', 'Homeowner', 24, '2026-09-22 21:20:40'),
-(43, 43, 'Phase 3', 'Homeowner', 24, '2026-09-22 21:20:40'),
-(44, 44, 'Phase 3', 'Homeowner', 24, '2026-09-22 21:20:40'),
-(45, 45, 'Phase 3', 'Homeowner', 24, '2026-09-22 21:20:40');
+-- Fresh start: data intentionally cleared from `homeowner_positions`.
 
 -- --------------------------------------------------------
 
@@ -1827,54 +1669,7 @@ CREATE TABLE `household_members` (
 -- Dumping data for table `household_members`
 --
 
-INSERT INTO `household_members` (`id`, `homeowner_id`, `first_name`, `middle_name`, `last_name`, `relation`, `relationship_detail`, `birth_date`, `contact_number`, `email`, `address`, `notes`, `created_at`, `updated_at`) VALUES
-(1, 1, 'Adrian', 'M.', 'Reyes', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(2, 2, 'Bianca', 'L.', 'Santos', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(3, 3, 'Carlo', 'D.', 'Mendoza', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(4, 4, 'Diana', 'P.', 'Cruz', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(5, 5, 'Ethan', 'R.', 'Flores', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(6, 6, 'Fiona', 'G.', 'Garcia', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(7, 7, 'Gabriel', 'T.', 'Navarro', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(8, 8, 'Hannah', 'C.', 'Lim', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(9, 9, 'Ivan', 'J.', 'Torres', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(10, 10, 'Julia', 'A.', 'Ramos', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(11, 11, 'Kevin', 'B.', 'Bautista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(12, 12, 'Liam', 'C.', 'Domingo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(13, 13, 'Mia', 'R.', 'Salazar', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(14, 14, 'Noah', 'P.', 'Evangelista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(15, 15, 'Olivia', 'T.', 'Mercado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(16, 16, 'Lara', 'S.', 'Villanueva', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(17, 17, 'Marco', 'V.', 'Aquino', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(18, 18, 'Nina', 'F.', 'Castillo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(19, 19, 'Owen', 'M.', 'Pascual', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(20, 20, 'Paula', 'K.', 'Dizon', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(21, 21, 'Rafael', 'L.', 'Chua', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(22, 22, 'Sofia', 'D.', 'Valdez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(23, 23, 'Tristan', 'R.', 'Lopez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(24, 24, 'Ursula', 'P.', 'Tan', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(25, 25, 'Victor', 'N.', 'Ong', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(26, 26, 'Wendy', 'C.', 'Yu', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(27, 27, 'Peter', 'A.', 'Dominguez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(28, 28, 'Queenie', 'L.', 'Sarmiento', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(29, 29, 'Ryan', 'M.', 'Andrada', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(30, 30, 'Sarah', 'D.', 'Manalo', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(31, 31, 'Xavier', 'A.', 'Delgado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(32, 32, 'Yvonne', 'S.', 'Bautista', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(33, 33, 'Zachary', 'P.', 'Flores', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(34, 34, 'Angela', 'M.', 'Mercado', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(35, 35, 'Brandon', 'L.', 'Gomez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(36, 36, 'Camille', 'A.', 'Sison', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(37, 37, 'Daniel', 'M.', 'Herrera', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(38, 38, 'Erica', 'G.', 'Pineda', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(39, 39, 'Francis', 'C.', 'Marquez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(40, 40, 'Grace', 'R.', 'Velasco', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(41, 41, 'Henry', 'T.', 'Fernandez', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(42, 42, 'Theo', 'G.', 'Rosales', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(43, 43, 'Uma', 'P.', 'Serrano', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(44, 44, 'Vince', 'R.', 'Padilla', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(45, 45, 'Wella', 'M.', 'Alcantara', 'Homeowner', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(46, 46, 'Erick', 'Alva', 'Rez', 'Relative', NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 10:42:56', '2026-09-30 10:42:56'),
-(47, 46, 'Janna', 'Marcos', 'Eroles', 'Relative', 'Father', '2003-11-24', '09916963390', 'janna@gmail.com', 'hahahaha', 'eto na to', '2026-09-30 10:55:03', '2026-09-30 10:55:03');
+-- Fresh start: data intentionally cleared from `household_members`.
 
 -- --------------------------------------------------------
 
@@ -1900,11 +1695,7 @@ CREATE TABLE `login_security_appeals` (
 -- Dumping data for table `login_security_appeals`
 --
 
-INSERT INTO `login_security_appeals` (`id`, `security_state_id`, `token_hash`, `status`, `appeal_message`, `created_at`, `email_sent_at`, `requested_at`, `reviewed_at`, `reviewed_by_admin_id`, `admin_remarks`) VALUES
-(1, 128, '6e857c555a4d5a6c2296913ee21a337455939ce1621f68492067262c93b451a6', 'approved', 'wasdawdaawdasdawadsdawda', '2026-10-02 17:19:22', '2026-10-02 17:19:26', '2026-10-02 17:21:49', '2026-10-02 17:26:06', 2, 'wasdaw'),
-(2, 128, '0f65fdc9230958d85ac546050ccc883fd224c77d9ec06937dbd2213441903604', 'approved', 'wasdawdasdawdadadadasdawd', '2026-10-02 17:33:55', '2026-10-02 17:33:59', '2026-10-02 17:34:14', '2026-10-02 17:34:41', 2, ''),
-(3, 128, '81f7c5e48838d3c310e183f76ff06865845abfc88124acfca853f4afccea37b0', 'approved', 'asdawdaawdasdaw', '2026-10-02 17:38:53', '2026-10-02 17:38:56', '2026-10-02 17:39:05', '2026-10-02 17:39:40', 2, ''),
-(4, 128, 'afec2af94bb075f3b4365a5afbd274a0937888f4b5d732e772485833f84eb98e', 'approved', 'awdasdawdad', '2026-10-02 17:45:33', '2026-10-02 17:45:38', '2026-10-02 17:45:48', '2026-10-02 17:46:04', 2, '');
+-- Fresh start: data intentionally cleared from `login_security_appeals`.
 
 --
 -- Triggers `login_security_appeals`
@@ -1998,15 +1789,7 @@ CREATE TABLE `login_security_state` (
 --
 -- Dumping data for table `login_security_state`
 --
-
-INSERT INTO `login_security_state` (`id`, `account_type`, `account_id`, `email`, `phase`, `failed_attempts`, `cooldown_stage`, `cooldown_until`, `hard_locked`, `hard_locked_at`, `last_failed_at`, `last_failed_ip`, `last_user_agent`, `unlocked_at`, `unlocked_by_admin_id`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 2, 'p1.president@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-23 05:22:29', '2026-10-02 12:52:12'),
-(38, 'admin', 5, 'p1.treasurer@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-09-30 21:42:13', '2026-09-30 21:42:13'),
-(56, 'admin', 1, 'superadmin@gmail.com', 'Superadmin', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-02 01:59:45', '2026-10-02 01:59:45'),
-(74, 'admin', 3, 'p1.vicepresident@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-02 12:33:47', '2026-10-02 12:33:47'),
-(76, 'admin', 4, 'p1.secretary@hoa.local', 'Phase 1', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-02 12:36:03', '2026-10-02 12:36:03'),
-(78, 'admin', 13, 'p2.president@hoa.local', 'Phase 2', 0, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-02 12:36:16', '2026-10-02 12:36:16'),
-(128, 'homeowner', 46, 'baculpopatrick2440@gmail.com', 'Phase 1', 0, 0, NULL, 0, NULL, '2026-10-02 17:45:33', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36', NULL, NULL, '2026-10-02 17:08:35', '2026-10-02 17:46:37');
+-- Fresh start: data intentionally cleared from `login_security_state`.
 
 --
 -- Triggers `login_security_state`
@@ -2245,10 +2028,7 @@ CREATE TABLE `public_chat_messages` (
 -- Dumping data for table `public_chat_messages`
 --
 
-INSERT INTO `public_chat_messages` (`id`, `phase`, `homeowner_id`, `message`, `attachment_name`, `attachment_path`, `attachment_type`, `created_at`) VALUES
-(1, 'Phase 1', 46, 'wadawda', NULL, NULL, NULL, '2026-10-02 06:39:07'),
-(2, 'Phase 1', 46, 'awdasdaw', NULL, NULL, NULL, '2026-10-02 06:39:51'),
-(3, 'Phase 1', 46, 'wadwa', NULL, NULL, NULL, '2026-10-02 06:39:56');
+-- Fresh start: data intentionally cleared from `public_chat_messages`.
 
 --
 -- Triggers `public_chat_messages`
@@ -2316,10 +2096,7 @@ CREATE TABLE `realtime_admin_state` (
 -- Dumping data for table `realtime_admin_state`
 --
 
-INSERT INTO `realtime_admin_state` (`admin_id`, `module_key`, `last_seen_event_id`, `updated_at`) VALUES
-(2, 'announcements', 0, '2026-10-02 08:53:44'),
-(2, 'community_chat', 3, '2026-10-02 07:47:57'),
-(2, 'finance_dues', 0, '2026-10-02 07:45:19');
+-- Fresh start: data intentionally cleared from `realtime_admin_state`.
 
 -- --------------------------------------------------------
 
@@ -2343,67 +2120,7 @@ CREATE TABLE `realtime_events` (
 -- Dumping data for table `realtime_events`
 --
 
-INSERT INTO `realtime_events` (`id`, `module_key`, `event_type`, `phase`, `target_admin_id`, `entity_id`, `action`, `payload_json`, `created_at`) VALUES
-(1, 'community_chat', 'public_chat_message', 'Phase 1', NULL, 1, 'created', '{\"message_id\": 1, \"homeowner_id\": 46}', '2026-10-02 06:39:07'),
-(2, 'community_chat', 'public_chat_message', 'Phase 1', NULL, 2, 'created', '{\"message_id\": 2, \"homeowner_id\": 46}', '2026-10-02 06:39:51'),
-(3, 'community_chat', 'public_chat_message', 'Phase 1', NULL, 3, 'created', '{\"message_id\": 3, \"homeowner_id\": 46}', '2026-10-02 06:39:56'),
-(4, 'complaints', 'complaint_state_changed', 'Phase 1', 2, 18, 'updated', '{\"complaint_id\": 18, \"old_status\": \"open\", \"new_status\": \"in_progress\", \"priority\": \"urgent\"}', '2026-10-02 07:09:29'),
-(5, 'complaints', 'complaint_state_changed', 'Phase 1', 2, 18, 'updated', '{\"complaint_id\": 18, \"old_status\": \"in_progress\", \"new_status\": \"resolved\", \"priority\": \"urgent\"}', '2026-10-02 07:09:39'),
-(6, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 07:23:00'),
-(7, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 07:23:08'),
-(8, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 07:55:07'),
-(9, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 07:55:11'),
-(10, 'homeowner_push', 'homeowner_review_state_changed', 'Phase 1', NULL, 46, 'updated', '{\"homeowner_id\": 46, \"old_status\": \"approved\", \"new_status\": \"approved\", \"source\": \"register_household\"}', '2026-10-02 08:06:53'),
-(11, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 08:50:27'),
-(12, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 08:50:28'),
-(13, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 08:50:30'),
-(14, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:03:48'),
-(15, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:03:55'),
-(16, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:03:56'),
-(17, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:07:39'),
-(18, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:07:40'),
-(19, 'login_security', 'security_state_changed', 'Phase 1', NULL, 7, 'updated', '{\"security_state_id\": 7, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:07:41'),
-(20, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:08:35'),
-(21, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:12:54'),
-(22, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:14:47'),
-(23, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:14:48'),
-(24, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:14:48'),
-(25, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:18:50'),
-(26, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:18:51'),
-(27, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:18:51'),
-(28, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 1, \"failed_attempts\": 1}', '2026-10-02 09:19:22'),
-(29, 'login_security', 'security_appeal_created', 'Phase 1', NULL, 1, 'created', '{\"appeal_id\": 1, \"security_state_id\": 128, \"status\": \"available\"}', '2026-10-02 09:19:22'),
-(30, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 1, 'updated', '{\"appeal_id\": 1, \"security_state_id\": 128, \"old_status\": \"available\", \"new_status\": \"pending\"}', '2026-10-02 09:21:49'),
-(31, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:26:06'),
-(32, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 1, 'updated', '{\"appeal_id\": 1, \"security_state_id\": 128, \"old_status\": \"pending\", \"new_status\": \"approved\"}', '2026-10-02 09:26:06'),
-(33, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:29:48'),
-(34, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:32:33'),
-(35, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:32:34'),
-(36, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:32:34'),
-(37, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 1, \"failed_attempts\": 1}', '2026-10-02 09:33:55'),
-(38, 'login_security', 'security_appeal_created', 'Phase 1', NULL, 2, 'created', '{\"appeal_id\": 2, \"security_state_id\": 128, \"status\": \"available\"}', '2026-10-02 09:33:55'),
-(39, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 2, 'updated', '{\"appeal_id\": 2, \"security_state_id\": 128, \"old_status\": \"available\", \"new_status\": \"pending\"}', '2026-10-02 09:34:14'),
-(40, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:34:41'),
-(41, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 2, 'updated', '{\"appeal_id\": 2, \"security_state_id\": 128, \"old_status\": \"pending\", \"new_status\": \"approved\"}', '2026-10-02 09:34:41'),
-(42, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:35:16'),
-(43, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:35:21'),
-(44, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:38:08'),
-(45, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:38:09'),
-(46, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:38:09'),
-(47, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 1, \"failed_attempts\": 1}', '2026-10-02 09:38:53'),
-(48, 'login_security', 'security_appeal_created', 'Phase 1', NULL, 3, 'created', '{\"appeal_id\": 3, \"security_state_id\": 128, \"status\": \"available\"}', '2026-10-02 09:38:53'),
-(49, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 3, 'updated', '{\"appeal_id\": 3, \"security_state_id\": 128, \"old_status\": \"available\", \"new_status\": \"pending\"}', '2026-10-02 09:39:05'),
-(50, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:39:40'),
-(51, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 3, 'updated', '{\"appeal_id\": 3, \"security_state_id\": 128, \"old_status\": \"pending\", \"new_status\": \"approved\"}', '2026-10-02 09:39:40'),
-(52, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 1}', '2026-10-02 09:40:10'),
-(53, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 2}', '2026-10-02 09:44:51'),
-(54, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:44:52'),
-(55, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 1, \"failed_attempts\": 1}', '2026-10-02 09:45:33'),
-(56, 'login_security', 'security_appeal_created', 'Phase 1', NULL, 4, 'created', '{\"appeal_id\": 4, \"security_state_id\": 128, \"status\": \"available\"}', '2026-10-02 09:45:33'),
-(57, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 4, 'updated', '{\"appeal_id\": 4, \"security_state_id\": 128, \"old_status\": \"available\", \"new_status\": \"pending\"}', '2026-10-02 09:45:48'),
-(58, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:46:04'),
-(59, 'login_security', 'security_appeal_state_changed', 'Phase 1', NULL, 4, 'updated', '{\"appeal_id\": 4, \"security_state_id\": 128, \"old_status\": \"pending\", \"new_status\": \"approved\"}', '2026-10-02 09:46:04'),
-(60, 'login_security', 'security_state_changed', 'Phase 1', NULL, 128, 'updated', '{\"security_state_id\": 128, \"hard_locked\": 0, \"failed_attempts\": 0}', '2026-10-02 09:46:37');
+-- Fresh start: data intentionally cleared from `realtime_events`.
 
 -- --------------------------------------------------------
 
@@ -2574,6 +2291,28 @@ CREATE TABLE `voting_requests` (
   `superadmin_remarks` varchar(500) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `processed_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `voting_request_candidates`
+-- Added from the latest President -> Superadmin voting workflow.
+--
+
+CREATE TABLE `voting_request_candidates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `voting_request_id` int(11) NOT NULL,
+  `phase` enum('Phase 1','Phase 2','Phase 3') NOT NULL,
+  `position` enum('President','Vice President','Secretary','Treasurer','Auditor','Board of Director') NOT NULL,
+  `homeowner_id` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_voting_request_candidate` (`voting_request_id`,`position`,`homeowner_id`),
+  KEY `idx_vrc_request` (`voting_request_id`),
+  KEY `idx_vrc_phase` (`phase`),
+  KEY `idx_vrc_position` (`position`),
+  KEY `idx_vrc_homeowner` (`homeowner_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -3090,19 +2829,19 @@ ALTER TABLE `voting_requests`
 -- AUTO_INCREMENT for table `access_permissions`
 --
 ALTER TABLE `access_permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7639;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3607;
 
 --
 -- AUTO_INCREMENT for table `activity_logs`
 --
 ALTER TABLE `activity_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `admins`
 --
 ALTER TABLE `admins`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `announcements`
@@ -3138,7 +2877,7 @@ ALTER TABLE `announcement_recipients`
 -- AUTO_INCREMENT for table `cctv_saved_clips`
 --
 ALTER TABLE `cctv_saved_clips`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `communication_calls`
@@ -3150,19 +2889,19 @@ ALTER TABLE `communication_calls`
 -- AUTO_INCREMENT for table `complaints`
 --
 ALTER TABLE `complaints`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `complaint_attachments`
 --
 ALTER TABLE `complaint_attachments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `complaint_messages`
 --
 ALTER TABLE `complaint_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `election_nominations`
@@ -3186,7 +2925,7 @@ ALTER TABLE `election_votes`
 -- AUTO_INCREMENT for table `facility_rental_pricing`
 --
 ALTER TABLE `facility_rental_pricing`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `facility_rental_requests`
@@ -3198,7 +2937,7 @@ ALTER TABLE `facility_rental_requests`
 -- AUTO_INCREMENT for table `finance_audit_logs`
 --
 ALTER TABLE `finance_audit_logs`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `finance_donations`
@@ -3222,13 +2961,13 @@ ALTER TABLE `finance_dues_reminders`
 -- AUTO_INCREMENT for table `finance_dues_settings`
 --
 ALTER TABLE `finance_dues_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `finance_expenses`
 --
 ALTER TABLE `finance_expenses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `finance_expense_items`
@@ -3270,13 +3009,13 @@ ALTER TABLE `finance_report_snapshots`
 -- AUTO_INCREMENT for table `hoa_officers`
 --
 ALTER TABLE `hoa_officers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=34;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowners`
 --
 ALTER TABLE `homeowners`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowner_calls`
@@ -3294,13 +3033,13 @@ ALTER TABLE `homeowner_call_signals`
 -- AUTO_INCREMENT for table `homeowner_import_archive`
 --
 ALTER TABLE `homeowner_import_archive`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowner_import_queue`
 --
 ALTER TABLE `homeowner_import_queue`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowner_officer_messages`
@@ -3312,13 +3051,13 @@ ALTER TABLE `homeowner_officer_messages`
 -- AUTO_INCREMENT for table `homeowner_ownership_transfers`
 --
 ALTER TABLE `homeowner_ownership_transfers`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowner_positions`
 --
 ALTER TABLE `homeowner_positions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=51;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `homeowner_private_messages`
@@ -3330,19 +3069,19 @@ ALTER TABLE `homeowner_private_messages`
 -- AUTO_INCREMENT for table `household_members`
 --
 ALTER TABLE `household_members`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=48;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `login_security_appeals`
 --
 ALTER TABLE `login_security_appeals`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `login_security_state`
 --
 ALTER TABLE `login_security_state`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=185;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `parking_paymongo_checkouts`
@@ -3366,7 +3105,7 @@ ALTER TABLE `parking_violations`
 -- AUTO_INCREMENT for table `public_chat_messages`
 --
 ALTER TABLE `public_chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `public_chat_mutes`
@@ -3378,7 +3117,7 @@ ALTER TABLE `public_chat_mutes`
 -- AUTO_INCREMENT for table `realtime_events`
 --
 ALTER TABLE `realtime_events`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=61;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `staff_applications`

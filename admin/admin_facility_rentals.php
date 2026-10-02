@@ -4,48 +4,50 @@ require_once '../config/database.php';
 require_once 'admin_access.php';
 requireAccess('community');
 /* =========================
-   1) AUTH GUARD
+   AUTH / CURRENT ADMIN
    ========================= */
-if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
-    !in_array($_SESSION['admin_role'], ['admin', 'superadmin'], true)) {
-  echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
-  exit;
+/*
+ * admin_access.php + requireAccess('community') remains the primary
+ * authentication and module-permission guard. Validate the current admin
+ * from the database instead of depending on a second admin_role session check.
+ */
+$adminId = (int)($_SESSION['admin_id'] ?? 0);
+if ($adminId <= 0) {
+    header('Location: ../index.php');
+    exit;
 }
-
-/* Superadmin not allowed here */
-if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
-  echo "<script>alert('Superadmin cannot access President Dashboard.'); window.location='index.php';</script>";
-  exit;
-}
-
-
-
-function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-
-/* =========================
-   3) ADMIN INFO
-   ========================= */
-$adminId   = (int)($_SESSION['admin_id'] ?? 0);
-
-$stmt = $conn->prepare("SELECT email, full_name, phase, role FROM admins WHERE id=? LIMIT 1");
+$stmt = $conn->prepare("
+    SELECT email, full_name, phase, role
+    FROM admins
+    WHERE id = ?
+    LIMIT 1
+");
 $stmt->bind_param("i", $adminId);
 $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-
 if (!$me) {
-  session_destroy();
-  echo "<script>alert('Session error. Please login again.'); window.location='index.php';</script>";
-  exit;
+    header('Location: ../index.php');
+    exit;
 }
-
+$adminRole = strtolower(trim((string)($me['role'] ?? '')));
+if ($adminRole === 'superadmin') {
+    http_response_code(403);
+    exit('Superadmin cannot access this module.');
+}
+if ($adminRole !== 'admin') {
+    header('Location: ../index.php');
+    exit;
+}
+function esc($v): string
+{
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
 $adminEmail = (string)($me['email'] ?? '');
-$adminName  = trim((string)($me['full_name'] ?? ''));
-$myPhase    = (string)($me['phase'] ?? 'Phase 1');
-
+$adminName = trim((string)($me['full_name'] ?? ''));
+$myPhase = (string)($me['phase'] ?? 'Phase 1');
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
 $phase = in_array($myPhase, $allowedPhases, true) ? $myPhase : 'Phase 1';
-
 /* =========================
    PRICING (dynamic)
    ========================= */
@@ -149,9 +151,10 @@ $view = $_GET['view'] ?? '';
   <meta charset="utf-8">
   <title>HOA-ADMIN • Facility Rentals</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -161,6 +164,7 @@ $view = $_GET['view'] ?? '';
   <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
 
   <style>
     .badge-soft { padding:.35rem .6rem; border-radius:999px; font-weight:800; font-size:12px; }
@@ -208,15 +212,322 @@ $view = $_GET['view'] ?? '';
   box-shadow: 0 6px 18px rgba(0,0,0,0.2);
   z-index: 99999;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
   transform: translateY(-10px);
   transition: all .3s ease;
 }
 
 .access-toast.show {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: translateY(0);
 }
-  </style>
+
+    .admin-theme-switch {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+    }
+    .admin-theme-toggle {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: inherit;
+      font-size: 22px;
+      cursor: pointer;
+      transition: background .18s ease, color .18s ease;
+    }
+    .admin-theme-toggle:hover,
+    .admin-theme-toggle:focus {
+      background: rgba(15, 23, 42, .06);
+      outline: none;
+    }
+    .admin-page-logout-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 98px;
+      min-height: 40px;
+      margin: 0 18px 0 6px;
+      padding: 8px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 11px;
+      background: #fff;
+      color: #b91c1c !important;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 800;
+      text-decoration: none !important;
+      white-space: nowrap;
+      transition:
+        background .18s ease,
+        color .18s ease,
+        border-color .18s ease,
+        transform .18s ease,
+        box-shadow .18s ease;
+    }
+    .admin-page-logout-btn i {
+      font-size: 17px;
+      line-height: 1;
+    }
+    .admin-page-logout-btn:hover,
+    .admin-page-logout-btn:focus {
+      border-color: #ef4444;
+      background: #fef2f2;
+      color: #991b1b !important;
+      box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    html.dark body,
+    html.dark .main-container {
+      background: var(--admin-bg, #0f172a) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+    html.dark .page-header,
+    html.dark .card-box,
+    html.dark .footer-wrap {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+    html.dark .page-header h4,
+    html.dark .card-box h4,
+    html.dark .card-box h5,
+    html.dark .card-box label,
+    html.dark .card-box b,
+    html.dark .card-box strong,
+    html.dark .footer-wrap {
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+    html.dark .text-secondary,
+    html.dark .text-muted {
+      color: var(--admin-muted, #9ca3af) !important;
+    }
+    html.dark .pill {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #374151) !important;
+      color: #cbd5e1 !important;
+    }
+    html.dark .form-control,
+    html.dark select.form-control,
+    html.dark input.form-control,
+    html.dark textarea.form-control {
+      background: var(--admin-input, #111827) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #4b5563) !important;
+    }
+    html.dark .form-control:focus,
+    html.dark select.form-control:focus,
+    html.dark input.form-control:focus,
+    html.dark textarea.form-control:focus {
+      background: var(--admin-input, #111827) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 .2rem rgba(59, 130, 246, .16) !important;
+    }
+    html.dark select.form-control option {
+      background: #111827 !important;
+      color: #e5e7eb !important;
+    }
+    html.dark .table,
+    html.dark table.dataTable {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+    html.dark .table thead th,
+    html.dark .table-light th,
+    html.dark table.dataTable thead th,
+    html.dark table.dataTable thead td {
+      background: var(--admin-surface-2, #253244) !important;
+      color: #f8fafc !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+    html.dark .table tbody tr,
+    html.dark .table tbody td,
+    html.dark table.dataTable tbody tr,
+    html.dark table.dataTable tbody td {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+    html.dark .table-striped tbody tr:nth-of-type(odd),
+    html.dark .table-striped tbody tr:nth-of-type(odd) > * {
+      background: var(--admin-surface-2, #253244) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+    html.dark .table-hover tbody tr:hover,
+    html.dark .table-hover tbody tr:hover > * {
+      background: var(--admin-hover, #334155) !important;
+      color: #fff !important;
+    }
+    html.dark .badge-soft-warning {
+      background: rgba(217, 119, 6, .14) !important;
+      border-color: rgba(245, 158, 11, .35) !important;
+      color: #fde68a !important;
+    }
+    html.dark .badge-soft-success {
+      background: rgba(22, 163, 74, .14) !important;
+      border-color: rgba(34, 197, 94, .35) !important;
+      color: #bbf7d0 !important;
+    }
+    html.dark .badge-soft-danger {
+      background: rgba(220, 38, 38, .14) !important;
+      border-color: rgba(239, 68, 68, .35) !important;
+      color: #fecaca !important;
+    }
+    html.dark .badge-soft-muted {
+      background: rgba(71, 85, 105, .25) !important;
+      border-color: rgba(100, 116, 139, .4) !important;
+      color: #cbd5e1 !important;
+    }
+    html.dark .modalx .box {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border: 1px solid var(--admin-border, #374151) !important;
+    }
+    html.dark .modalx .boxhead {
+      background: var(--admin-surface-2, #253244) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+    html.dark .modalx .closebtn {
+      color: #f8fafc !important;
+    }
+    html.dark .alert-info {
+      background: rgba(14, 165, 233, .12) !important;
+      color: #bae6fd !important;
+      border-color: rgba(14, 165, 233, .28) !important;
+    }
+    html.dark .alert-warning {
+      background: rgba(217, 119, 6, .12) !important;
+      color: #fde68a !important;
+      border-color: rgba(245, 158, 11, .28) !important;
+    }
+    html.dark .btn-outline-success {
+      color: #86efac !important;
+      border-color: #22c55e !important;
+    }
+    html.dark .btn-outline-success:hover,
+    html.dark .btn-outline-success:focus {
+      background: #15803d !important;
+      border-color: #15803d !important;
+      color: #fff !important;
+    }
+    html.dark .btn-outline-danger {
+      color: #fca5a5 !important;
+      border-color: #ef4444 !important;
+    }
+    html.dark .btn-outline-danger:hover,
+    html.dark .btn-outline-danger:focus {
+      background: #b91c1c !important;
+      border-color: #b91c1c !important;
+      color: #fff !important;
+    }
+    html.dark .btn-outline-secondary {
+      color: #cbd5e1 !important;
+      border-color: #64748b !important;
+    }
+    html.dark .btn-outline-secondary:hover,
+    html.dark .btn-outline-secondary:focus {
+      background: #475569 !important;
+      border-color: #64748b !important;
+      color: #fff !important;
+    }
+    html.dark .dataTables_wrapper,
+    html.dark .dataTables_wrapper .dataTables_length,
+    html.dark .dataTables_wrapper .dataTables_filter,
+    html.dark .dataTables_wrapper .dataTables_info,
+    html.dark .dataTables_wrapper .dataTables_paginate {
+      color: var(--admin-muted, #9ca3af) !important;
+    }
+    html.dark .dataTables_wrapper .dataTables_filter input,
+    html.dark .dataTables_wrapper .dataTables_length select {
+      background: var(--admin-input, #111827) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border: 1px solid var(--admin-border, #4b5563) !important;
+    }
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover,
+    html.dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+      color: #fff !important;
+      border-color: #2563eb !important;
+      background: #2563eb !important;
+    }
+    html.dark .admin-theme-toggle {
+      color: #f8fafc !important;
+    }
+    html.dark .admin-theme-toggle:hover,
+    html.dark .admin-theme-toggle:focus {
+      background: rgba(255,255,255,.08);
+    }
+    html.dark .admin-page-logout-btn {
+      border-color: rgba(248, 113, 113, .30);
+      background: rgba(127, 29, 29, .16);
+      color: #fca5a5 !important;
+      box-shadow: none;
+    }
+    html.dark .admin-page-logout-btn:hover,
+    html.dark .admin-page-logout-btn:focus {
+      border-color: rgba(248, 113, 113, .55);
+      background: rgba(127, 29, 29, .28);
+      color: #fecaca !important;
+    }
+    @media (max-width: 575.98px) {
+      .admin-page-logout-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        margin: 0 10px 0 4px;
+        padding: 0;
+        border-radius: 10px;
+      }
+      .admin-page-logout-btn span {
+        display: none;
+      }
+      .admin-page-logout-btn i {
+        font-size: 18px;
+      }
+      .admin-theme-switch {
+        padding: 0 2px;
+      }
+      .modalx .box {
+        width: 100%;
+      }
+    }
+
+</style>
+
+  <script>
+  (function () {
+    try {
+      const savedTheme = localStorage.getItem('hoa-theme');
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+
+      document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+  })();
+  </script>
 </head>
 
 <body>
@@ -228,16 +539,24 @@ $view = $_GET['view'] ?? '';
     </div>
 
     <div class="header-right">
-      <div class="user-info-dropdown">
-        <div class="dropdown">
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-            <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-          </div>
-        </div>
+      <div class="admin-theme-switch">
+        <button
+          type="button"
+          id="themeToggle"
+          class="admin-theme-toggle"
+          aria-label="Switch theme"
+          title="Switch theme"
+        >
+          <span id="themeIcon">☾</span>
+        </button>
       </div>
+      <a href="logout.php"
+         class="admin-page-logout-btn"
+         title="Log out"
+         aria-label="Log out">
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+      </a>
     </div>
   </div>
 
@@ -466,6 +785,7 @@ $view = $_GET['view'] ?? '';
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+  <script src="vendors/scripts/admin_theme.js"></script>
 
   <script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
   <script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>

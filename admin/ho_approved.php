@@ -10,7 +10,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 if (!function_exists('esc')) {
@@ -81,11 +80,9 @@ function south_meridian_locations(): array
         . DIRECTORY_SEPARATOR
         . 'southmeri_block_lot_mapping.json';
 
-
     if (!is_readable($mappingPath)) {
         return $locations;
     }
-
 
     $decoded =
         json_decode(
@@ -95,11 +92,9 @@ function south_meridian_locations(): array
             true
         );
 
-
     if (!is_array($decoded)) {
         return $locations;
     }
-
 
     /*
      * Coordinate conversion used by the
@@ -117,7 +112,6 @@ function south_meridian_locations(): array
     $markerCenterOffsetEmu =
         90000;
 
-
     foreach ($decoded as $row) {
 
         $block =
@@ -132,7 +126,6 @@ function south_meridian_locations(): array
         $yEmu =
             (float)($row['y_emu'] ?? -1);
 
-
         if (
             $block < 1 ||
             $lot < 1 ||
@@ -141,7 +134,6 @@ function south_meridian_locations(): array
         ) {
             continue;
         }
-
 
         $locations[
             $block . ':' . $lot
@@ -192,10 +184,8 @@ function south_meridian_locations(): array
         ];
     }
 
-
     return $locations;
 }
-
 
 $southMeridianLocations =
     south_meridian_locations();
@@ -355,11 +345,9 @@ $stmt = $conn->prepare("
     $homeownerLot
 ] = subdivision_block_lot($homeowner);
 
-
 $homeownerStreet = trim(
     (string)($homeowner['street'] ?? '')
 );
-
 
 /*
 |--------------------------------------------------------------------------
@@ -381,7 +369,6 @@ if ($homeownerRegion === '') {
         'CALABARZON';
 }
 
-
 $homeownerZipCode =
     trim(
         (string)(
@@ -394,7 +381,6 @@ if ($homeownerZipCode === '') {
     $homeownerZipCode =
         '4114';
 }
-
 
 $homeownerCountry =
     trim(
@@ -409,7 +395,6 @@ if ($homeownerCountry === '') {
         'Philippines';
 }
 
-
 /*
 |--------------------------------------------------------------------------
 | Find exact Block / Lot on official subdivision map
@@ -417,7 +402,6 @@ if ($homeownerCountry === '') {
 */
 
 $mapLocation = null;
-
 
 if (
     $homeownerBlock > 0 &&
@@ -429,13 +413,11 @@ if (
         . ':'
         . $homeownerLot;
 
-
     $mapLocation =
         $southMeridianLocations[
             $mapKey
         ] ?? null;
 }
-
 
 /*
  * Prefer official mapping coordinates.
@@ -450,14 +432,12 @@ $mapX =
     ??
     null;
 
-
 $mapY =
     $mapLocation['y']
     ??
     $homeowner['map_y']
     ??
     null;
-
 
 /*
  * If Street is missing from the homeowner record,
@@ -474,7 +454,6 @@ if (
         );
 }
 
-
 $hasSubdivisionMap =
     $homeownerBlock > 0 &&
     $homeownerLot > 0 &&
@@ -482,7 +461,6 @@ $hasSubdivisionMap =
     $mapY !== null &&
     is_numeric($mapX) &&
     is_numeric($mapY);
-
 
 /*
 |--------------------------------------------------------------------------
@@ -504,7 +482,6 @@ $markerTop =
         ? ((float)$mapY / 3300) * 100
         : 0;
 
-
 /*
  * Older homeowner records may still only
  * have latitude / longitude.
@@ -512,13 +489,11 @@ $markerTop =
 $lat = $homeowner['latitude'] ?? '';
 $lng = $homeowner['longitude'] ?? '';
 
-
 $hasLegacyGps =
     $lat !== '' &&
     $lng !== '' &&
     is_numeric($lat) &&
     is_numeric($lng);
-
 
 $propertyAddress =
     ($homeownerBlock > 0 && $homeownerLot > 0)
@@ -526,7 +501,6 @@ $propertyAddress =
         : trim(
             (string)($homeowner['house_lot_number'] ?? '')
         );
-
 
 $fullAddress = trim(
     implode(
@@ -548,7 +522,6 @@ $fullAddress = trim(
         )
     )
 );
-
 
 $createdAt =
     !empty($homeowner['created_at'])
@@ -658,7 +631,6 @@ $createdAt =
             </div>
           </div>
         </div>
-
 
         <div class="card shadow-sm border-0 mb-4">
           <div class="card-header bg-white">
@@ -781,7 +753,6 @@ $createdAt =
             </div>
           </div>
         </div>
-
 
         <div class="card shadow-sm border-0 mb-4">
           <div class="card-header bg-white">
@@ -906,7 +877,6 @@ $mapImageFile =
     . DIRECTORY_SEPARATOR
     . 'south_meridian_block_lot_map.png';
 
-
 $mapImageVersion =
     is_file($mapImageFile)
         ? (int)filemtime(
@@ -938,7 +908,6 @@ $mapImageVersion =
 
     </div>
 
-
     <div class="card-body">
 
  <?php if ($hasSubdivisionMap): ?>
@@ -951,7 +920,6 @@ $mapImageVersion =
             src="../assets/img/south_meridian_block_lot_map.png?v=<?= $mapImageVersion ?>"
             alt="South Meridian Block and Lot Map"
         >
-
 
         <!-- Exact homeowner location pin -->
         <div
@@ -968,7 +936,6 @@ $mapImageVersion =
 
     </div>
 
-
     <div class="text-center mt-2 text-muted small">
 
         Block <?= (int)$homeownerBlock ?>,
@@ -981,7 +948,6 @@ $mapImageVersion =
         <?php endif; ?>
 
     </div>
-
 
 <?php elseif ($hasLegacyGps): ?>
 
@@ -1188,9 +1154,10 @@ $resultApproved = $sqlApproved->get_result();
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -1213,7 +1180,6 @@ $resultApproved = $sqlApproved->get_result();
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
-
 
 	<style>
 		:root{--brand:#077f46;}
@@ -1266,6 +1232,87 @@ $resultApproved = $sqlApproved->get_result();
 #appToast.show,
 #appToast.showing {
     pointer-events: auto;
+}
+
+/* Shared direct logout button used across updated admin pages. */
+.admin-page-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 98px;
+    min-height: 40px;
+    margin: 0 18px 0 6px;
+    padding: 8px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 11px;
+    background: #fff;
+    color: #b91c1c !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+    text-decoration: none !important;
+    white-space: nowrap;
+    transition:
+        background .18s ease,
+        color .18s ease,
+        border-color .18s ease,
+        transform .18s ease,
+        box-shadow .18s ease;
+}
+
+.admin-page-logout-btn i {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.admin-page-logout-btn:hover,
+.admin-page-logout-btn:focus {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #991b1b !important;
+    box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+html.dark .admin-page-logout-btn {
+    border-color: rgba(248, 113, 113, .30);
+    background: rgba(127, 29, 29, .16);
+    color: #fca5a5 !important;
+    box-shadow: none;
+}
+
+html.dark .admin-page-logout-btn:hover,
+html.dark .admin-page-logout-btn:focus {
+    border-color: rgba(248, 113, 113, .55);
+    background: rgba(127, 29, 29, .28);
+    color: #fecaca !important;
+}
+
+@media (max-width: 575.98px) {
+    .admin-page-logout-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        margin: 0 10px 0 4px;
+        padding: 0;
+        border-radius: 10px;
+    }
+
+    .admin-page-logout-btn span {
+        display: none;
+    }
+
+    .admin-page-logout-btn i {
+        font-size: 18px;
+    }
+
+    .admin-theme-switch {
+        padding: 0 2px;
+    }
 }
 
 		#viewHomeownerModal .card{
@@ -1457,7 +1504,6 @@ html.dark #approvedTable {
         var(--admin-surface) !important;
 }
 
-
 /* Main Approved Households table cells */
 html.dark #approvedTable tbody td {
     color:
@@ -1466,7 +1512,6 @@ html.dark #approvedTable tbody td {
     border-color:
         var(--admin-border) !important;
 }
-
 
 /* Normal/even rows */
 html.dark #approvedTable tbody tr:nth-child(even) > * {
@@ -1477,7 +1522,6 @@ html.dark #approvedTable tbody tr:nth-child(even) > * {
         var(--admin-text) !important;
 }
 
-
 /* Striped/odd rows */
 html.dark #approvedTable tbody tr:nth-child(odd) > * {
     background:
@@ -1486,7 +1530,6 @@ html.dark #approvedTable tbody tr:nth-child(odd) > * {
     color:
         var(--admin-text) !important;
 }
-
 
 /* Header */
 html.dark #approvedTable thead th {
@@ -1500,7 +1543,6 @@ html.dark #approvedTable thead th {
         var(--admin-border) !important;
 }
 
-
 /* Row hover */
 html.dark #approvedTable tbody tr:hover > * {
     background:
@@ -1509,7 +1551,6 @@ html.dark #approvedTable tbody tr:hover > * {
     color:
         #ffffff !important;
 }
-
 
 /* =========================================================
    TABLES INSIDE VIEW HOMEOWNER MODAL
@@ -1533,7 +1574,6 @@ html.dark #viewHomeownerModal .table {
         var(--admin-border);
 }
 
-
 html.dark #viewHomeownerModal
 .table > :not(caption) > * > * {
 
@@ -1544,7 +1584,6 @@ html.dark #viewHomeownerModal
         var(--admin-border) !important;
 }
 
-
 html.dark #viewHomeownerModal
 .table tbody tr:nth-child(even) > * {
 
@@ -1552,14 +1591,12 @@ html.dark #viewHomeownerModal
         var(--admin-surface) !important;
 }
 
-
 html.dark #viewHomeownerModal
 .table tbody tr:nth-child(odd) > * {
 
     background:
         var(--admin-surface-2) !important;
 }
-
 
 html.dark #viewHomeownerModal
 .table thead th {
@@ -1574,12 +1611,52 @@ html.dark #viewHomeownerModal
         var(--admin-border) !important;
 }
 
-
 html.dark #viewHomeownerModal .modal-body,
 html.dark #editHomeownerModal .modal-body {
-    background:
-        var(--admin-bg) !important;
+    background: var(--admin-bg) !important;
 }
+
+/* Approved-households dark mode */
+html.dark .card-box,
+html.dark #viewHomeownerModal .card,
+html.dark #editHomeownerModal .modal-content,
+html.dark #deleteHomeownerModal .modal-content {
+    background: var(--admin-surface) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .card-header,
+html.dark #editHomeownerModal .modal-header,
+html.dark #editHomeownerModal .modal-footer,
+html.dark #deleteHomeownerModal .modal-footer {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #viewHomeownerModal .bg-white,
+html.dark #viewHomeownerModal .bg-light {
+    background: var(--admin-surface-2) !important;
+}
+
+html.dark #viewHomeownerModal .text-muted,
+html.dark #editHomeownerModal .text-muted {
+    color: var(--admin-muted) !important;
+}
+
+html.dark #viewHomeownerModal .border,
+html.dark #viewHomeownerModal .border-top {
+    border-color: var(--admin-border) !important;
+}
+
+html.dark #editHomeownerModal .form-control,
+html.dark #editHomeownerModal .form-select {
+    background: var(--admin-input) !important;
+    color: var(--admin-text) !important;
+    border-color: var(--admin-border) !important;
+}
+
 </style>
 <script>
 (function () {
@@ -1609,55 +1686,28 @@ html.dark #editHomeownerModal .modal-body {
 			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 		</div>
 <div class="header-right">
-
-    <!-- DARK MODE TOGGLE -->
     <div class="admin-theme-switch">
-        <button type="button"
-                id="themeToggle"
-                class="admin-theme-toggle"
-                aria-label="Switch theme"
-                title="Switch theme">
+        <button
+            type="button"
+            id="themeToggle"
+            class="admin-theme-toggle"
+            aria-label="Switch theme"
+            title="Switch theme"
+        >
             <span id="themeIcon">☾</span>
         </button>
     </div>
 
-    <div class="user-notification">
-				<div class="dropdown">
-					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-						<i class="icon-copy dw dw-notification"></i>
-						<span class="badge notification-active"></span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right">
-						<div class="notification-list mx-h-350 customscroll">
-							<ul>
-								<li>
-									<a href="#">
-										<img src="vendors/images/img.jpg" alt="">
-										<h3>System</h3>
-										<p>Notifications appear here.</p>
-									</a>
-								</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<div class="user-info-dropdown">
-				<div class="dropdown">
-					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-						<span class="user-icon">
-							<img src="vendors/images/photo1.jpg" alt="">
-						</span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-					</div>
-				</div>
-			</div>
-		</div>
+    <a
+        href="logout.php"
+        class="admin-page-logout-btn"
+        title="Log out"
+        aria-label="Log out"
+    >
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+    </a>
+</div>
 	</div>
 
 	<?php include 'sidebar.php'; ?>
@@ -1701,14 +1751,12 @@ html.dark #editHomeownerModal .modal-body {
     $rowLot
 ] = subdivision_block_lot($row);
 
-
 $rowStreet =
     trim(
         (string)(
             $row['street'] ?? ''
         )
     );
-
 
 $rowProperty =
     ($rowBlock > 0 && $rowLot > 0)
@@ -1718,7 +1766,6 @@ $rowProperty =
                 $row['house_lot_number'] ?? ''
             )
         );
-
 
 $rowAddress =
     trim(
@@ -1807,7 +1854,7 @@ $rowAddress =
 			</div>
 		</div>
 	</div>
-	
+
 	<div class="modal fade" id="deleteHomeownerModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog">
 			<div class="modal-content" style="border-radius:14px; overflow:hidden;">
@@ -1890,8 +1937,6 @@ $rowAddress =
 			const content = document.getElementById('viewHomeownerContent');
 			const modal = new bootstrap.Modal(modalEl, { backdrop:'static', keyboard:true });
 
-
-
 /*
 |--------------------------------------------------------------------------
 | View Approved Homeowner
@@ -1969,7 +2014,6 @@ $(document).on(
     }
 );
 
-
 modalEl.addEventListener(
     'hidden.bs.modal',
     function () {
@@ -1979,13 +2023,11 @@ modalEl.addEventListener(
     }
 );
 
-
 			const editModalEl = document.getElementById('editHomeownerModal');
 			const editContent = document.getElementById('editHomeownerContent');
 			const editModal = new bootstrap.Modal(editModalEl, { backdrop:'static', keyboard:true });
 
 let pendingInit = false;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -2017,7 +2059,6 @@ function initEditPropertyMap() {
     const propertyInfo =
         document.getElementById('editPropertyInfo');
 
-
     if (
         !mapEl ||
         !dataEl ||
@@ -2026,7 +2067,6 @@ function initEditPropertyMap() {
     ) {
         return;
     }
-
 
     let locations = [];
 
@@ -2047,11 +2087,9 @@ function initEditPropertyMap() {
         return;
     }
 
-
     const imageUrl =
         mapEl.dataset.mapImage ||
         '../assets/img/south_meridian_block_lot_map.png';
-
 
     /*
      * Rebuild the map container as a responsive image map.
@@ -2085,7 +2123,6 @@ function initEditPropertyMap() {
     mapEl.style.background =
         '#e9eef6';
 
-
     const mapImage =
         document.createElement('img');
 
@@ -2110,7 +2147,6 @@ function initEditPropertyMap() {
     mapEl.appendChild(
         mapImage
     );
-
 
     const marker =
         document.createElement('div');
@@ -2159,7 +2195,6 @@ function initEditPropertyMap() {
         marker
     );
 
-
     function findLocation(
         block,
         lot
@@ -2179,7 +2214,6 @@ function initEditPropertyMap() {
         );
     }
 
-
     function showSelectedProperty() {
 
         const block =
@@ -2192,13 +2226,11 @@ function initEditPropertyMap() {
                 lotSelect.value
             );
 
-
         const location =
             findLocation(
                 block,
                 lot
             );
-
 
         if (!location) {
 
@@ -2218,7 +2250,6 @@ function initEditPropertyMap() {
             return;
         }
 
-
         const x =
             Number(
                 location.map_x
@@ -2234,7 +2265,6 @@ function initEditPropertyMap() {
                 location.street || ''
             );
 
-
         if (
             !Number.isFinite(x) ||
             !Number.isFinite(y)
@@ -2246,13 +2276,11 @@ function initEditPropertyMap() {
             return;
         }
 
-
         const leftPercent =
             (x / 2550) * 100;
 
         const topPercent =
             (y / 3300) * 100;
-
 
         marker.style.left =
             leftPercent + '%';
@@ -2274,12 +2302,10 @@ function initEditPropertyMap() {
                     : ''
             );
 
-
         if (streetInput) {
             streetInput.value =
                 street;
         }
-
 
         if (propertyInfo) {
 
@@ -2297,7 +2323,6 @@ function initEditPropertyMap() {
         }
     }
 
-
     /*
      * Rebuild the Lot choices whenever Block changes.
      */
@@ -2310,10 +2335,8 @@ function initEditPropertyMap() {
                     blockSelect.value
                 );
 
-
             lotSelect.innerHTML =
                 '<option value="">Select Lot</option>';
-
 
             if (!block) {
 
@@ -2324,7 +2347,6 @@ function initEditPropertyMap() {
 
                 return;
             }
-
 
             const lots =
                 locations
@@ -2346,7 +2368,6 @@ function initEditPropertyMap() {
                             );
                         }
                     );
-
 
             lots.forEach(
                 function (location) {
@@ -2371,14 +2392,12 @@ function initEditPropertyMap() {
                 }
             );
 
-
             lotSelect.disabled =
                 false;
 
             showSelectedProperty();
         }
     );
-
 
     lotSelect.addEventListener(
         'change',
@@ -2388,13 +2407,11 @@ function initEditPropertyMap() {
         }
     );
 
-
     /*
      * Show the homeowner's current property immediately.
      */
     showSelectedProperty();
 }
-
 
 $(document).on(
     'click',
@@ -2472,7 +2489,6 @@ $(document).on(
     }
 );
 
-
 editModalEl.addEventListener(
     'shown.bs.modal',
     function () {
@@ -2487,7 +2503,6 @@ editModalEl.addEventListener(
     }
 );
 
-
 editModalEl.addEventListener(
     'hidden.bs.modal',
     function () {
@@ -2499,7 +2514,6 @@ editModalEl.addEventListener(
             false;
     }
 );
-
 
 document.addEventListener('click', async function(e){
 				if (!e.target.closest('#saveEditHomeownerBtn')) return;

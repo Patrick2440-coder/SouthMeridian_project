@@ -39,7 +39,6 @@ $csrf_token = $_SESSION['csrf_ann'];
    3) LOCAL DB CONNECTION
    ========================= */
 
-
 function esc($v) {
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
@@ -570,7 +569,6 @@ function guess_mime(string $tmpPath): string {
   }
   return 'application/octet-stream';
 }
-
 
 function ini_size_to_bytes(string $value): int {
   $value = trim($value);
@@ -1351,9 +1349,10 @@ if (
   <meta charset="utf-8">
   <title>HOA-ADMIN | Announcements</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+  <?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1484,7 +1483,94 @@ if (
   visibility: visible;
   transform: translateY(0);
 }
-  </style>
+  
+    /* Direct logout */
+    .admin-header-logout{display:flex;align-items:center;margin-left:8px}
+    .admin-logout-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:8px 13px;border:1px solid #fecaca;border-radius:10px;background:#fef2f2;color:#dc2626!important;font-size:12px;font-weight:700;text-decoration:none!important;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
+    .admin-logout-btn:hover{background:#dc2626;border-color:#dc2626;color:#fff!important;transform:translateY(-1px)}
+    .admin-logout-btn i{font-size:18px}
+
+    /* Announcements dark mode */
+    html.dark .card,
+    html.dark .card-box,
+    html.dark .picker-box,
+    html.dark .picker-list,
+    html.dark #calendar,
+    html.dark .modalx .box{
+      background:var(--admin-surface)!important;
+      color:var(--admin-text)!important;
+      border-color:var(--admin-border)!important;
+    }
+    html.dark .picker-item,
+    html.dark .modalx .boxhead{
+      border-color:var(--admin-border)!important;
+    }
+    html.dark .small-muted,
+    html.dark .text-secondary,
+    html.dark .text-muted{
+      color:var(--admin-muted)!important;
+    }
+    html.dark .form-control,
+    html.dark .form-select,
+    html.dark textarea{
+      background:var(--admin-input)!important;
+      color:var(--admin-text)!important;
+      border-color:var(--admin-border)!important;
+    }
+    html.dark .form-control::placeholder,
+    html.dark textarea::placeholder{
+      color:var(--admin-muted)!important;
+      opacity:1;
+    }
+    html.dark .form-control[readonly]{
+      background:var(--admin-surface-2)!important;
+      color:var(--admin-muted)!important;
+    }
+    html.dark .modalx .closebtn{
+      color:var(--admin-text)!important;
+    }
+    html.dark .fc,
+    html.dark .fc .fc-toolbar-title,
+    html.dark .fc .fc-col-header-cell-cushion,
+    html.dark .fc .fc-daygrid-day-number{
+      color:var(--admin-text)!important;
+    }
+    html.dark .fc-theme-standard td,
+    html.dark .fc-theme-standard th,
+    html.dark .fc-theme-standard .fc-scrollgrid{
+      border-color:var(--admin-border)!important;
+    }
+    html.dark .fc .fc-button-primary{
+      background:var(--admin-surface-3)!important;
+      border-color:var(--admin-border)!important;
+      color:var(--admin-text)!important;
+    }
+    html.dark .fc .fc-button-primary:hover,
+    html.dark .fc .fc-button-primary:not(:disabled).fc-button-active{
+      background:var(--admin-hover)!important;
+      color:#fff!important;
+    }
+    html.dark .alert-light,
+    html.dark .alert-secondary{
+      background:var(--admin-surface-2)!important;
+      color:var(--admin-text)!important;
+      border-color:var(--admin-border)!important;
+    }
+    html.dark .admin-logout-btn{
+      border-color:rgba(248,113,113,.28);
+      background:rgba(220,38,38,.10);
+      color:#fca5a5!important;
+    }
+    html.dark .admin-logout-btn:hover{
+      border-color:#ef4444;
+      background:#dc2626;
+      color:#fff!important;
+    }
+    @media (max-width:575.98px){
+      .admin-logout-btn{width:38px;height:38px;min-height:38px;padding:0;border-radius:10px}
+      .admin-logout-text{display:none}
+    }
+</style>
   <script>
   (function () {
     try {
@@ -1516,30 +1602,17 @@ if (
       <div class="menu-icon dw dw-menu"></div>
       <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
     </div>
-
     <div class="header-right">
-
-      <!-- DARK MODE TOGGLE -->
       <div class="admin-theme-switch">
-        <button
-          type="button"
-          id="themeToggle"
-          class="admin-theme-toggle"
-          aria-label="Switch theme"
-          title="Switch theme"
-        >
+        <button type="button" id="themeToggle" class="admin-theme-toggle" aria-label="Switch theme" title="Switch theme">
           <span id="themeIcon">☾</span>
         </button>
       </div>
-      <div class="user-info-dropdown">
-        <div class="dropdown">
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-            <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-          </div>
-        </div>
+      <div class="admin-header-logout">
+        <a href="logout.php" class="admin-logout-btn" title="Log Out" aria-label="Log Out">
+          <i class="dw dw-logout"></i>
+          <span class="admin-logout-text">Log Out</span>
+        </a>
       </div>
     </div>
   </div>
@@ -2055,7 +2128,6 @@ if (
         }
       }
     );
-
 
     // show/hide sections based on audience
     const audience = document.getElementById('audience');

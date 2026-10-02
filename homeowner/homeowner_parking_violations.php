@@ -638,7 +638,10 @@ $chatOpen =
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 <meta charset="UTF-8">
 
 <title>

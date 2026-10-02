@@ -1115,7 +1115,6 @@ if ($migrationSchemaReady) {
   $stmt->close();
 }
 
-
 /* =========================
 
    MODAL TRANSACTION DATA
@@ -1356,12 +1355,10 @@ unset($_SESSION['finance_dues_flash']);
 
   <title>HOA-ADMIN</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-
-  <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-
-  <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
-
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1540,7 +1537,6 @@ unset($_SESSION['finance_dues_flash']);
 
 }
 
-  
 .migration-toast {
   position: fixed;
   top: 76px;
@@ -1979,6 +1975,85 @@ unset($_SESSION['finance_dues_flash']);
 
   }
 
+  /* Direct header logout button */
+  .dashboard-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 98px;
+    min-height: 40px;
+    margin: 0 18px 0 10px;
+    padding: 8px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 11px;
+    background: #fff;
+    color: #b91c1c !important;
+    box-shadow: 0 4px 14px rgba(15,23,42,.06);
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+    text-decoration: none !important;
+    white-space: nowrap;
+    transition: background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease;
+  }
+  .dashboard-logout-btn i { font-size: 17px; line-height: 1; }
+  .dashboard-logout-btn:hover,
+  .dashboard-logout-btn:focus {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #991b1b !important;
+    box-shadow: 0 7px 18px rgba(220,38,38,.12);
+    transform: translateY(-1px);
+    outline: none;
+  }
+  html.dark .dashboard-logout-btn {
+    border-color: rgba(248,113,113,.30);
+    background: rgba(127,29,29,.16);
+    color: #fca5a5 !important;
+    box-shadow: none;
+  }
+  html.dark .dashboard-logout-btn:hover,
+  html.dark .dashboard-logout-btn:focus {
+    border-color: rgba(248,113,113,.55);
+    background: rgba(127,29,29,.28);
+    color: #fecaca !important;
+  }
+
+  /* Remaining dark-mode surfaces used by migration/review sections */
+  html.dark .card-box .border,
+  html.dark .custom-modal-body .border {
+    border-color: var(--admin-border) !important;
+  }
+  html.dark .card-box .rounded.border,
+  html.dark .custom-modal-body .rounded.border {
+    background: var(--admin-surface-2) !important;
+    color: var(--admin-text) !important;
+  }
+  html.dark .btn-outline-dark {
+    color: #cbd5e1 !important;
+    border-color: #64748b !important;
+  }
+  html.dark .btn-outline-dark:hover {
+    color: #fff !important;
+    background: #475569 !important;
+    border-color: #475569 !important;
+  }
+
+  @media (max-width:575.98px) {
+    .dashboard-logout-btn {
+      width: 40px;
+      min-width: 40px;
+      height: 40px;
+      min-height: 40px;
+      margin: 0 10px 0 6px;
+      padding: 0;
+      border-radius: 10px;
+    }
+    .dashboard-logout-btn span { display: none; }
+    .dashboard-logout-btn i { font-size: 18px; }
+  }
+
   </style>
 
   <!-- Apply saved theme before body paint -->
@@ -2053,145 +2128,12 @@ unset($_SESSION['finance_dues_flash']);
 
       </div>
 
-      <div class="user-notification">
 
-        <div class="dropdown">
 
-          <a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-
-            <i class="icon-copy dw dw-notification"></i>
-
-            <span class="badge notification-active"></span>
-
-          </a>
-
-          <div class="dropdown-menu dropdown-menu-right">
-
-            <div class="notification-list mx-h-350 customscroll">
-
-              <ul>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/img.jpg" alt="">
-
-                    <h3>John Doe</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/photo1.jpg" alt="">
-
-                    <h3>Lea R. Frith</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/photo2.jpg" alt="">
-
-                    <h3>Erik L. Richards</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/photo3.jpg" alt="">
-
-                    <h3>John Doe</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/photo4.jpg" alt="">
-
-                    <h3>Renee I. Hansen</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-                <li>
-
-                  <a href="#">
-
-                    <img src="vendors/images/img.jpg" alt="">
-
-                    <h3>Vicki M. Coleman</h3>
-
-                    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-
-                  </a>
-
-                </li>
-
-              </ul>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      <div class="user-info-dropdown">
-
-        <div class="dropdown">
-
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-
-            <span class="user-icon">
-
-              <img src="vendors/images/photo1.jpg" alt="">
-
-            </span>
-
-          </a>
-
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-
-            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-
-            <a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-
-          </div>
-
-        </div>
-
-      </div>
+      <a href="logout.php" class="dashboard-logout-btn" title="Log out" aria-label="Log out">
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+      </a>
 
     </div>
 
@@ -3819,7 +3761,6 @@ async function restoreHistoricalRow(id) {
 
 document.getElementById('importHistoricalDuesBtn')?.addEventListener('click', importHistoricalDuesFile);
 document.getElementById('finalizeAllHistoricalBtn')?.addEventListener('click', finalizeAllHistoricalRows);
-
 
 </script>
 

@@ -13,7 +13,6 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
   exit();
 }
 
-
 if (!function_exists('esc')) {
   function esc($value): string {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -28,6 +27,39 @@ $homeownerImportCsrf = $_SESSION['homeowner_import_csrf'];
 function phase_prefix(string $phase): string {
   $n = (int) filter_var($phase, FILTER_SANITIZE_NUMBER_INT);
   return $n > 0 ? ('P'.$n) : 'P';
+}
+
+/**
+ * Return the permanent homeowner-facing ID.
+ *
+ * The stored public_id is always preferred. The fallback is only for legacy
+ * rows where public_id is empty, and it follows the same standard used by
+ * Register Household and Excel Import:
+ *
+ * Phase 1 + homeowners.id 46 = P1H046
+ */
+function homeowner_public_id(array $record): string {
+  $stored = trim((string)($record['public_id'] ?? ''));
+  if ($stored !== '') {
+    return $stored;
+  }
+
+  $phasePrefix = phase_prefix((string)($record['phase'] ?? ''));
+  $homeownerId = (int)($record['id'] ?? 0);
+
+  if ($homeownerId <= 0) {
+    return $phasePrefix . 'H000';
+  }
+
+  return
+    $phasePrefix .
+    'H' .
+    str_pad(
+      (string)$homeownerId,
+      3,
+      '0',
+      STR_PAD_LEFT
+    );
 }
 
 /**
@@ -256,6 +288,13 @@ $mapImageVersion =
   $validId = trim((string)($homeowner['valid_id_path'] ?? ''));
   $billing = trim((string)($homeowner['proof_of_billing_path'] ?? ''));
 
+  $isMigratedRecord =
+      $validId !== '' &&
+      str_starts_with(
+          $validId,
+          'imports/'
+      );
+
   $isImportPlaceholder = static function(string $path): bool {
     return $path === '' || str_starts_with($path, 'imports/');
   };
@@ -272,7 +311,7 @@ $mapImageVersion =
                 <div class="text-muted small fw-semibold text-uppercase mb-1">Homeowner Profile</div>
                 <h4 class="mb-1"><?= esc($fullName ?: 'Unnamed Resident') ?></h4>
                 <div class="text-muted">
-                  <?= esc($homeowner['public_id'] ?: (phase_prefix((string)$homeowner['phase']).$homeowner['id'])) ?>
+                  <?= esc(homeowner_public_id($homeowner)) ?>
                   · <?= esc($displayValue($homeowner['phase'] ?? null)) ?>
                 </div>
               </div>
@@ -331,11 +370,27 @@ $mapImageVersion =
             <div class="row g-3">
               <div class="col-md-6">
                 <div class="text-muted small">Valid ID</div>
-                <div><?php if (!$isImportPlaceholder($validId)): ?><a href="<?= esc($validId) ?>" target="_blank" class="fw-semibold">Open file</a><?php else: ?><span class="text-muted">Not provided by Excel import</span><?php endif; ?></div>
+                <div>
+                  <?php if (!$isImportPlaceholder($validId)): ?>
+                    <a href="<?= esc($validId) ?>" target="_blank" class="fw-semibold">Open file</a>
+                  <?php elseif ($isMigratedRecord): ?>
+                    <span class="text-muted">Not provided by Excel import</span>
+                  <?php else: ?>
+                    <span class="text-muted">To be uploaded by homeowner</span>
+                  <?php endif; ?>
+                </div>
               </div>
               <div class="col-md-6">
                 <div class="text-muted small">Proof of Billing</div>
-                <div><?php if (!$isImportPlaceholder($billing)): ?><a href="<?= esc($billing) ?>" target="_blank" class="fw-semibold">Open file</a><?php else: ?><span class="text-muted">Not provided by Excel import</span><?php endif; ?></div>
+                <div>
+                  <?php if (!$isImportPlaceholder($billing)): ?>
+                    <a href="<?= esc($billing) ?>" target="_blank" class="fw-semibold">Open file</a>
+                  <?php elseif ($isMigratedRecord): ?>
+                    <span class="text-muted">Not provided by Excel import</span>
+                  <?php else: ?>
+                    <span class="text-muted">To be uploaded by homeowner</span>
+                  <?php endif; ?>
+                </div>
               </div>
             </div>
           </div>
@@ -368,7 +423,7 @@ $mapImageVersion =
         <div class="card border-0 shadow-sm mb-3">
           <div class="card-body p-4">
             <h6 class="fw-bold mb-3">Record Summary</h6>
-            <div class="mb-3"><div class="text-muted small">Homeowner ID</div><div class="fw-semibold"><?= esc($homeowner['public_id'] ?: (phase_prefix((string)$homeowner['phase']).$homeowner['id'])) ?></div></div>
+            <div class="mb-3"><div class="text-muted small">Homeowner ID</div><div class="fw-semibold"><?= esc(homeowner_public_id($homeowner)) ?></div></div>
             <div class="mb-3"><div class="text-muted small">Status</div><div class="fw-semibold"><?= esc(ucfirst($status)) ?></div></div>
             <div><div class="text-muted small">Residential Type</div><div class="fw-semibold"><?= esc($displayValue($homeowner['residential_type'] ?? null)) ?></div></div>
           </div>
@@ -398,11 +453,33 @@ $mapImageVersion =
         <?php if ($status === 'pending'): ?>
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
-              <h6 class="fw-bold mb-3">Import Review</h6>
-              <div class="d-grid gap-2">
-                <button class="btn btn-success finalizeImportedHomeowner" data-id="<?= (int)$homeownerId ?>">Push to Homeowner Data</button>
-                <div class="small text-muted mt-2">Double-check the resident information first. This is not an approval step; it only confirms that the imported record is ready to become active homeowner data.</div>
-              </div>
+              <?php if ($isMigratedRecord): ?>
+                <h6 class="fw-bold mb-3">Imported Resident Review</h6>
+                <div class="d-grid gap-2">
+                  <button
+                    class="btn btn-success finalizeImportedHomeowner"
+                    data-id="<?= (int)$homeownerId ?>"
+                  >
+                    Push to Homeowner Data
+                  </button>
+                  <div class="small text-muted mt-2">
+                    Double-check the imported resident information first. This is not an approval step; it confirms that the migrated record is ready to become active homeowner data.
+                  </div>
+                </div>
+              <?php else: ?>
+                <h6 class="fw-bold mb-3">Registered Household Review</h6>
+                <div class="d-grid gap-2">
+                  <button
+                    class="btn btn-success finalizeRegisteredHomeowner"
+                    data-id="<?= (int)$homeownerId ?>"
+                  >
+                    Push to Homeowner Data
+                  </button>
+                  <div class="small text-muted mt-2">
+                    Double-check the homeowner details, household members, and property information before activating this registered household. The homeowner will upload required documents later from the homeowner side.
+                  </div>
+                </div>
+              <?php endif; ?>
             </div>
           </div>
         <?php endif; ?>
@@ -457,9 +534,7 @@ try {
             WHERE q.status='duplicate'
               AND NOT EXISTS (SELECT 1 FROM homeowner_import_archive a WHERE a.source_queue_id=q.id)
 
-
             UNION ALL
-
 
             SELECT
                 'homeowner' AS source_type,
@@ -530,9 +605,7 @@ ORDER BY created_at DESC
               AND q.phase=?
               AND NOT EXISTS (SELECT 1 FROM homeowner_import_archive a WHERE a.source_queue_id=q.id)
 
-
             UNION ALL
-
 
             SELECT
                 'homeowner' AS source_type,
@@ -621,94 +694,218 @@ $pendingImportedCount = (int)($pendingImportedCountRow['total'] ?? 0);
 $pendingImportedCountStmt->close();
 
 /*
- * Manual / walk-in pending registrations that use a property already assigned
- * to another APPROVED homeowner are possible ownership transfers. They are
- * intentionally kept Pending until both parties are verified and an admin
- * completes the transfer.
+ * Register Household creates normal pending homeowner records whose uploaded
+ * document paths do NOT start with imports/.
+ *
+ * Split those records into:
+ *   1) registered households that can be reviewed and pushed normally
+ *   2) possible ownership transfers that require the transfer workflow
  */
+$manualPendingForReview = [];
 $manualTransferCandidates = [];
+
 try {
     if ($admin_role === 'superadmin') {
         $manualPendingStmt = $conn->prepare(
-            "SELECT * FROM homeowners
+            "SELECT *
+             FROM homeowners
              WHERE status='pending'
-               AND valid_id_path NOT LIKE 'imports/%'
+               AND COALESCE(valid_id_path, '') NOT LIKE 'imports/%'
              ORDER BY created_at DESC"
         );
+
         $approvedOwnersStmt = $conn->prepare(
-            "SELECT id, public_id, first_name, middle_name, last_name, email,
-                    phase, block, lot, street, house_lot_number, status
+            "SELECT
+                id,
+                public_id,
+                first_name,
+                middle_name,
+                last_name,
+                email,
+                phase,
+                block,
+                lot,
+                street,
+                house_lot_number,
+                status
              FROM homeowners
              WHERE status='approved'"
         );
     } else {
         $manualPendingStmt = $conn->prepare(
-            "SELECT * FROM homeowners
+            "SELECT *
+             FROM homeowners
              WHERE status='pending'
-               AND valid_id_path NOT LIKE 'imports/%'
+               AND COALESCE(valid_id_path, '') NOT LIKE 'imports/%'
                AND phase=?
              ORDER BY created_at DESC"
         );
-        $manualPendingStmt->bind_param('s', $admin_phase);
+        $manualPendingStmt->bind_param(
+            's',
+            $admin_phase
+        );
 
         $approvedOwnersStmt = $conn->prepare(
-            "SELECT id, public_id, first_name, middle_name, last_name, email,
-                    phase, block, lot, street, house_lot_number, status
+            "SELECT
+                id,
+                public_id,
+                first_name,
+                middle_name,
+                last_name,
+                email,
+                phase,
+                block,
+                lot,
+                street,
+                house_lot_number,
+                status
              FROM homeowners
-             WHERE status='approved' AND phase=?"
+             WHERE status='approved'
+               AND phase=?"
         );
-        $approvedOwnersStmt->bind_param('s', $admin_phase);
+        $approvedOwnersStmt->bind_param(
+            's',
+            $admin_phase
+        );
     }
 
     $approvedOwnersStmt->execute();
-    $approvedOwners = $approvedOwnersStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+    $approvedOwners =
+        $approvedOwnersStmt
+            ->get_result()
+            ->fetch_all(MYSQLI_ASSOC);
+
     $approvedOwnersStmt->close();
 
     $ownerByProperty = [];
+
     foreach ($approvedOwners as $ownerRow) {
-        [$ownerBlock, $ownerLot] = subdivision_block_lot($ownerRow);
-        if ($ownerBlock <= 0 || $ownerLot <= 0) continue;
-        $ownerKey = (string)$ownerRow['phase'] . '|' . $ownerBlock . '|' . $ownerLot;
+        [$ownerBlock, $ownerLot] =
+            subdivision_block_lot(
+                $ownerRow
+            );
+
+        if (
+            $ownerBlock <= 0 ||
+            $ownerLot <= 0
+        ) {
+            continue;
+        }
+
+        $ownerKey =
+            (string)$ownerRow['phase'] .
+            '|' .
+            $ownerBlock .
+            '|' .
+            $ownerLot;
+
         if (!isset($ownerByProperty[$ownerKey])) {
-            $ownerByProperty[$ownerKey] = $ownerRow;
+            $ownerByProperty[$ownerKey] =
+                $ownerRow;
         }
     }
 
     $manualPendingStmt->execute();
-    $manualPendingRows = $manualPendingStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+    $manualPendingRows =
+        $manualPendingStmt
+            ->get_result()
+            ->fetch_all(MYSQLI_ASSOC);
+
     $manualPendingStmt->close();
 
     foreach ($manualPendingRows as $pendingRow) {
-        [$pendingBlock, $pendingLot] = subdivision_block_lot($pendingRow);
-        if ($pendingBlock <= 0 || $pendingLot <= 0) continue;
-        $key = (string)$pendingRow['phase'] . '|' . $pendingBlock . '|' . $pendingLot;
-        if (!isset($ownerByProperty[$key])) continue;
+        [$pendingBlock, $pendingLot] =
+            subdivision_block_lot(
+                $pendingRow
+            );
 
-        $currentOwner = $ownerByProperty[$key];
-        $incomingEmail = strtolower(trim((string)($pendingRow['email'] ?? '')));
-        $currentEmail = strtolower(trim((string)($currentOwner['email'] ?? '')));
-        if ($incomingEmail === '' || $currentEmail === '' || $incomingEmail === $currentEmail) continue;
+        $isTransfer = false;
+        $currentOwner = null;
 
-        $manualTransferCandidates[] = [
-            'incoming' => $pendingRow,
-            'current_owner' => $currentOwner,
-            'block' => $pendingBlock,
-            'lot' => $pendingLot,
-        ];
+        if (
+            $pendingBlock > 0 &&
+            $pendingLot > 0
+        ) {
+            $key =
+                (string)$pendingRow['phase'] .
+                '|' .
+                $pendingBlock .
+                '|' .
+                $pendingLot;
+
+            if (isset($ownerByProperty[$key])) {
+                $currentOwner =
+                    $ownerByProperty[$key];
+
+                $incomingEmail =
+                    strtolower(
+                        trim(
+                            (string)(
+                                $pendingRow['email'] ??
+                                ''
+                            )
+                        )
+                    );
+
+                $currentEmail =
+                    strtolower(
+                        trim(
+                            (string)(
+                                $currentOwner['email'] ??
+                                ''
+                            )
+                        )
+                    );
+
+                $isTransfer =
+                    $incomingEmail !== '' &&
+                    $currentEmail !== '' &&
+                    $incomingEmail !==
+                        $currentEmail;
+            }
+        }
+
+        if (
+            $isTransfer &&
+            $currentOwner
+        ) {
+            $manualTransferCandidates[] = [
+                'incoming' =>
+                    $pendingRow,
+                'current_owner' =>
+                    $currentOwner,
+                'block' =>
+                    $pendingBlock,
+                'lot' =>
+                    $pendingLot,
+            ];
+
+            continue;
+        }
+
+        $manualPendingForReview[] =
+            $pendingRow;
     }
 } catch (Throwable $e) {
-    error_log('Manual ownership-transfer candidate query failed: ' . $e->getMessage());
+    error_log(
+        'Registered household review query failed: ' .
+        $e->getMessage()
+    );
 }
 ?>
 <!DOCTYPE html>
 <html>
 <head>
+    <?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 	<meta charset="utf-8">
 	<title>HOA-ADMIN</title>
 
-	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+
 
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -762,7 +959,7 @@ try {
 			margin-top: 24px;
 			text-align: center;
 		}
-		
+
 /* ACCESS TOAST */
 .access-toast {
     position: fixed;
@@ -811,7 +1008,88 @@ try {
 #appToast.showing {
     pointer-events: auto;
 }
-		
+
+/* Shared direct logout button used across updated admin pages. */
+.admin-page-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 98px;
+    min-height: 40px;
+    margin: 0 18px 0 6px;
+    padding: 8px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 11px;
+    background: #fff;
+    color: #b91c1c !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+    text-decoration: none !important;
+    white-space: nowrap;
+    transition:
+        background .18s ease,
+        color .18s ease,
+        border-color .18s ease,
+        transform .18s ease,
+        box-shadow .18s ease;
+}
+
+.admin-page-logout-btn i {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.admin-page-logout-btn:hover,
+.admin-page-logout-btn:focus {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #991b1b !important;
+    box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+html.dark .admin-page-logout-btn {
+    border-color: rgba(248, 113, 113, .30);
+    background: rgba(127, 29, 29, .16);
+    color: #fca5a5 !important;
+    box-shadow: none;
+}
+
+html.dark .admin-page-logout-btn:hover,
+html.dark .admin-page-logout-btn:focus {
+    border-color: rgba(248, 113, 113, .55);
+    background: rgba(127, 29, 29, .28);
+    color: #fecaca !important;
+}
+
+@media (max-width: 575.98px) {
+    .admin-page-logout-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        margin: 0 10px 0 4px;
+        padding: 0;
+        border-radius: 10px;
+    }
+
+    .admin-page-logout-btn span {
+        display: none;
+    }
+
+    .admin-page-logout-btn i {
+        font-size: 18px;
+    }
+
+    .admin-theme-switch {
+        padding: 0 2px;
+    }
+}
+
 		#viewHomeownerModal #coverMap{
 			min-height:320px;
 			background:#e9eef6;
@@ -883,7 +1161,6 @@ html.dark .table {
         var(--admin-border) !important;
 }
 
-
 /*
  * Bootstrap 5 paints the actual TD/TH cells,
  * not only the TR.
@@ -906,7 +1183,6 @@ html.dark .table > :not(caption) > * > * {
         ) !important;
 }
 
-
 /* Normal DataTables rows */
 html.dark table.dataTable tbody tr,
 html.dark table.dataTable tbody td {
@@ -917,7 +1193,6 @@ html.dark table.dataTable tbody td {
         var(--admin-border) !important;
 }
 
-
 /* Even rows */
 html.dark table.dataTable tbody tr.even > *,
 html.dark table.dataTable tbody tr:nth-child(even) > * {
@@ -927,7 +1202,6 @@ html.dark table.dataTable tbody tr:nth-child(even) > * {
     color:
         var(--admin-text) !important;
 }
-
 
 /* Odd / striped rows */
 html.dark table.dataTable tbody tr.odd > *,
@@ -941,7 +1215,6 @@ html.dark table.dataTable.table-striped
     color:
         var(--admin-text) !important;
 }
-
 
 /* Header */
 html.dark table.dataTable thead th,
@@ -957,7 +1230,6 @@ html.dark .table thead th {
         var(--admin-border) !important;
 }
 
-
 /* Hover */
 html.dark table.dataTable tbody tr:hover > *,
 html.dark .table-hover tbody tr:hover > * {
@@ -967,7 +1239,6 @@ html.dark .table-hover tbody tr:hover > * {
     color:
         #ffffff !important;
 }
-
 
 /* DataTables controls */
 html.dark .dataTables_wrapper
@@ -979,7 +1250,6 @@ html.dark .dataTables_wrapper
     color:
         var(--admin-muted) !important;
 }
-
 
 html.dark .dataTables_wrapper
     .dataTables_filter input,
@@ -1065,57 +1335,29 @@ html.dark #hoaConfirmModal .btn-light {
 		</div>
 
 <div class="header-right">
-
-    <!-- DARK MODE TOGGLE -->
     <div class="admin-theme-switch">
-        <button type="button"
-                id="themeToggle"
-                class="admin-theme-toggle"
-                aria-label="Switch theme"
-                title="Switch theme">
+        <button
+            type="button"
+            id="themeToggle"
+            class="admin-theme-toggle"
+            aria-label="Switch theme"
+            title="Switch theme"
+        >
             <span id="themeIcon">☾</span>
         </button>
     </div>
 
-    <div class="user-notification">
-				<div class="dropdown">
-					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-						<i class="icon-copy dw dw-notification"></i>
-						<span class="badge notification-active"></span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right">
-						<div class="notification-list mx-h-350 customscroll">
-							<ul>
-								<li>
-									<a href="#">
-										<img src="vendors/images/img.jpg" alt="">
-										<h3>System</h3>
-										<p>Notifications appear here.</p>
-									</a>
-								</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<div class="user-info-dropdown">
-				<div class="dropdown">
-					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-						<span class="user-icon">
-							<img src="vendors/images/photo1.jpg" alt="">
-						</span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-					</div>
-				</div>
-			</div>
-
-		</div>
-	</div>
+    <a
+        href="logout.php"
+        class="admin-page-logout-btn"
+        title="Log out"
+        aria-label="Log out"
+    >
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+    </a>
+</div>
+</div>
 
 	<div class="right-sidebar">
 		<div class="sidebar-title">
@@ -1159,11 +1401,140 @@ html.dark #hoaConfirmModal .btn-light {
 				<div class="page-title-wrap">
 				<div>
 						<h2 class="h4 mb-1">Home Owner Management</h2>
-						<div class="text-muted fw-semibold subtitle">Import Review & Duplicate Checking</div>
+						<div class="text-muted fw-semibold subtitle">Household Review, Import &amp; Duplicate Checking</div>
 					</div>
 				</div>
 
 				<div class="card-box p-3">
+          <?php if (!empty($_SESSION['flash_message'])): ?>
+            <div
+              class="alert alert-<?= esc($_SESSION['flash_type'] ?? 'info') ?> alert-dismissible fade show mb-3"
+              role="alert"
+            >
+              <?= esc($_SESSION['flash_message']) ?>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="alert"
+                aria-label="Close"
+              ></button>
+            </div>
+            <?php unset(
+                $_SESSION['flash_type'],
+                $_SESSION['flash_message']
+            ); ?>
+          <?php endif; ?>
+
+          <?php if (!empty($manualPendingForReview)): ?>
+            <div class="mb-4">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div>
+                  <h5 class="mb-1">Registered Households for Review</h5>
+                  <small class="text-muted">
+                    Households entered through Register Household appear here until they are reviewed and pushed to active homeowner data.
+                  </small>
+                </div>
+                <span class="badge bg-warning text-dark">
+                  <?= count($manualPendingForReview) ?> for review
+                </span>
+              </div>
+
+              <div class="alert alert-info py-2 mb-3">
+                Review the homeowner details, household members, and mapped property. Required documents will be uploaded later by the homeowner. Records that conflict with an active homeowner are separated into the ownership-transfer section below.
+              </div>
+
+              <div class="table-responsive">
+                <table
+                  id="manualReviewTable"
+                  class="table table-bordered table-striped align-middle"
+                  style="width:100%"
+                >
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Homeowner</th>
+                      <th>Email</th>
+                      <th>Phase / Block / Lot</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($manualPendingForReview as $manualRow): ?>
+                      <?php
+                      [$manualBlock, $manualLot] =
+                          subdivision_block_lot(
+                              $manualRow
+                          );
+
+                      $manualName =
+                          trim(
+                              (string)(
+                                  $manualRow['first_name'] ??
+                                  ''
+                              ) .
+                              ' ' .
+                              (string)(
+                                  $manualRow['middle_name'] ??
+                                  ''
+                              ) .
+                              ' ' .
+                              (string)(
+                                  $manualRow['last_name'] ??
+                                  ''
+                              )
+                          );
+
+                      $manualDisplayId =
+                          homeowner_public_id(
+                              $manualRow
+                          );
+
+                      ?>
+                      <tr>
+                        <td><?= esc($manualDisplayId) ?></td>
+                        <td><?= esc($manualName ?: 'Unnamed Homeowner') ?></td>
+                        <td><?= esc($manualRow['email'] ?? '') ?></td>
+                        <td>
+                          <?= esc(
+                              (string)($manualRow['phase'] ?? '') .
+                              ' / Block ' .
+                              $manualBlock .
+                              ' / Lot ' .
+                              $manualLot
+                          ) ?>
+                        </td>
+
+                        <td>
+                          <span class="badge badge-warning">
+                            Ready for Review
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-info viewHomeownerBtn"
+                            data-id="<?= (int)$manualRow['id'] ?>"
+                            title="Review Registered Household"
+                          >
+                            <i class="dw dw-eye"></i>
+                            Review
+                          </button>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <hr class="mb-4">
+          <?php else: ?>
+            <div class="alert alert-light border mb-4">
+              No registered households are waiting for normal review.
+            </div>
+          <?php endif; ?>
+
 				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
 					<div>
 						<h5 class="mb-1">Homeowner Import</h5>
@@ -1200,12 +1571,6 @@ html.dark #hoaConfirmModal .btn-light {
               <?php endif; ?>
             </div>
 
-            <div class="alert alert-info py-2 mb-3">
-              <strong>Review flow:</strong>
-              Double-check the imported residents. You may push them one by one, or use
-              <strong>Push All to Homeowner Data</strong> to activate all valid pending imports at once.
-              Duplicate records are excluded and remain available for separate review and archiving.
-            </div>
             <div class="table-responsive">
               <table id="importQueueTable" class="table table-bordered table-striped align-middle" style="width:100%">
                 <thead>
@@ -1260,21 +1625,14 @@ html.dark #hoaConfirmModal .btn-light {
 
     <?php
     $importDisplayId =
-        trim(
-            (string)(
-                $qrow['public_id'] ?? ''
-            )
-        );
-
-    if ($importDisplayId === '') {
-
-        $importDisplayId =
-            phase_prefix(
-                (string)$qrow['phase']
-            )
-            .
-            (int)$qrow['source_id'];
-    }
+        homeowner_public_id([
+            'public_id' =>
+                $qrow['public_id'] ?? '',
+            'phase' =>
+                $qrow['phase'] ?? '',
+            'id' =>
+                $qrow['source_id'] ?? 0,
+        ]);
     ?>
 
     <?= esc($importDisplayId) ?>
@@ -1405,7 +1763,10 @@ html.dark #hoaConfirmModal .btn-light {
                     $currentOwner = $candidate['current_owner'];
                     $incomingName = trim(($incoming['first_name'] ?? '') . ' ' . ($incoming['middle_name'] ?? '') . ' ' . ($incoming['last_name'] ?? ''));
                     $currentName = trim(($currentOwner['first_name'] ?? '') . ' ' . ($currentOwner['middle_name'] ?? '') . ' ' . ($currentOwner['last_name'] ?? ''));
-                    $incomingDisplayId = trim((string)($incoming['public_id'] ?? '')) ?: (phase_prefix((string)$incoming['phase']) . (int)$incoming['id']);
+                    $incomingDisplayId =
+                        homeowner_public_id(
+                            $incoming
+                        );
                   ?>
                   <tr>
                     <td><?= esc($incomingDisplayId) ?></td>
@@ -1414,7 +1775,7 @@ html.dark #hoaConfirmModal .btn-light {
                     <td><?= esc(($incoming['phase'] ?? '') . ' / Block ' . (int)$candidate['block'] . ' / Lot ' . (int)$candidate['lot']) ?></td>
                     <td>
                       <div class="fw-semibold"><?= esc($currentName) ?></div>
-                      <small class="text-muted"><?= esc($currentOwner['public_id'] ?? ('#' . (int)$currentOwner['id'])) ?></small>
+                      <small class="text-muted"><?= esc(homeowner_public_id($currentOwner)) ?></small>
                     </td>
                     <td><span class="badge badge-warning">Possible Ownership Transfer</span></td>
                     <td>
@@ -1434,7 +1795,6 @@ html.dark #hoaConfirmModal .btn-light {
             </div>
           </div>
         <?php endif; ?>
-
 
 				</div>
 			</div>
@@ -1472,7 +1832,6 @@ html.dark #hoaConfirmModal .btn-light {
 			</div>
 		</div>
 	</div>
-
 
   <div class="modal fade" id="pushAllImportedModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -1528,14 +1887,13 @@ html.dark #hoaConfirmModal .btn-light {
                     Resident Conflict Review
                 </h5>
 
-                <button 
-                    type="button" 
-                    class="btn-close" 
+                <button
+                    type="button"
+                    class="btn-close"
                     data-bs-dismiss="modal">
                 </button>
 
             </div>
-
 
             <div class="modal-body">
 
@@ -1548,7 +1906,6 @@ html.dark #hoaConfirmModal .btn-light {
                 </div>
 
             </div>
-
 
             <div class="modal-footer flex-wrap gap-2">
 
@@ -1597,7 +1954,6 @@ html.dark #hoaConfirmModal .btn-light {
                 </button>
 
             </div>
-
 
         </div>
 
@@ -1717,7 +2073,6 @@ html.dark #hoaConfirmModal .btn-light {
 
             </div>
 
-
             <div class="modal-body text-center px-4 py-4">
 
                 <div
@@ -1734,16 +2089,13 @@ html.dark #hoaConfirmModal .btn-light {
                     <i class="dw dw-warning"></i>
                 </div>
 
-
                 <h5 class="fw-bold mb-2">
                     Notify both parties and archive duplicate?
                 </h5>
 
-
                 <p class="text-muted mb-0">
                     Email notifications will be sent to both the imported resident and the existing registered homeowner before the duplicate import record is archived.
                 </p>
-
 
                 <div class="alert alert-warning mt-3 mb-0 text-start">
 
@@ -1754,7 +2106,6 @@ html.dark #hoaConfirmModal .btn-light {
                 </div>
 
             </div>
-
 
             <div
                 class="modal-footer border-0 justify-content-center pb-4"
@@ -1767,7 +2118,6 @@ html.dark #hoaConfirmModal .btn-light {
                 >
                     Cancel
                 </button>
-
 
                 <button
                     type="button"
@@ -1783,8 +2133,6 @@ html.dark #hoaConfirmModal .btn-light {
 
     </div>
 </div>
-
-
 
 <!-- =====================================================
      SHARED HOA CONFIRMATION MODAL (THIS PAGE ONLY)
@@ -1864,7 +2212,6 @@ function showToast(
     msgEl.textContent =
         message;
 
-
     toastEl.classList.remove(
         'text-bg-success',
         'text-bg-danger',
@@ -1872,7 +2219,6 @@ function showToast(
         'text-bg-info',
         'text-bg-dark'
     );
-
 
     if (type === 'success') {
 
@@ -1899,7 +2245,6 @@ function showToast(
         );
     }
 
-
     bootstrap.Toast
         .getOrCreateInstance(
             toastEl,
@@ -1909,7 +2254,6 @@ function showToast(
         )
         .show();
 }
-
 
 /**
  * Custom promise-based confirmation dialog used by ownership-transfer actions.
@@ -2103,7 +2447,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const fileInput =
         document.getElementById('excelFileInput');
 
-
     importBtn?.addEventListener(
         'click',
         function () {
@@ -2112,7 +2455,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         }
     );
-
 
     fileInput?.addEventListener(
         'change',
@@ -2146,7 +2488,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 'info'
             );
 
-
             /*
             |--------------------------------------------------------------------------
             | Read Excel
@@ -2168,7 +2509,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 workbook.Sheets[
                     workbook.SheetNames[0]
                 ];
-
 
             /*
             |--------------------------------------------------------------------------
@@ -2232,7 +2572,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Could not find the Excel column headings. Please use the revised South Meridian Block and Lot template.'
                 );
             }
-
 
             /*
             |--------------------------------------------------------------------------
@@ -2302,7 +2641,6 @@ rows =
                 );
             }
 
-
             /*
             |--------------------------------------------------------------------------
             | Required columns
@@ -2347,7 +2685,6 @@ rows =
                 );
             }
 
-
             /*
             |--------------------------------------------------------------------------
             | Map required
@@ -2362,7 +2699,6 @@ rows =
                     'The subdivision Block/Lot mapping file is missing. Upload southmeri_block_lot_mapping.json beside this PHP file.'
                 );
             }
-
 
             /*
             |--------------------------------------------------------------------------
@@ -2384,7 +2720,6 @@ const excelRow =
     headerIndex +
     index +
     2;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -2413,7 +2748,6 @@ if (rawLot === '') {
     );
 }
 
-
 /*
 |--------------------------------------------------------------------------
 | Convert to numbers
@@ -2432,7 +2766,6 @@ const lot =
         10
     );
 
-
 if (
     !Number.isInteger(block) ||
     block <= 0
@@ -2442,7 +2775,6 @@ if (
         `Excel row ${excelRow}: "${rawBlock}" is not a valid Block number.`
     );
 }
-
 
 if (
     !Number.isInteger(lot) ||
@@ -2454,7 +2786,6 @@ if (
     );
 }
 
-
 /*
 |--------------------------------------------------------------------------
 | Check official South Meridian map
@@ -2465,7 +2796,6 @@ const location =
     southMeridianLocationIndex.get(
         `${block}:${lot}`
     );
-
 
 if (!location) {
 
@@ -2534,7 +2864,6 @@ if (!location) {
                     }
                 );
 
-
             /*
             |--------------------------------------------------------------------------
             | Counters
@@ -2553,7 +2882,6 @@ if (!location) {
              * FROM YOUR CURRENT FILE.
              */
             const chunkSize = 100;
-
 
             /*
             |--------------------------------------------------------------------------
@@ -2580,7 +2908,6 @@ if (!location) {
                     )} of ${rows.length}...`,
                     'info'
                 );
-
 
                 const response =
                     await fetch(
@@ -2609,7 +2936,6 @@ if (!location) {
                                 })
                         }
                     );
-
 
                 /*
                 |--------------------------------------------------------------------------
@@ -2667,7 +2993,6 @@ if (!location) {
                     );
                 }
 
-
                 if (
                     !response.ok ||
                     !data ||
@@ -2683,7 +3008,6 @@ if (!location) {
                             : 'Import request failed.'
                     );
                 }
-
 
                 /*
                 |--------------------------------------------------------------------------
@@ -2721,7 +3045,6 @@ if (!location) {
                 );
             }
 
-
             /*
             |--------------------------------------------------------------------------
             | Summary
@@ -2756,7 +3079,6 @@ if (!location) {
             }
 
             summary += '.';
-
 
             /*
             |--------------------------------------------------------------------------
@@ -2819,7 +3141,6 @@ if (!location) {
                 );
             }
 
-
             /*
              * Reload so:
              *
@@ -2836,7 +3157,6 @@ if (!location) {
                 },
                 1800
             );
-
 
         } catch (err) {
 
@@ -2865,7 +3185,6 @@ if (!location) {
     });
 
 });
-
 
 	$(function () {
 
@@ -2975,6 +3294,21 @@ if (!location) {
                 pageLength: 25,
                 order: [],
                 columnDefs: [
+                    { orderable: false, targets: 5 }
+                ]
+            });
+        }
+
+        if (
+            $.fn.DataTable &&
+            $('#manualReviewTable').length &&
+            !$.fn.DataTable.isDataTable('#manualReviewTable')
+        ) {
+            $('#manualReviewTable').DataTable({
+                responsive: true,
+                pageLength: 10,
+                order: [],
+                columnDefs: [
                     { orderable: false, targets: 6 }
                 ]
             });
@@ -3011,7 +3345,7 @@ if (!location) {
 		const reasonInputEl  = document.getElementById('rejectReasonInput');
 		const reasonErrorEl  = document.getElementById('rejectReasonError');
 
-		let pendingAction = { id: null, status: null };
+		let pendingAction = { id: null, status: null, source: 'import' };
 
 		const confirmModal = new bootstrap.Modal(confirmModalEl, {
 			backdrop: true,
@@ -3025,7 +3359,7 @@ if (!location) {
 			const id = $(this).data('id');
 			if (!id) return;
 
-			pendingAction = { id, status: 'approved' };
+			pendingAction = { id, status: 'approved', source: 'import' };
 
 			confirmTitleEl.textContent = 'Push to Homeowner Data';
 			confirmTextEl.textContent  = 'You have double-checked this imported resident. Push this record to active homeowner data and send the homeowner an account setup email?';
@@ -3047,9 +3381,82 @@ if (!location) {
 			}, 120);
 		});
 
+        $(document).on(
+            'click',
+            '.finalizeRegisteredHomeowner',
+            function (e) {
+                e.preventDefault();
+
+                const id =
+                    $(this).data('id');
+
+                if (!id) {
+                    return;
+                }
+
+                pendingAction = {
+                    id,
+                    status: 'approved',
+                    source: 'registered'
+                };
+
+                confirmTitleEl.textContent =
+                    'Push Registered Household';
+
+                confirmTextEl.textContent =
+                    'You have reviewed this registered household. Push it to active homeowner data and send the homeowner an account setup email?';
+
+                confirmBtnEl.classList.remove(
+                    'btn-danger'
+                );
+
+                confirmBtnEl.classList.add(
+                    'btn-success'
+                );
+
+                confirmBtnEl.textContent =
+                    'Push to Homeowner Data';
+
+                reasonWrapEl.style.display =
+                    'none';
+
+                reasonErrorEl.style.display =
+                    'none';
+
+                reasonInputEl.value =
+                    '';
+
+                confirmModal.show();
+
+                setTimeout(
+                    function () {
+                        const backdrops =
+                            document.querySelectorAll(
+                                '.modal-backdrop'
+                            );
+
+                        if (
+                            backdrops.length >
+                            1
+                        ) {
+                            backdrops[
+                                backdrops.length -
+                                1
+                            ].classList.add(
+                                'confirm-top'
+                            );
+                        }
+
+                        confirmBtnEl.focus();
+                    },
+                    120
+                );
+            }
+        );
+
 		confirmBtnEl.addEventListener('click', function () {
 
-    const { id, status } = pendingAction;
+    const { id, status, source } = pendingAction;
 
     if (!id || status !== 'approved') {
         return;
@@ -3060,16 +3467,22 @@ if (!location) {
     const oldText = confirmBtnEl.textContent;
     confirmBtnEl.textContent = 'Pushing...';
 
+    const isRegistered =
+        source === 'registered';
+
+    const finalizerEndpoint =
+        isRegistered
+            ? 'finalize_registered_homeowner.php'
+            : 'finalize_migrated_homeowner.php';
+
     /*
-     * IMPORTANT:
      * The database still uses status="approved" for compatibility with the
-     * rest of the existing South Meridian system. In the UI this is no longer
-     * an approval workflow. It simply means the imported record has passed
-     * double-checking and is now pushed to active homeowner data.
+     * rest of the South Meridian system. The UI action is "Push to Homeowner
+     * Data" after review rather than a separate Approve / Reject workflow.
      */
     $.ajax({
 
-        url: 'finalize_migrated_homeowner.php',
+        url: finalizerEndpoint,
         type: 'POST',
         dataType: 'json',
 
@@ -3084,7 +3497,11 @@ if (!location) {
                 showToast(
                     res && res.message
                         ? res.message
-                        : 'Unable to push the imported resident.',
+                        : (
+                            isRegistered
+                                ? 'Unable to push the registered household.'
+                                : 'Unable to push the imported resident.'
+                        ),
                     'error'
                 );
 
@@ -3094,7 +3511,12 @@ if (!location) {
             }
 
             showToast(
-                res.message || 'Imported resident was pushed to homeowner data and the account setup email was sent successfully.',
+                res.message ||
+                    (
+                        isRegistered
+                            ? 'Registered household was pushed to homeowner data and the account setup email was sent successfully.'
+                            : 'Imported resident was pushed to homeowner data and the account setup email was sent successfully.'
+                    ),
                 'success'
             );
 
@@ -3118,7 +3540,10 @@ if (!location) {
             console.error('HTTP Status:', xhr.status);
             console.error('Server Response:', xhr.responseText);
 
-            let message = 'Unable to push the imported resident. Please try again.';
+            let message =
+                isRegistered
+                    ? 'Unable to push the registered household. Please try again.'
+                    : 'Unable to push the imported resident. Please try again.';
 
             if (xhr.responseText) {
                 try {
@@ -3134,7 +3559,10 @@ if (!location) {
                     } else if (xhr.status === 404) {
                         message = 'The homeowner update endpoint was not found.';
                     } else if (xhr.status === 500) {
-                        message = 'Server error occurred while pushing the imported resident. Check the PHP error log or email configuration.';
+                        message =
+                            isRegistered
+                                ? 'Server error occurred while pushing the registered household. Check the PHP error log or email configuration.'
+                                : 'Server error occurred while pushing the imported resident. Check the PHP error log or email configuration.';
                     }
                 }
             }
@@ -3148,7 +3576,7 @@ if (!location) {
 });
 
 		confirmModalEl.addEventListener('hidden.bs.modal', function () {
-			pendingAction = { id: null, status: null };
+			pendingAction = { id: null, status: null, source: 'import' };
 			confirmBtnEl.disabled = false;
 			confirmBtnEl.textContent = 'Push to Homeowner Data';
 			reasonErrorEl.style.display = 'none';
@@ -3295,7 +3723,7 @@ function initCoverMapIfAny() {
 	});
 	</script>
 	<script>
-		
+
 const duplicateResidentModalEl = document.getElementById('duplicateResidentModal');
 const duplicateResidentModal = duplicateResidentModalEl ? new bootstrap.Modal(duplicateResidentModalEl) : null;
 const duplicateResidentContent = document.getElementById('duplicateResidentContent');
@@ -3704,7 +4132,6 @@ const duplicateDeleteConfirmModal =
         )
         : null;
 
-
 const duplicateDeleteConfirmBtn =
     document.getElementById(
         'duplicateDeleteConfirmBtn'
@@ -3720,9 +4147,7 @@ const duplicateDeleteCloseBtn =
         'duplicateDeleteCloseBtn'
     );
 
-
 let pendingDuplicateDeleteId = 0;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -3748,10 +4173,8 @@ notifyDeleteDuplicateBtn?.addEventListener(
             return;
         }
 
-
         pendingDuplicateDeleteId =
             id;
-
 
         /*
          * Close the duplicate review first,
@@ -3773,7 +4196,6 @@ notifyDeleteDuplicateBtn?.addEventListener(
                     }
                 );
 
-
             duplicateResidentModal
                 ?.hide();
 
@@ -3785,7 +4207,6 @@ notifyDeleteDuplicateBtn?.addEventListener(
     }
 );
 
-
 /*
 |--------------------------------------------------------------------------
 | Cancel archive confirmation
@@ -3796,7 +4217,6 @@ function cancelDuplicateDelete() {
 
     pendingDuplicateDeleteId =
         0;
-
 
     if (
         duplicateDeleteConfirmModalEl
@@ -3817,11 +4237,9 @@ function cancelDuplicateDelete() {
             );
     }
 
-
     duplicateDeleteConfirmModal
         ?.hide();
 }
-
 
 duplicateDeleteCancelBtn
     ?.addEventListener(
@@ -3829,13 +4247,11 @@ duplicateDeleteCancelBtn
         cancelDuplicateDelete
     );
 
-
 duplicateDeleteCloseBtn
     ?.addEventListener(
         'click',
         cancelDuplicateDelete
     );
-
 
 /*
 |--------------------------------------------------------------------------
@@ -3863,13 +4279,11 @@ duplicateDeleteConfirmBtn
                 return;
             }
 
-
             const button =
                 this;
 
             const originalText =
                 button.textContent;
-
 
             button.disabled =
                 true;
@@ -3877,24 +4291,20 @@ duplicateDeleteConfirmBtn
             button.textContent =
                 'Sending notification...';
 
-
             try {
 
                 const body =
                     new URLSearchParams();
-
 
                 body.set(
                     'id',
                     String(id)
                 );
 
-
                 body.set(
                     'csrf',
                     homeownerImportCsrf
                 );
-
 
                 const response =
                     await fetch(
@@ -3913,7 +4323,6 @@ duplicateDeleteConfirmBtn
                         }
                     );
 
-
                 /*
                 |--------------------------------------------------------------------------
                 | Read response
@@ -3923,9 +4332,7 @@ duplicateDeleteConfirmBtn
                 const responseText =
                     await response.text();
 
-
                 let data;
-
 
                 try {
 
@@ -3941,12 +4348,10 @@ duplicateDeleteConfirmBtn
                         responseText
                     );
 
-
                     throw new Error(
                         'Server returned an invalid response.'
                     );
                 }
-
 
                 if (
                     !response.ok ||
@@ -3959,7 +4364,6 @@ duplicateDeleteConfirmBtn
                     );
                 }
 
-
                 /*
                 |--------------------------------------------------------------------------
                 | Success
@@ -3969,10 +4373,8 @@ duplicateDeleteConfirmBtn
                 pendingDuplicateDeleteId =
                     0;
 
-
                 duplicateDeleteConfirmModal
                     ?.hide();
-
 
                 if (
                     data.email_sent === false
@@ -3982,7 +4384,6 @@ duplicateDeleteConfirmBtn
                         'Email error:',
                         data.email_error || ''
                     );
-
 
                     showToast(
                         data.message ||
@@ -3999,7 +4400,6 @@ duplicateDeleteConfirmBtn
                     );
                 }
 
-
                 /*
                  * Reload page so the archived duplicate
                  * leaves the active duplicate review list.
@@ -4013,7 +4413,6 @@ duplicateDeleteConfirmBtn
                     1200
                 );
 
-
             } catch (error) {
 
                 console.error(
@@ -4021,13 +4420,11 @@ duplicateDeleteConfirmBtn
                     error
                 );
 
-
                 showToast(
                     error.message ||
                     'Unable to archive duplicate.',
                     'error'
                 );
-
 
                 button.disabled =
                     false;
@@ -4037,7 +4434,6 @@ duplicateDeleteConfirmBtn
             }
         }
     );
-
 
 /*
 |--------------------------------------------------------------------------

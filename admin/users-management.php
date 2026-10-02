@@ -1,674 +1,1344 @@
 <?php
-session_start();
-require_once '../config/database.php';
-require_once 'admin_access.php';
-requireAccess('user_management');
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin','superadmin'], true) || empty($_SESSION['user_id'])) {
-	header("Location: index.php");
-	exit;
-}
 
+session_start();
+
+require_once '../config/database.php';
+
+require_once 'admin_access.php';
+
+requireAccess('user_management');
+
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin','superadmin'], true) || empty($_SESSION['user_id'])) {
+
+    header("Location: index.php");
+
+    exit;
+
+}
 
 function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 $admin_id = (int)$_SESSION['user_id'];
 
 // Get admin phase
+
 $stmt = $conn->prepare("SELECT phase, role, full_name, email FROM admins WHERE id=? LIMIT 1");
+
 $stmt->bind_param("i", $admin_id);
+
 $stmt->execute();
+
 $admin = $stmt->get_result()->fetch_assoc();
+
 $stmt->close();
 
 if (!$admin) {
-	session_destroy();
-	header("Location: index.php");
-	exit;
+
+    session_destroy();
+
+    header("Location: index.php");
+
+    exit;
+
 }
 
 $admin_phase = $admin['phase']; // Phase 1|Phase 2|Phase 3|Superadmin
 
 if ($admin_phase === 'Superadmin') {
-	die("Superadmin phase is not tied to a specific HOA phase. Please login as Phase Admin (Phase 1/2/3) to manage users here.");
+
+    die("Superadmin phase is not tied to a specific HOA phase. Please login as Phase Admin (Phase 1/2/3) to manage users here.");
+
 }
 
 // view switcher (sidebar dropdown)
+
 $view = $_GET['view'] ?? 'homeowners';
+
 if (!in_array($view, ['homeowners','officers'], true)) $view = 'homeowners';
 
 // Phase code prefix: Phase 1 => P1, Phase 2 => P2, Phase 3 => P3
+
 $phase_no = (int) filter_var($admin_phase, FILTER_SANITIZE_NUMBER_INT);
+
 $phase_prefix = "P".$phase_no;
 
 // Load homeowners for this phase (approved only), with editable position from homeowner_positions
+
 $sqlHomeowners = "
-	SELECT
-		h.id,
-		h.first_name, h.middle_name, h.last_name,
-		h.contact_number, h.email,
-		h.house_lot_number,
-		h.phase,
-		COALESCE(hp.position, 'Homeowner') AS position
-	FROM homeowners h
-	LEFT JOIN homeowner_positions hp
-		ON hp.homeowner_id = h.id AND hp.phase = h.phase
-	WHERE h.status='approved' AND h.phase=?
-	ORDER BY h.id DESC
+
+    SELECT
+
+        h.id,
+
+        h.public_id,
+
+        h.first_name, h.middle_name, h.last_name,
+
+        h.contact_number, h.email,
+
+        h.house_lot_number,
+
+        h.phase,
+
+        COALESCE(hp.position, 'Homeowner') AS position
+
+    FROM homeowners h
+
+    LEFT JOIN homeowner_positions hp
+
+        ON hp.homeowner_id = h.id AND hp.phase = h.phase
+
+    WHERE h.status='approved' AND h.phase=?
+
+    ORDER BY h.id DESC
+
 ";
+
 $stmt = $conn->prepare($sqlHomeowners);
+
 $stmt->bind_param("s", $admin_phase);
+
 $stmt->execute();
+
 $homeowners = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
 $stmt->close();
 
 // Load officers for this phase (not editable here)
+
 $sqlOfficers = "
-	SELECT id, position, officer_name, officer_email, phase
-	FROM hoa_officers
-	WHERE phase=? AND is_active=1
-	ORDER BY FIELD(position,'President','Vice President','Secretary','Treasurer','Auditor','Board of Director'), position
+
+    SELECT id, position, officer_name, officer_email, phase
+
+    FROM hoa_officers
+
+    WHERE phase=? AND is_active=1
+
+    ORDER BY FIELD(position,'President','Vice President','Secretary','Treasurer','Auditor','Board of Director'), position
+
 ";
+
 $stmt = $conn->prepare($sqlOfficers);
+
 $stmt->bind_param("s", $admin_phase);
+
 $stmt->execute();
+
 $officers = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
 $stmt->close();
 
+// Active HOA officers are read-only in the Homeowners list.
+
+$hoaOfficerByEmail = [];
+
+$hoaOfficerByName = [];
+
+foreach ($officers as $officer) {
+
+    $officerEmail = strtolower(trim((string)($officer['officer_email'] ?? '')));
+
+    $officerName = strtolower(trim((string)($officer['officer_name'] ?? '')));
+
+    if ($officerEmail !== '') {
+
+        $hoaOfficerByEmail[$officerEmail] = $officer;
+
+    } elseif ($officerName !== '') {
+
+        $hoaOfficerByName[$officerName] = $officer;
+
+    }
+
+}
+
 $adminDisplayName = $admin['full_name'] ?: $admin['email'];
+
 $pageTitle = $view === 'officers' ? 'User Management • Officers' : 'User Management • Homeowners';
+
 ?>
+
 <!DOCTYPE html>
+
 <html>
+
 <head>
-	<meta charset="utf-8">
-	<title><?= esc($pageTitle) ?></title>
 
-	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+    <meta charset="utf-8">
 
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title><?= esc($pageTitle) ?></title>
 
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 
-	<!-- DataTables (CDN to avoid your local 404 issue) -->
-	<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
-	<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<style>
-		.table thead th { border-bottom: 1px solid #e9ecef !important; }
-		.table td, .table th { vertical-align: middle !important; }
-		.badge { border-radius: 999px; }
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-		/* ACCESS TOAST */
-		.access-toast {
-		  position: fixed;
-		  top: 20px;
-		  right: 20px;
-		  padding: 12px 18px;
-		  border-radius: 8px;
-		  font-weight: 600;
-		  z-index: 99999;
-		  opacity: 0;
-		  visibility: hidden;
-		  pointer-events: none;
-		  transform: translateY(-10px);
-		  transition:
-		    opacity .3s ease,
-		    transform .3s ease,
-		    visibility .3s ease;
-		}
+    <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
 
-		.access-toast.show {
-		  opacity: 1;
-		  visibility: visible;
-		  pointer-events: auto;
-		  transform: translateY(0);
-		}
-	</style>
+    <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
 
-	<!-- SHARED ADMIN LIGHT / DARK THEME -->
-	<link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+    <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
 
-	<style>
-		/* =========================================================
-		   USER MANAGEMENT - DARK MODE SAFETY
-		   Base colors come from admin_theme.css
-		   ========================================================= */
+    <!-- DataTables (CDN to avoid your local 404 issue) -->
 
-		html.dark .table thead th {
-			border-color: var(--admin-border) !important;
-		}
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 
-		html.dark #homeownersTable,
-		html.dark #officersTable {
-			--bs-table-color: var(--admin-text);
-			--bs-table-bg: var(--admin-surface);
-			--bs-table-border-color: var(--admin-border);
-			--bs-table-striped-color: var(--admin-text);
-			--bs-table-striped-bg: rgba(148, 163, 184, .055);
-			--bs-table-hover-color: #ffffff;
-			--bs-table-hover-bg: var(--admin-hover);
-			color: var(--admin-text) !important;
-			background: var(--admin-surface) !important;
-		}
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 
-		html.dark #homeownersTable > :not(caption) > * > *,
-		html.dark #officersTable > :not(caption) > * > * {
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+    <style>
 
-		html.dark #homeownersTable tbody tr:nth-child(odd) > *,
-		html.dark #officersTable tbody tr:nth-child(odd) > * {
-			background: var(--admin-surface-2) !important;
-		}
+        .table thead th { border-bottom: 1px solid #e9ecef !important; }
 
-		html.dark #homeownersTable tbody tr:nth-child(even) > *,
-		html.dark #officersTable tbody tr:nth-child(even) > * {
-			background: var(--admin-surface) !important;
-		}
+        .table td, .table th { vertical-align: middle !important; }
 
-		html.dark #homeownersTable tbody tr:hover > *,
-		html.dark #officersTable tbody tr:hover > * {
-			background: var(--admin-hover) !important;
-			color: #ffffff !important;
-		}
+        .badge { border-radius: 999px; }
 
-		html.dark #homeownersTable thead th,
-		html.dark #officersTable thead th,
-		html.dark #officersTable thead {
-			background: var(--admin-surface-2) !important;
-			color: #f8fafc !important;
-			border-color: var(--admin-border) !important;
-		}
+        /* ACCESS TOAST */
 
-		html.dark .dataTables_wrapper .dataTables_length,
-		html.dark .dataTables_wrapper .dataTables_filter,
-		html.dark .dataTables_wrapper .dataTables_info,
-		html.dark .dataTables_wrapper .dataTables_paginate {
-			color: var(--admin-muted) !important;
-		}
+        .access-toast {
 
-		html.dark .dataTables_wrapper .dataTables_filter input,
-		html.dark .dataTables_wrapper .dataTables_length select {
-			background: var(--admin-input) !important;
-			color: var(--admin-text) !important;
-			border: 1px solid var(--admin-border) !important;
-		}
+          position: fixed;
 
-		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+          top: 20px;
 
-		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
-		html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
-			background: var(--admin-surface-3) !important;
-			color: #ffffff !important;
-			border-color: var(--admin-border) !important;
-		}
+          right: 20px;
 
-		html.dark #ep_homeowner_name {
-			background: var(--admin-input) !important;
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+          padding: 12px 18px;
 
-		html.dark #editPositionModal .modal-body,
-		html.dark #editPositionModal .modal-footer {
-			background: var(--admin-surface) !important;
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+          border-radius: 8px;
 
-		html.dark #editPositionModal .form-control {
-			background: var(--admin-input) !important;
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+          font-weight: 600;
 
-		html.dark .badge-light {
-			background: var(--admin-surface-3) !important;
-			color: var(--admin-text) !important;
-			border-color: var(--admin-border) !important;
-		}
+          z-index: 99999;
 
-		html.dark .access-toast {
-			background: #7f1d1d !important;
-			color: #fecaca !important;
-			border: 1px solid #991b1b !important;
-			box-shadow: 0 10px 30px rgba(0,0,0,.35) !important;
-		}
-	</style>
+          opacity: 0;
 
-	<script>
-	(function () {
-		try {
-			const savedTheme = localStorage.getItem('hoa-theme');
+          visibility: hidden;
 
-			const dark =
-				savedTheme === 'dark' ||
-				(
-					!savedTheme &&
-					window.matchMedia &&
-					window.matchMedia('(prefers-color-scheme: dark)').matches
-				);
+          pointer-events: none;
 
-			document.documentElement.classList.toggle('dark', dark);
-		} catch (e) {}
-	})();
-	</script>
+          transform: translateY(-10px);
+
+          transition:
+
+            opacity .3s ease,
+
+            transform .3s ease,
+
+            visibility .3s ease;
+
+        }
+
+        .access-toast.show {
+
+          opacity: 1;
+
+          visibility: visible;
+
+          pointer-events: auto;
+
+          transform: translateY(0);
+
+        }
+
+    </style>
+
+    <!-- SHARED ADMIN LIGHT / DARK THEME -->
+
+    <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
+
+    <style>
+
+        /* =========================================================
+
+           USER MANAGEMENT - DARK MODE SAFETY
+
+           Base colors come from admin_theme.css
+
+           ========================================================= */
+
+        html.dark .table thead th {
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #homeownersTable,
+
+        html.dark #officersTable {
+
+            --bs-table-color: var(--admin-text);
+
+            --bs-table-bg: var(--admin-surface);
+
+            --bs-table-border-color: var(--admin-border);
+
+            --bs-table-striped-color: var(--admin-text);
+
+            --bs-table-striped-bg: rgba(148, 163, 184, .055);
+
+            --bs-table-hover-color: #ffffff;
+
+            --bs-table-hover-bg: var(--admin-hover);
+
+            color: var(--admin-text) !important;
+
+            background: var(--admin-surface) !important;
+
+        }
+
+        html.dark #homeownersTable > :not(caption) > * > *,
+
+        html.dark #officersTable > :not(caption) > * > * {
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #homeownersTable tbody tr:nth-child(odd) > *,
+
+        html.dark #officersTable tbody tr:nth-child(odd) > * {
+
+            background: var(--admin-surface-2) !important;
+
+        }
+
+        html.dark #homeownersTable tbody tr:nth-child(even) > *,
+
+        html.dark #officersTable tbody tr:nth-child(even) > * {
+
+            background: var(--admin-surface) !important;
+
+        }
+
+        html.dark #homeownersTable tbody tr:hover > *,
+
+        html.dark #officersTable tbody tr:hover > * {
+
+            background: var(--admin-hover) !important;
+
+            color: #ffffff !important;
+
+        }
+
+        html.dark #homeownersTable thead th,
+
+        html.dark #officersTable thead th,
+
+        html.dark #officersTable thead {
+
+            background: var(--admin-surface-2) !important;
+
+            color: #f8fafc !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark .dataTables_wrapper .dataTables_length,
+
+        html.dark .dataTables_wrapper .dataTables_filter,
+
+        html.dark .dataTables_wrapper .dataTables_info,
+
+        html.dark .dataTables_wrapper .dataTables_paginate {
+
+            color: var(--admin-muted) !important;
+
+        }
+
+        html.dark .dataTables_wrapper .dataTables_filter input,
+
+        html.dark .dataTables_wrapper .dataTables_length select {
+
+            background: var(--admin-input) !important;
+
+            color: var(--admin-text) !important;
+
+            border: 1px solid var(--admin-border) !important;
+
+        }
+
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+
+            background: var(--admin-surface-3) !important;
+
+            color: #ffffff !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #ep_homeowner_name {
+
+            background: var(--admin-input) !important;
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #editPositionModal .modal-body,
+
+        html.dark #editPositionModal .modal-footer {
+
+            background: var(--admin-surface) !important;
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #editPositionModal .form-control {
+
+            background: var(--admin-input) !important;
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark .badge-light {
+
+            background: var(--admin-surface-3) !important;
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark .access-toast {
+
+            background: #7f1d1d !important;
+
+            color: #fecaca !important;
+
+            border: 1px solid #991b1b !important;
+
+            box-shadow: 0 10px 30px rgba(0,0,0,.35) !important;
+
+        }
+
+        /* DIRECT HEADER LOGOUT */
+
+        .admin-header-logout {
+
+            display: flex;
+
+            align-items: center;
+
+            margin-left: 8px;
+
+        }
+
+        .admin-logout-btn {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 7px;
+
+            min-height: 38px;
+
+            padding: 8px 13px;
+
+            border: 1px solid #fecaca;
+
+            border-radius: 10px;
+
+            background: #fef2f2;
+
+            color: #dc2626 !important;
+
+            font-size: 12px;
+
+            font-weight: 700;
+
+            text-decoration: none !important;
+
+            transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+
+        }
+
+        .admin-logout-btn:hover {
+
+            background: #dc2626;
+
+            border-color: #dc2626;
+
+            color: #fff !important;
+
+            transform: translateY(-1px);
+
+        }
+
+        .admin-logout-btn i {
+
+            font-size: 18px;
+
+        }
+
+        /* EXTRA USER MANAGEMENT DARK MODE */
+
+        html.dark .card-box,
+
+        html.dark #editPositionModal .modal-content {
+
+            background: var(--admin-surface) !important;
+
+            color: var(--admin-text) !important;
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark #editPositionModal .modal-header,
+
+        html.dark #editPositionModal .modal-footer {
+
+            border-color: var(--admin-border) !important;
+
+        }
+
+        html.dark .alert-info {
+
+            background: rgba(59, 130, 246, .12) !important;
+
+            color: #bfdbfe !important;
+
+            border-color: rgba(96, 165, 250, .28) !important;
+
+        }
+
+        html.dark .alert-danger {
+
+            background: rgba(220, 38, 38, .12) !important;
+
+            color: #fecaca !important;
+
+            border-color: rgba(248, 113, 113, .28) !important;
+
+        }
+
+        html.dark .admin-logout-btn {
+
+            background: rgba(220, 38, 38, .10);
+
+            border-color: rgba(248, 113, 113, .28);
+
+            color: #fca5a5 !important;
+
+        }
+
+        html.dark .admin-logout-btn:hover {
+
+            background: #dc2626;
+
+            border-color: #ef4444;
+
+            color: #fff !important;
+
+        }
+
+        @media (max-width: 575.98px) {
+
+            .admin-logout-btn {
+
+                width: 38px;
+
+                height: 38px;
+
+                min-height: 38px;
+
+                padding: 0;
+
+            }
+
+            .admin-logout-text {
+
+                display: none;
+
+            }
+
+        }
+
+    </style>
+
+    <script>
+
+    (function () {
+
+        try {
+
+            const savedTheme = localStorage.getItem('hoa-theme');
+
+            const dark =
+
+                savedTheme === 'dark' ||
+
+                (
+
+                    !savedTheme &&
+
+                    window.matchMedia &&
+
+                    window.matchMedia('(prefers-color-scheme: dark)').matches
+
+                );
+
+            document.documentElement.classList.toggle('dark', dark);
+
+        } catch (e) {}
+
+    })();
+
+    </script>
+
 </head>
 
 <body>
-	<div class="header">
-		<div class="header-left">
-			<div class="menu-icon dw dw-menu"></div>
-			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
-		</div>
-		<div class="header-right">
 
-			<!-- SHARED ADMIN DARK MODE TOGGLE -->
-			<div class="admin-theme-switch">
-				<button
-					type="button"
-					id="themeToggle"
-					class="admin-theme-toggle"
-					aria-label="Switch theme"
-					title="Switch theme"
-				>
-					<span id="themeIcon">☾</span>
-				</button>
-			</div>
+    <div class="header">
 
-			<div class="user-notification">
-				<div class="dropdown">
-					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-						<i class="icon-copy dw dw-notification"></i>
-						<span class="badge notification-active"></span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right">
-						<div class="notification-list mx-h-350 customscroll">
-							<ul>
-								<li>
-									<a href="#">
-										<img src="vendors/images/img.jpg" alt="">
-										<h3>System</h3>
-										<p>User Management loaded for <?= esc($admin_phase) ?>.</p>
-									</a>
-								</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</div>
+        <div class="header-left">
 
-			<div class="user-info-dropdown">
-				<div class="dropdown">
-					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-						<span class="user-icon">
-							<img src="vendors/images/photo1.jpg" alt="">
-						</span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-					</div>
-				</div>
-			</div>
+            <div class="menu-icon dw dw-menu"></div>
 
-		</div>
-	</div>
+            <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
+
+        </div>
+
+        <div class="header-right">
+
+            <!-- SHARED ADMIN DARK MODE TOGGLE -->
+
+            <div class="admin-theme-switch">
+
+                <button
+
+                    type="button"
+
+                    id="themeToggle"
+
+                    class="admin-theme-toggle"
+
+                    aria-label="Switch theme"
+
+                    title="Switch theme"
+
+                >
+
+                    <span id="themeIcon">☾</span>
+
+                </button>
+
+            </div>
+
+            <div class="admin-header-logout">
+
+                <a href="logout.php" class="admin-logout-btn" title="Log Out" aria-label="Log Out">
+
+                    <i class="dw dw-logout"></i>
+
+                    <span class="admin-logout-text">Log Out</span>
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
 
   <!-- SIDEBAR -->
+
 <?php include 'sidebar.php'; ?>
 
-	<div class="mobile-menu-overlay"></div>
+    <div class="mobile-menu-overlay"></div>
 
-	<div class="main-container">
-		<div class="pd-ltr-20">
+    <div class="main-container">
 
-			<div class="col-xl-12 mb-30">
-				<div class="card-box height-100-p pd-20">
+        <div class="pd-ltr-20">
 
-					<div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
-						<div>
-							<h4 class="mb-0">User Management</h4>
-							<small class="text-muted">
-								Phase: <?= esc($admin_phase) ?> —
-								<?= $view === 'officers' ? 'Officers (Read-only)' : 'Homeowners (Editable Position)' ?>
-							</small>
-						</div>
-					</div>
+            <div class="col-xl-12 mb-30">
 
-					<?php if ($view === 'homeowners'): ?>
-						<!-- ================= HOMEOWNERS VIEW ================= -->
-						<div class="table-responsive">
-							<table id="homeownersTable" class="table table-hover table-striped mb-0 align-middle">
-								<thead class="table-light">
-									<tr>
-										<th width="12%">ID</th>
-										<th width="25%">Full Name</th>
-										<th width="23%">Address & Contacts</th>
-										<th width="20%">Position</th>
-										<th width="20%" class="text-center">Action</th>
-									</tr>
-								</thead>
-								<tbody>
-									<?php foreach ($homeowners as $h): ?>
-										<?php
-											$fullName = trim($h['first_name'].' '.($h['middle_name'] ?? '').' '.$h['last_name']);
-											$displayId = $phase_prefix . $h['id'];
-											$position = $h['position'] ?: 'Homeowner';
-											$addr = $h['house_lot_number'] ?: '-';
-											$contact = $h['contact_number'] ?: '-';
-											$email = $h['email'] ?: '-';
-										?>
-										<tr id="row-homeowner-<?= (int)$h['id'] ?>">
-											<td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
-											<td>
-												<div class="font-weight-600"><?= esc($fullName) ?></div>
-											</td>
-											<td>
-												<div><i class="dw dw-home"></i> <?= esc($addr) ?></div>
-												<div><i class="dw dw-phone-call"></i> <?= esc($contact) ?></div>
-												<div><i class="dw dw-mail"></i> <?= esc($email) ?></div>
-											</td>
-											<td>
-												<span class="badge badge-primary" id="pos-badge-<?= (int)$h['id'] ?>">
-													<?= esc($position) ?>
-												</span>
-											</td>
-											<td class="text-center">
-												<button
-													type="button"
-													class="btn btn-sm btn-outline-primary editPositionBtn"
-													data-id="<?= (int)$h['id'] ?>"
-													data-name="<?= esc($fullName) ?>"
-													data-position="<?= esc($position) ?>"
-												>
-													<i class="dw dw-edit2"></i>
-												</button>
-											</td>
-										</tr>
-									<?php endforeach; ?>
-								</tbody>
-							</table>
-						</div>
+                <div class="card-box height-100-p pd-20">
 
-					<?php else: ?>
-						<!-- ================= OFFICERS VIEW ================= -->
-						<div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
-							<div>
-								<h5 class="mb-0">
-									<i class="dw dw-shield1 mr-1"></i> HOA Officers — <?= esc($admin_phase) ?>
-								</h5>
-								<small class="text-muted">Read-only list (no editing here)</small>
-							</div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
 
-							<div class="d-flex align-items-center mt-2 mt-md-0">
-								<div class="card-box pd-10 mr-2" style="min-width: 180px;">
-									<div class="d-flex align-items-center justify-content-between">
-										<div>
-											<small class="text-muted d-block">Active Officers</small>
-											<div class="font-weight-700" style="font-size:18px; line-height:1;">
-												<?= (int)count($officers) ?>
-											</div>
-										</div>
-										<div class="text-primary" style="font-size:28px;">
-											<i class="dw dw-user-12"></i>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
+                        <div>
 
-						<div class="card-box pb-10">
-							<div class="table-responsive">
-								<table id="officersTable" class="table table-hover table-striped nowrap mb-0">
-									<thead style="background:#f6f8fb;">
-										<tr>
-											<th style="width: 18%;">Position</th>
-											<th style="width: 28%;">Officer Name</th>
-											<th style="width: 30%;">Email</th>
-											<th style="width: 12%;">Phase</th>
-											<th style="width: 12%;">Status</th>
-										</tr>
-									</thead>
-									<tbody>
-										<?php foreach ($officers as $o): ?>
-											<?php
-												$pos = $o['position'] ?? '';
-												$name = $o['officer_name'] ?: '-';
-												$email = $o['officer_email'] ?: '';
-												$phase = $o['phase'] ?? $admin_phase;
+                            <h4 class="mb-0">User Management</h4>
 
-												$badgeClass = 'badge badge-secondary';
-												$posLower = strtolower($pos);
-												if (strpos($posLower, 'president') !== false) $badgeClass = 'badge badge-primary';
-												if (strpos($posLower, 'vice') !== false) $badgeClass = 'badge badge-info';
-												if (strpos($posLower, 'secretary') !== false) $badgeClass = 'badge badge-success';
-												if (strpos($posLower, 'treasurer') !== false) $badgeClass = 'badge badge-warning';
-												if (strpos($posLower, 'auditor') !== false) $badgeClass = 'badge badge-dark';
-												if (strpos($posLower, 'board') !== false) $badgeClass = 'badge badge-secondary';
-											?>
-											<tr>
-												<td>
-													<span class="<?= esc($badgeClass) ?>" style="font-size:12px; padding:6px 10px;">
-														<?= esc($pos ?: '-') ?>
-													</span>
-												</td>
-												<td class="font-weight-600"><?= esc($name) ?></td>
-												<td>
-													<?php if ($email): ?>
-														<i class="dw dw-mail mr-1"></i> <?= esc($email) ?>
-													<?php else: ?>
-														<span class="text-muted">-</span>
-													<?php endif; ?>
-												</td>
-												<td>
-													<span class="badge badge-light" style="border:1px solid #e5e7eb;">
-														<?= esc($phase) ?>
-													</span>
-												</td>
-												<td>
-													<span class="badge badge-success" style="font-size:12px; padding:6px 10px;">
-														Active
-													</span>
-												</td>
-											</tr>
-										<?php endforeach; ?>
-									</tbody>
-								</table>
-							</div>
+                            <small class="text-muted">
 
-							<?php if (empty($officers)): ?>
-								<div class="alert alert-info mt-3 mb-0">
-									No active officers found for <?= esc($admin_phase) ?>.
-								</div>
-							<?php endif; ?>
-						</div>
-					<?php endif; ?>
+                                Phase: <?= esc($admin_phase) ?> —
 
-				</div>
-			</div>
+                                <?= $view === 'officers' ? 'Officers (Read-only)' : 'Homeowners (HOA officer positions are locked)' ?>
 
-			<div class="footer-wrap pd-20 mb-20 card-box">
-				© Copyright South Meridian Homes All Rights Reserved
-			</div>
+                            </small>
 
-		</div>
-	</div>
+                        </div>
 
-	<!-- EDIT POSITION MODAL -->
-	<div class="modal fade" id="editPositionModal" tabindex="-1" role="dialog" aria-hidden="true">
-		<div class="modal-dialog modal-dialog-centered" role="document">
-			<div class="modal-content">
+                    </div>
 
-				<div class="modal-header bg-primary text-white">
-					<h5 class="modal-title">
-						<i class="dw dw-edit2"></i> Edit Homeowner Position
-					</h5>
-					<button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-						<span aria-hidden="true">&times;</span>
-					</button>
-				</div>
+                    <?php if ($view === 'homeowners'): ?>
 
-				<div class="modal-body">
-					<form id="editPositionForm">
-						<input type="hidden" name="homeowner_id" id="ep_homeowner_id" value="">
+                        <!-- ================= HOMEOWNERS VIEW ================= -->
 
-						<div class="mb-2">
-							<label class="form-label font-weight-600">Homeowner</label>
-							<div class="form-control" style="background:#f7f7f7" id="ep_homeowner_name">-</div>
-						</div>
+                        <div class="table-responsive">
 
-						<div class="mb-2">
-							<label class="form-label font-weight-600">Position</label>
-							<select class="form-control" name="position" id="ep_position_select">
-								<option value="Homeowner">Homeowner</option>
-								<option value="Committee">Committee</option>
-								<option value="Block Representative">Block Representative</option>
-								<option value="Staff">Staff</option>
-								<option value="Volunteer">Volunteer</option>
-							</select>
-							<small class="text-muted">You can also type a custom position below.</small>
-						</div>
+                            <table id="homeownersTable" class="table table-hover table-striped mb-0 align-middle">
 
-						<div class="mb-2">
-							<label class="form-label font-weight-600">Custom Position (optional)</label>
-							<input type="text" class="form-control" id="ep_position_custom" placeholder="e.g. Event Coordinator">
-						</div>
+                                <thead class="table-light">
 
-						<div class="alert alert-danger d-none mt-3" id="ep_error"></div>
-						<div class="alert alert-success d-none mt-3" id="ep_success"></div>
-					</form>
-				</div>
+                                    <tr>
 
-				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-					<button type="button" class="btn btn-primary" id="savePositionBtn">
-						<i class="dw dw-save2"></i> Save
-					</button>
-				</div>
+                                        <th width="12%">ID</th>
 
-			</div>
-		</div>
-	</div>
+                                        <th width="25%">Full Name</th>
 
-	<!-- js -->
-	<script src="vendors/scripts/core.js"></script>
-	<script src="vendors/scripts/script.min.js"></script>
-	<script src="vendors/scripts/process.js"></script>
-	<script src="vendors/scripts/layout-settings.js"></script>
+                                        <th width="23%">Address & Contacts</th>
 
-	<!-- SHARED ADMIN DARK MODE -->
-	<script src="vendors/scripts/admin_theme.js"></script>
+                                        <th width="20%">Position</th>
 
-	<!-- Bootstrap 4 modal dependencies -->
-	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script>
+                                        <th width="20%" class="text-center">Action</th>
 
-	<!-- DataTables (CDN) -->
-	<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-	<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
-	<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-	<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
+                                    </tr>
 
-	<script>
-	$(document).ready(function() {
+                                </thead>
 
-		// Bind modal click first
-		$(document).on('click', '.editPositionBtn', function() {
-			const id = $(this).data('id');
-			const name = $(this).data('name');
-			const position = $(this).data('position') || 'Homeowner';
+                                <tbody>
 
-			$('#ep_homeowner_id').val(id);
-			$('#ep_homeowner_name').text(name);
+                                    <?php foreach ($homeowners as $h): ?>
 
-			$('#ep_position_custom').val('');
-			const existsInSelect = $('#ep_position_select option').filter(function(){
-				return $(this).val() === position;
-			}).length > 0;
+                                        <?php
 
-			if (existsInSelect) {
-				$('#ep_position_select').val(position);
-			} else {
-				$('#ep_position_select').val('Homeowner');
-				$('#ep_position_custom').val(position);
-			}
+                                            $fullName = trim($h['first_name'].' '.($h['middle_name'] ?? '').' '.$h['last_name']);
 
-			$('#ep_error').addClass('d-none').text('');
-			$('#ep_success').addClass('d-none').text('');
+                                            $displayId = trim((string)($h['public_id'] ?? ''));
 
-			$('#editPositionModal').modal('show');
-		});
+                                            if ($displayId === '') {
+                                                $displayId =
+                                                    $phase_prefix .
+                                                    'H' .
+                                                    str_pad(
+                                                        (string)$h['id'],
+                                                        3,
+                                                        '0',
+                                                        STR_PAD_LEFT
+                                                    );
+                                            }
 
-		// DataTables init safely
-		if ($.fn.DataTable) {
-			if ($('#homeownersTable').length) {
-				$('#homeownersTable').DataTable({
-					responsive: true,
-					columnDefs: [{ orderable: false, targets: 4 }]
-				});
-			}
+                                            $position = $h['position'] ?: 'Homeowner';
 
-			if ($('#officersTable').length) {
-				$('#officersTable').DataTable({
-					responsive: true,
-					pageLength: 10,
-					lengthChange: false,
-					order: []
-				});
-			}
-		} else {
-			console.warn('DataTables not loaded. Tables will work but without search/paging.');
-		}
+                                            $addr = $h['house_lot_number'] ?: '-';
 
-		// Save position AJAX
-		$('#savePositionBtn').on('click', function() {
-			const homeownerId = $('#ep_homeowner_id').val();
-			let position = ($('#ep_position_custom').val() || '').trim();
-			if (!position) position = $('#ep_position_select').val();
+                                            $contact = $h['contact_number'] ?: '-';
 
-			$('#ep_error').addClass('d-none').text('');
-			$('#ep_success').addClass('d-none').text('');
+                                            $email = $h['email'] ?: '-';
 
-			$.ajax({
-				url: 'update_homeowner_position.php',
-				type: 'POST',
-				dataType: 'json',
-				data: { homeowner_id: homeownerId, position: position },
-				success: function(res) {
-					if (!res || !res.success) {
-						$('#ep_error').removeClass('d-none').text(res && res.message ? res.message : 'Failed to update position.');
-						return;
-					}
+                                            $homeownerEmailKey = strtolower(trim((string)($h['email'] ?? '')));
 
-					$('#pos-badge-' + homeownerId).text(position);
-					$('button.editPositionBtn[data-id="' + homeownerId + '"]').data('position', position);
+                                            $homeownerNameKey = strtolower(trim($fullName));
 
-					$('#ep_success').removeClass('d-none').text('Position updated successfully.');
-					setTimeout(function(){ $('#editPositionModal').modal('hide'); }, 600);
-				},
-				error: function() {
-					$('#ep_error').removeClass('d-none').text('Server error. Please try again.');
-				}
-			});
-		});
+                                            $matchedOfficer = null;
 
-	});
-	</script>
+                                            if ($homeownerEmailKey !== '' && isset($hoaOfficerByEmail[$homeownerEmailKey])) {
+
+                                                $matchedOfficer = $hoaOfficerByEmail[$homeownerEmailKey];
+
+                                            } elseif ($homeownerNameKey !== '' && isset($hoaOfficerByName[$homeownerNameKey])) {
+
+                                                $matchedOfficer = $hoaOfficerByName[$homeownerNameKey];
+
+                                            }
+
+                                            $isHoaOfficer = is_array($matchedOfficer);
+
+                                            if ($isHoaOfficer) {
+
+                                                $officialPosition = trim((string)($matchedOfficer['position'] ?? ''));
+
+                                                if ($officialPosition !== '') {
+
+                                                    $position = $officialPosition;
+
+                                                }
+
+                                            }
+
+                                        ?>
+
+                                        <tr id="row-homeowner-<?= (int)$h['id'] ?>">
+
+                                            <td><span class="badge badge-success"><?= esc($displayId) ?></span></td>
+
+                                            <td>
+
+                                                <div class="font-weight-600"><?= esc($fullName) ?></div>
+
+                                            </td>
+
+                                            <td>
+
+                                                <div><i class="dw dw-home"></i> <?= esc($addr) ?></div>
+
+                                                <div><i class="dw dw-phone-call"></i> <?= esc($contact) ?></div>
+
+                                                <div><i class="dw dw-mail"></i> <?= esc($email) ?></div>
+
+                                            </td>
+
+                                            <td>
+
+                                                <span class="badge <?= $isHoaOfficer ? 'badge-success' : 'badge-primary' ?>" id="pos-badge-<?= (int)$h['id'] ?>">
+
+                                                    <?= esc($position) ?>
+
+                                                </span>
+
+                                                <?php if ($isHoaOfficer): ?>
+
+                                                    <div class="small text-muted mt-1"><i class="dw dw-lock"></i> HOA officer position</div>
+
+                                                <?php endif; ?>
+
+                                            </td>
+
+                                            <td class="text-center">
+
+                                                <?php if ($isHoaOfficer): ?>
+
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="HOA officer positions cannot be changed here.">
+
+                                                        <i class="dw dw-lock"></i>
+
+                                                    </button>
+
+                                                <?php else: ?>
+
+                                                    <button
+
+                                                        type="button"
+
+                                                        class="btn btn-sm btn-outline-primary editPositionBtn"
+
+                                                        data-id="<?= (int)$h['id'] ?>"
+
+                                                        data-name="<?= esc($fullName) ?>"
+
+                                                        data-position="<?= esc($position) ?>"
+
+                                                    >
+
+                                                        <i class="dw dw-edit2"></i>
+
+                                                    </button>
+
+                                                <?php endif; ?>
+
+                                            </td>
+
+                                        </tr>
+
+                                    <?php endforeach; ?>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    <?php else: ?>
+
+                        <!-- ================= OFFICERS VIEW ================= -->
+
+                        <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+
+                            <div>
+
+                                <h5 class="mb-0">
+
+                                    <i class="dw dw-shield1 mr-1"></i> HOA Officers — <?= esc($admin_phase) ?>
+
+                                </h5>
+
+                                <small class="text-muted">Read-only list (no editing here)</small>
+
+                            </div>
+
+                            <div class="d-flex align-items-center mt-2 mt-md-0">
+
+                                <div class="card-box pd-10 mr-2" style="min-width: 180px;">
+
+                                    <div class="d-flex align-items-center justify-content-between">
+
+                                        <div>
+
+                                            <small class="text-muted d-block">Active Officers</small>
+
+                                            <div class="font-weight-700" style="font-size:18px; line-height:1;">
+
+                                                <?= (int)count($officers) ?>
+
+                                            </div>
+
+                                        </div>
+
+                                        <div class="text-primary" style="font-size:28px;">
+
+                                            <i class="dw dw-user-12"></i>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="card-box pb-10">
+
+                            <div class="table-responsive">
+
+                                <table id="officersTable" class="table table-hover table-striped nowrap mb-0">
+
+                                    <thead style="background:#f6f8fb;">
+
+                                        <tr>
+
+                                            <th style="width: 18%;">Position</th>
+
+                                            <th style="width: 28%;">Officer Name</th>
+
+                                            <th style="width: 30%;">Email</th>
+
+                                            <th style="width: 12%;">Phase</th>
+
+                                            <th style="width: 12%;">Status</th>
+
+                                        </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                        <?php foreach ($officers as $o): ?>
+
+                                            <?php
+
+                                                $pos = $o['position'] ?? '';
+
+                                                $name = $o['officer_name'] ?: '-';
+
+                                                $email = $o['officer_email'] ?: '';
+
+                                                $phase = $o['phase'] ?? $admin_phase;
+
+                                                $badgeClass = 'badge badge-secondary';
+
+                                                $posLower = strtolower($pos);
+
+                                                if (strpos($posLower, 'president') !== false) $badgeClass = 'badge badge-primary';
+
+                                                if (strpos($posLower, 'vice') !== false) $badgeClass = 'badge badge-info';
+
+                                                if (strpos($posLower, 'secretary') !== false) $badgeClass = 'badge badge-success';
+
+                                                if (strpos($posLower, 'treasurer') !== false) $badgeClass = 'badge badge-warning';
+
+                                                if (strpos($posLower, 'auditor') !== false) $badgeClass = 'badge badge-dark';
+
+                                                if (strpos($posLower, 'board') !== false) $badgeClass = 'badge badge-secondary';
+
+                                            ?>
+
+                                            <tr>
+
+                                                <td>
+
+                                                    <span class="<?= esc($badgeClass) ?>" style="font-size:12px; padding:6px 10px;">
+
+                                                        <?= esc($pos ?: '-') ?>
+
+                                                    </span>
+
+                                                </td>
+
+                                                <td class="font-weight-600"><?= esc($name) ?></td>
+
+                                                <td>
+
+                                                    <?php if ($email): ?>
+
+                                                        <i class="dw dw-mail mr-1"></i> <?= esc($email) ?>
+
+                                                    <?php else: ?>
+
+                                                        <span class="text-muted">-</span>
+
+                                                    <?php endif; ?>
+
+                                                </td>
+
+                                                <td>
+
+                                                    <span class="badge badge-light" style="border:1px solid #e5e7eb;">
+
+                                                        <?= esc($phase) ?>
+
+                                                    </span>
+
+                                                </td>
+
+                                                <td>
+
+                                                    <span class="badge badge-success" style="font-size:12px; padding:6px 10px;">
+
+                                                        Active
+
+                                                    </span>
+
+                                                </td>
+
+                                            </tr>
+
+                                        <?php endforeach; ?>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                            <?php if (empty($officers)): ?>
+
+                                <div class="alert alert-info mt-3 mb-0">
+
+                                    No active officers found for <?= esc($admin_phase) ?>.
+
+                                </div>
+
+                            <?php endif; ?>
+
+                        </div>
+
+                    <?php endif; ?>
+
+                </div>
+
+            </div>
+
+            <div class="footer-wrap pd-20 mb-20 card-box">
+
+                © Copyright South Meridian Homes All Rights Reserved
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- EDIT POSITION MODAL -->
+
+    <div class="modal fade" id="editPositionModal" tabindex="-1" role="dialog" aria-hidden="true">
+
+        <div class="modal-dialog modal-dialog-centered" role="document">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-primary text-white">
+
+                    <h5 class="modal-title">
+
+                        <i class="dw dw-edit2"></i> Edit Homeowner Position
+
+                    </h5>
+
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+
+                        <span aria-hidden="true">&times;</span>
+
+                    </button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <form id="editPositionForm">
+
+                        <input type="hidden" name="homeowner_id" id="ep_homeowner_id" value="">
+
+                        <div class="mb-2">
+
+                            <label class="form-label font-weight-600">Homeowner</label>
+
+                            <div class="form-control" style="background:#f7f7f7" id="ep_homeowner_name">-</div>
+
+                        </div>
+
+                        <div class="mb-2">
+
+                            <label class="form-label font-weight-600">Position</label>
+
+                            <select class="form-control" name="position" id="ep_position_select">
+
+                                <option value="Homeowner">Homeowner</option>
+
+                                <option value="Committee">Committee</option>
+
+                                <option value="Block Representative">Block Representative</option>
+
+                                <option value="Staff">Staff</option>
+
+                                <option value="Volunteer">Volunteer</option>
+
+                            </select>
+
+                            <small class="text-muted">You can also type a custom position below.</small>
+
+                        </div>
+
+                        <div class="mb-2">
+
+                            <label class="form-label font-weight-600">Custom Position (optional)</label>
+
+                            <input type="text" class="form-control" id="ep_position_custom" placeholder="e.g. Event Coordinator">
+
+                        </div>
+
+                        <div class="alert alert-danger d-none mt-3" id="ep_error"></div>
+
+                        <div class="alert alert-success d-none mt-3" id="ep_success"></div>
+
+                    </form>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+
+                    <button type="button" class="btn btn-primary" id="savePositionBtn">
+
+                        <i class="dw dw-save2"></i> Save
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- js -->
+
+    <script src="vendors/scripts/core.js"></script>
+
+    <script src="vendors/scripts/script.min.js"></script>
+
+    <script src="vendors/scripts/process.js"></script>
+
+    <script src="vendors/scripts/layout-settings.js"></script>
+
+    <!-- SHARED ADMIN DARK MODE -->
+
+    <script src="vendors/scripts/admin_theme.js"></script>
+
+    <!-- Bootstrap 4 modal dependencies -->
+
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script>
+
+    <!-- DataTables (CDN) -->
+
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
+
+    <script>
+
+    $(document).ready(function() {
+
+        // Bind modal click first
+
+        $(document).on('click', '.editPositionBtn', function() {
+
+            const id = $(this).data('id');
+
+            const name = $(this).data('name');
+
+            const position = $(this).data('position') || 'Homeowner';
+
+            $('#ep_homeowner_id').val(id);
+
+            $('#ep_homeowner_name').text(name);
+
+            $('#ep_position_custom').val('');
+
+            const existsInSelect = $('#ep_position_select option').filter(function(){
+
+                return $(this).val() === position;
+
+            }).length > 0;
+
+            if (existsInSelect) {
+
+                $('#ep_position_select').val(position);
+
+            } else {
+
+                $('#ep_position_select').val('Homeowner');
+
+                $('#ep_position_custom').val(position);
+
+            }
+
+            $('#ep_error').addClass('d-none').text('');
+
+            $('#ep_success').addClass('d-none').text('');
+
+            $('#editPositionModal').modal('show');
+
+        });
+
+        // DataTables init safely
+
+        if ($.fn.DataTable) {
+
+            if ($('#homeownersTable').length) {
+
+                $('#homeownersTable').DataTable({
+
+                    responsive: true,
+
+                    columnDefs: [{ orderable: false, targets: 4 }]
+
+                });
+
+            }
+
+            if ($('#officersTable').length) {
+
+                $('#officersTable').DataTable({
+
+                    responsive: true,
+
+                    pageLength: 10,
+
+                    lengthChange: false,
+
+                    order: []
+
+                });
+
+            }
+
+        } else {
+
+            console.warn('DataTables not loaded. Tables will work but without search/paging.');
+
+        }
+
+        // Save position AJAX
+
+        $('#savePositionBtn').on('click', function() {
+
+            const homeownerId = $('#ep_homeowner_id').val();
+
+            let position = ($('#ep_position_custom').val() || '').trim();
+
+            if (!position) position = $('#ep_position_select').val();
+
+            $('#ep_error').addClass('d-none').text('');
+
+            $('#ep_success').addClass('d-none').text('');
+
+            $.ajax({
+
+                url: 'update_homeowner_position.php',
+
+                type: 'POST',
+
+                dataType: 'json',
+
+                data: { homeowner_id: homeownerId, position: position },
+
+                success: function(res) {
+
+                    if (!res || !res.success) {
+
+                        $('#ep_error').removeClass('d-none').text(res && res.message ? res.message : 'Failed to update position.');
+
+                        return;
+
+                    }
+
+                    $('#pos-badge-' + homeownerId).text(position);
+
+                    $('button.editPositionBtn[data-id="' + homeownerId + '"]').data('position', position);
+
+                    $('#ep_success').removeClass('d-none').text('Position updated successfully.');
+
+                    setTimeout(function(){ $('#editPositionModal').modal('hide'); }, 600);
+
+                },
+
+                error: function() {
+
+                    $('#ep_error').removeClass('d-none').text('Server error. Please try again.');
+
+                }
+
+            });
+
+        });
+
+    });
+
+    </script>
+
 <div id="accessToast" class="access-toast">
+
   🚫 You do not have access to that part.
+
 </div>
+
 <script>
+
 window.userPermissions = <?= json_encode($permissions) ?>;
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -676,11 +1346,15 @@ document.addEventListener('DOMContentLoaded', function () {
   const toast = document.getElementById('accessToast');
 
   function showAccessToast() {
+
     toast.classList.add('show');
 
     setTimeout(() => {
+
       toast.classList.remove('show');
+
     }, 2500);
+
   }
 
   document.querySelectorAll('.menu-access-link').forEach(function(link){
@@ -688,11 +1362,15 @@ document.addEventListener('DOMContentLoaded', function () {
     link.addEventListener('click', function(e){
 
       const moduleKey = this.dataset.module || '';
+
       const allowed = !!window.userPermissions[moduleKey];
 
       if(!allowed){
+
         e.preventDefault();
+
         showAccessToast();
+
       }
 
     });
@@ -700,6 +1378,9 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
 });
+
 </script>
+
 </body>
+
 </html>

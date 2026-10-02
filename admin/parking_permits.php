@@ -2,7 +2,6 @@
 session_start();
 require_once 'admin_access.php';
 requireAccess('parking');
-
 // ===================== AUTH GUARD =====================
 if (
     empty($_SESSION['admin_id']) ||
@@ -16,51 +15,40 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
     http_response_code(403);
     exit('Superadmin cannot access this module.');
 }
-
 // ===================== CSRF =====================
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-
 // ===================== DB =====================
 require_once '../config/database.php';
-
 function esc($v): string
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
-
 function normalize_asset_url(?string $path): string
 {
     $path = trim((string)$path);
     if ($path === '') return '';
-
     $path = str_replace('\\', '/', $path);
-
     /*
      * Parking requirement files are expected to be local files below uploads/.
      * Reject arbitrary schemes/paths instead of reflecting them into href/src.
      */
     $marker = '/uploads/';
     $pos = stripos($path, $marker);
-
     if ($pos !== false) {
         return substr($path, $pos + 1);
     }
-
     if (stripos($path, 'uploads/') === 0) {
         return $path;
     }
-
     return '';
 }
-
 function fail_flash(&$flash, &$flashType, string $msg): void
 {
     $flash = $msg;
     $flashType = "danger";
 }
-
 function next_permit_no(mysqli $conn, string $phase): string
 {
     $prefixMap = [
@@ -68,9 +56,7 @@ function next_permit_no(mysqli $conn, string $phase): string
         'Phase 2' => 'P2-',
         'Phase 3' => 'P3-',
     ];
-
     $prefix = $prefixMap[$phase] ?? 'PX-';
-
     $stmt = $conn->prepare("
         SELECT permit_no
         FROM parking_permits
@@ -85,21 +71,16 @@ function next_permit_no(mysqli $conn, string $phase): string
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-
     $nextNumber = 1;
-
     if ($row && !empty($row['permit_no']) && preg_match('/(\d+)$/', $row['permit_no'], $m)) {
         $nextNumber = ((int)$m[1]) + 1;
     }
-
     return $prefix . str_pad((string)$nextNumber, 3, '0', STR_PAD_LEFT);
 }
-
 function compute_permit_dates(string $duration, string $startDate): array
 {
     $start = new DateTime($startDate);
     $end = clone $start;
-
     switch ($duration) {
         case '1_month':
             $end->modify('+1 month')->modify('-1 day');
@@ -116,23 +97,19 @@ function compute_permit_dates(string $duration, string $startDate): array
         default:
             throw new InvalidArgumentException('Invalid permit duration.');
     }
-
     return [
         $start->format('Y-m-d'),
         $end->format('Y-m-d'),
     ];
 }
-
 function activation_dates_for_permit(mysqli $conn, array $permit): array
 {
     $today = new DateTime('today');
     $start = clone $today;
-
     $requestType = strtolower(trim((string)($permit['request_type'] ?? 'new')));
     $renewOfId = (int)($permit['renew_of_id'] ?? 0);
     $homeownerId = (int)($permit['homeowner_id'] ?? 0);
     $phase = (string)($permit['phase'] ?? '');
-
     if ($requestType === 'renew' && $renewOfId > 0) {
         $stmt = $conn->prepare("
             SELECT valid_until
@@ -146,50 +123,39 @@ function activation_dates_for_permit(mysqli $conn, array $permit): array
         $stmt->execute();
         $previousPermit = $stmt->get_result()->fetch_assoc();
         $stmt->close();
-
         if (!empty($previousPermit['valid_until'])) {
             $afterPrevious = new DateTime((string)$previousPermit['valid_until']);
             $afterPrevious->modify('+1 day');
-
             if ($afterPrevious > $start) {
                 $start = $afterPrevious;
             }
         }
     }
-
     return compute_permit_dates(
         (string)($permit['permit_duration'] ?? ''),
         $start->format('Y-m-d')
     );
 }
-
 function is_image_file(string $path): bool
 {
     $ext = strtolower(pathinfo(parse_url($path, PHP_URL_PATH) ?? $path, PATHINFO_EXTENSION));
     return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true);
 }
-
 $flash = "";
 $flashType = "success";
-
 $adminId   = (int)$_SESSION['admin_id'];
 $adminRole = (string)$_SESSION['admin_role'];
-
 $stmt = $conn->prepare("SELECT email, full_name, phase, role FROM admins WHERE id=? LIMIT 1");
 $stmt->bind_param("i", $adminId);
 $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc() ?: ['email' => '', 'full_name' => '', 'phase' => 'Phase 1', 'role' => $adminRole];
 $stmt->close();
-
 $myPhase = (string)($me['phase'] ?? 'Phase 1');
-
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
 $phase = in_array($myPhase, $allowedPhases, true) ? $myPhase : 'Phase 1';
-
 // ===================== ACTIONS =====================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postedToken = (string)($_POST['csrf_token'] ?? '');
-
     if (
         $postedToken === '' ||
         !hash_equals((string)$_SESSION['csrf_token'], $postedToken)
@@ -197,10 +163,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         fail_flash($flash, $flashType, "Invalid request token.");
     } else {
         $action = (string)($_POST['action'] ?? '');
-
         if ($action === 'approve') {
             $id = (int)($_POST['id'] ?? 0);
-
             if ($id <= 0) {
                 fail_flash($flash, $flashType, "Invalid approve request.");
             } else {
@@ -220,25 +184,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute();
                 $p = $stmt->get_result()->fetch_assoc();
                 $stmt->close();
-
                 if (!$p) {
                     fail_flash($flash, $flashType, "Permit request not found or already processed.");
                 } else {
                     $currentPaymentStatus = strtolower(trim((string)($p['payment_status'] ?? 'unpaid')));
-
                     if (!in_array($currentPaymentStatus, ['unpaid', 'failed', ''], true)) {
                         fail_flash($flash, $flashType, "This request is already approved for payment or already paid.");
                     } else {
                         $missing = [];
-
                         if (normalize_asset_url($p['vehicle_front_path'] ?? '') === '') {
                             $missing[] = "Vehicle Front Picture";
                         }
-
                         if (normalize_asset_url($p['vehicle_back_path'] ?? '') === '') {
                             $missing[] = "Vehicle Back Picture";
                         }
-
                         if ($missing) {
                             fail_flash(
                                 $flash,
@@ -249,7 +208,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $permitNo = !empty($p['permit_no'])
                                 ? (string)$p['permit_no']
                                 : next_permit_no($conn, $phase);
-
                             $stmt = $conn->prepare("
                                 UPDATE parking_permits
                                 SET permit_no=?,
@@ -262,25 +220,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ");
                             $stmt->bind_param("siis", $permitNo, $adminId, $id, $phase);
                             $stmt->execute();
-
                             if ($stmt->affected_rows <= 0) {
                                 fail_flash($flash, $flashType, "Approval failed or the request state changed.");
                             } else {
                                 $flash = "Requirements approved. Permit no. {$permitNo} created. The homeowner/tenant may now proceed to payment.";
                                 $flashType = "success";
                             }
-
                             $stmt->close();
                         }
                     }
                 }
             }
         }
-
         if ($action === 'reject') {
             $id = (int)($_POST['id'] ?? 0);
             $reason = trim((string)($_POST['reason'] ?? ''));
-
             if ($id <= 0 || $reason === '') {
                 fail_flash($flash, $flashType, "Reject reason is required.");
             } else {
@@ -294,12 +248,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute();
                 $row = $stmt->get_result()->fetch_assoc();
                 $stmt->close();
-
                 if (!$row) {
                     fail_flash($flash, $flashType, "Permit request not found or already processed.");
                 } else {
                     $currentPaymentStatus = strtolower(trim((string)($row['payment_status'] ?? 'unpaid')));
-
                     if (!in_array($currentPaymentStatus, ['unpaid', 'failed', ''], true)) {
                         fail_flash($flash, $flashType, "Only fresh requests can be rejected before payment approval.");
                     } else {
@@ -314,20 +266,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ");
                         $stmt->bind_param("siis", $reason, $adminId, $id, $phase);
                         $stmt->execute();
-
                         if ($stmt->affected_rows <= 0) {
                             fail_flash($flash, $flashType, "Permit request not found or already processed.");
                         } else {
                             $flash = "Permit request rejected.";
                             $flashType = "success";
                         }
-
                         $stmt->close();
                     }
                 }
             }
         }
-
         /*
          * CASH PAYMENT ACTIVATION
          *
@@ -341,13 +290,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          */
         if ($action === 'activate_cash') {
             $id = (int)($_POST['id'] ?? 0);
-
             if ($id <= 0) {
                 fail_flash($flash, $flashType, "Invalid cash payment request.");
             } else {
                 try {
                     $conn->begin_transaction();
-
                     $stmt = $conn->prepare("
                         SELECT
                             id,
@@ -369,34 +316,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute();
                     $permit = $stmt->get_result()->fetch_assoc();
                     $stmt->close();
-
                     if (!$permit) {
                         throw new DomainException("Permit request not found.");
                     }
-
                     $permitStatus = strtolower(trim((string)($permit['status'] ?? '')));
                     $paymentStatus = strtolower(trim((string)($permit['payment_status'] ?? '')));
                     $paymentMethod = strtolower(trim((string)($permit['payment_method'] ?? '')));
-
                     if ($permitStatus !== 'pending') {
                         throw new DomainException("Only pending permits can be activated.");
                     }
-
                     if ($paymentStatus !== 'for payment') {
                         throw new DomainException("This permit is not waiting for payment.");
                     }
-
                     if ($paymentMethod !== 'cash') {
                         throw new DomainException("This action is only for cash / physical payments.");
                     }
-
                     if (empty($permit['permit_no'])) {
                         throw new DomainException("Permit number is missing. Approve the requirements first.");
                     }
-
                     [$validFrom, $validUntil] = activation_dates_for_permit($conn, $permit);
                     $stickerYear = (int)substr($validFrom, 0, 4);
-
                     $stmt = $conn->prepare("
                         UPDATE parking_permits
                         SET payment_status='paid',
@@ -421,29 +360,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $phase
                     );
                     $stmt->execute();
-
                     if ($stmt->affected_rows <= 0) {
                         $stmt->close();
                         throw new DomainException("Cash payment activation failed or the permit state changed.");
                     }
-
                     $stmt->close();
                     $conn->commit();
-
                     $flash = "Cash payment recorded. Permit {$permit['permit_no']} is now active from {$validFrom} to {$validUntil}.";
                     $flashType = "success";
-
                 } catch (Throwable $e) {
                     try {
                         $conn->rollback();
                     } catch (Throwable $ignored) {
                     }
-
                     error_log(
                         "Parking cash activation failed. Permit={$id}, Phase={$phase}, Error=" .
                         $e->getMessage()
                     );
-
                     if ($e instanceof InvalidArgumentException) {
                         $userError = "Invalid permit duration. Please review the permit before activation.";
                     } elseif ($e instanceof DomainException) {
@@ -451,7 +384,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         $userError = "Cash payment activation failed. Please try again or check the server log.";
                     }
-
                     fail_flash(
                         $flash,
                         $flashType,
@@ -460,11 +392,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-
         if ($action === 'revoke') {
             $id = (int)($_POST['id'] ?? 0);
             $reason = trim((string)($_POST['reason'] ?? ''));
-
             if ($id <= 0 || $reason === '') {
                 fail_flash($flash, $flashType, "Revoke reason is required.");
             } else {
@@ -478,20 +408,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $stmt->bind_param("siis", $reason, $adminId, $id, $phase);
                 $stmt->execute();
-
                 if ($stmt->affected_rows <= 0) {
                     fail_flash($flash, $flashType, "Active permit not found.");
                 } else {
                     $flash = "Permit revoked.";
                     $flashType = "success";
                 }
-
                 $stmt->close();
             }
         }
     }
 }
-
 // ===================== AUTO-EXPIRE =====================
 $stmt = $conn->prepare("
     UPDATE parking_permits
@@ -504,7 +431,6 @@ $stmt = $conn->prepare("
 $stmt->bind_param("s", $phase);
 $stmt->execute();
 $stmt->close();
-
 // ===================== DATA LOAD =====================
 $stmt = $conn->prepare("
     SELECT
@@ -519,7 +445,6 @@ $stmt->bind_param("s", $phase);
 $stmt->execute();
 $pendingRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
-
 $stmt = $conn->prepare("
     SELECT
         p.*,
@@ -538,7 +463,6 @@ $stmt->bind_param("s", $phase);
 $stmt->execute();
 $activeRows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
-
 $stmt = $conn->prepare("
     SELECT
         p.*,
@@ -559,23 +483,20 @@ $stmt->close();
 <head>
     <meta charset="utf-8">
     <title>HOA-ADMIN | Parking Permits</title>
-
-    <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
     <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
     <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
     <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-
+    <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
     <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
     <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
-
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap4.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
-
     <style>
         .badge-soft { padding: .35rem .6rem; border-radius: 999px; font-weight: 800; font-size: 12px; display: inline-block; }
         .badge-soft-warning { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
@@ -583,10 +504,8 @@ $stmt->close();
         .badge-soft-danger  { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
         .badge-soft-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
         .badge-soft-dark    { background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; }
-
         .req-list li { margin-bottom: 6px; }
         .req-note { font-size: 12px; color: #64748b; }
-
         .proof-thumb {
             width: 70px;
             height: 70px;
@@ -594,7 +513,6 @@ $stmt->close();
             border-radius: 8px;
             border: 1px solid #e2e8f0;
         }
-
         .access-toast {
             position: fixed;
             top: 20px;
@@ -610,36 +528,30 @@ $stmt->close();
             transform: translateY(-10px);
             transition: all .3s ease;
         }
-
         .access-toast.show {
             opacity: 1;
             transform: translateY(0);
         }
-
         .quick-filters {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 15px;
         }
-
         .quick-filters input {
             min-width: 220px;
         }
-
         .detail-table td {
             vertical-align: top;
             padding: 8px 10px;
             border-top: 1px solid #edf2f7;
         }
-
         .detail-table td:first-child {
             width: 180px;
             font-weight: 700;
             color: #334155;
             background: #f8fafc;
         }
-
         .section-label {
             font-size: 12px;
             font-weight: 800;
@@ -648,41 +560,413 @@ $stmt->close();
             margin: 18px 0 8px;
             letter-spacing: .04em;
         }
-
         .btn[disabled] {
             pointer-events: none;
             opacity: .6;
         }
-    </style>
+        .admin-theme-switch {
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+        }
+        .admin-theme-toggle {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: inherit;
+            font-size: 22px;
+            cursor: pointer;
+            transition: background .18s ease, color .18s ease;
+        }
+        .admin-theme-toggle:hover,
+        .admin-theme-toggle:focus {
+            background: rgba(15, 23, 42, .06);
+            outline: none;
+        }
+        .admin-page-logout-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 98px;
+            min-height: 40px;
+            margin: 0 18px 0 6px;
+            padding: 8px 14px;
+            border: 1px solid #fecaca;
+            border-radius: 11px;
+            background: #fff;
+            color: #b91c1c !important;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+            font-size: 12px;
+            line-height: 1;
+            font-weight: 800;
+            text-decoration: none !important;
+            white-space: nowrap;
+            transition: background .18s ease, color .18s ease, border-color .18s ease,
+                        transform .18s ease, box-shadow .18s ease;
+        }
+        .admin-page-logout-btn i {
+            font-size: 17px;
+            line-height: 1;
+        }
+        .admin-page-logout-btn:hover,
+        .admin-page-logout-btn:focus {
+            border-color: #ef4444;
+            background: #fef2f2;
+            color: #991b1b !important;
+            box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+            transform: translateY(-1px);
+            outline: none;
+        }
+        /* Parking Permits dark-mode extensions */
+        html.dark body,
+        html.dark .main-container {
+            background: var(--admin-bg, #0f172a) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .page-header,
+        html.dark .card-box,
+        html.dark .footer-wrap {
+            background: var(--admin-surface, #1f2937) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .page-header .title h4,
+        html.dark .card-box h5,
+        html.dark .card-box label,
+        html.dark .card-box b,
+        html.dark .card-box strong,
+        html.dark .footer-wrap {
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .text-secondary,
+        html.dark .text-muted,
+        html.dark .req-note,
+        html.dark small.text-secondary {
+            color: var(--admin-muted, #9ca3af) !important;
+        }
+        html.dark .text-primary { color: #93c5fd !important; }
+        html.dark .text-success { color: #86efac !important; }
+        html.dark .text-danger { color: #fca5a5 !important; }
+        html.dark .text-warning { color: #fcd34d !important; }
+        html.dark .text-info { color: #7dd3fc !important; }
+        html.dark .nav-tabs {
+            border-bottom-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .nav-tabs .nav-link {
+            color: #cbd5e1 !important;
+            border-color: transparent !important;
+        }
+        html.dark .nav-tabs .nav-link:hover,
+        html.dark .nav-tabs .nav-link:focus {
+            color: #fff !important;
+            border-color: var(--admin-border, #374151) !important;
+            background: var(--admin-hover, #334155) !important;
+        }
+        html.dark .nav-tabs .nav-link.active {
+            color: #fff !important;
+            background: var(--admin-surface-2, #253244) !important;
+            border-color: var(--admin-border, #374151) var(--admin-border, #374151)
+                          var(--admin-surface-2, #253244) !important;
+        }
+        html.dark .form-control,
+        html.dark select.form-control,
+        html.dark input.form-control,
+        html.dark textarea.form-control {
+            background: var(--admin-input, #111827) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: var(--admin-border, #4b5563) !important;
+        }
+        html.dark .form-control:focus,
+        html.dark select.form-control:focus,
+        html.dark input.form-control:focus,
+        html.dark textarea.form-control:focus {
+            background: var(--admin-input, #111827) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 .2rem rgba(59, 130, 246, .16) !important;
+        }
+        html.dark .form-control::placeholder {
+            color: #64748b !important;
+            opacity: 1;
+        }
+        html.dark .table,
+        html.dark table.dataTable {
+            background: var(--admin-surface, #1f2937) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .table thead th,
+        html.dark .table-light th,
+        html.dark table.dataTable thead th,
+        html.dark table.dataTable thead td {
+            background: var(--admin-surface-2, #253244) !important;
+            color: #f8fafc !important;
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .table tbody tr,
+        html.dark .table tbody td,
+        html.dark .table tbody th,
+        html.dark table.dataTable tbody tr,
+        html.dark table.dataTable tbody td {
+            background: var(--admin-surface, #1f2937) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .table-striped tbody tr:nth-of-type(odd),
+        html.dark .table-striped tbody tr:nth-of-type(odd) > *,
+        html.dark table.dataTable.stripe tbody tr.odd,
+        html.dark table.dataTable.display tbody tr.odd {
+            background: var(--admin-surface-2, #253244) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .table-striped tbody tr:nth-of-type(even),
+        html.dark .table-striped tbody tr:nth-of-type(even) > * {
+            background: var(--admin-surface, #1f2937) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .table-hover tbody tr:hover,
+        html.dark .table-hover tbody tr:hover > *,
+        html.dark table.dataTable tbody tr:hover,
+        html.dark table.dataTable tbody tr:hover > * {
+            background: var(--admin-hover, #334155) !important;
+            color: #fff !important;
+        }
+        html.dark .detail-table td {
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .detail-table td:first-child {
+            background: var(--admin-surface-2, #253244) !important;
+            color: #f8fafc !important;
+        }
+        html.dark .section-label {
+            color: #cbd5e1 !important;
+        }
+        html.dark .proof-thumb {
+            border-color: var(--admin-border, #4b5563) !important;
+            background: var(--admin-input, #111827) !important;
+        }
+        html.dark .modal-content,
+        html.dark .modal-header,
+        html.dark .modal-footer {
+            background: var(--admin-surface, #1f2937) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border-color: var(--admin-border, #374151) !important;
+        }
+        html.dark .modal-title,
+        html.dark .modal label,
+        html.dark .modal strong,
+        html.dark .modal b {
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .modal .close {
+            color: #fff !important;
+            text-shadow: none !important;
+            opacity: .9;
+        }
+        html.dark .btn-light {
+            background: var(--admin-surface-2, #253244) !important;
+            color: #e5e7eb !important;
+            border-color: var(--admin-border, #4b5563) !important;
+        }
+        html.dark .btn-light:hover,
+        html.dark .btn-light:focus {
+            background: var(--admin-hover, #334155) !important;
+            color: #fff !important;
+        }
+        html.dark .btn-outline-secondary {
+            color: #cbd5e1 !important;
+            border-color: #64748b !important;
+        }
+        html.dark .btn-outline-secondary:hover,
+        html.dark .btn-outline-secondary:focus {
+            background: #475569 !important;
+            border-color: #64748b !important;
+            color: #fff !important;
+        }
+        html.dark .btn-outline-primary {
+            color: #93c5fd !important;
+            border-color: #3b82f6 !important;
+        }
+        html.dark .btn-outline-primary:hover,
+        html.dark .btn-outline-primary:focus {
+            background: #2563eb !important;
+            border-color: #2563eb !important;
+            color: #fff !important;
+        }
+        html.dark .btn-outline-danger {
+            color: #fca5a5 !important;
+            border-color: #ef4444 !important;
+        }
+        html.dark .btn-outline-danger:hover,
+        html.dark .btn-outline-danger:focus {
+            background: #b91c1c !important;
+            border-color: #b91c1c !important;
+            color: #fff !important;
+        }
+        html.dark .alert-info {
+            background: rgba(14, 165, 233, .12) !important;
+            color: #bae6fd !important;
+            border-color: rgba(14, 165, 233, .28) !important;
+        }
+        html.dark .alert-warning {
+            background: rgba(217, 119, 6, .12) !important;
+            color: #fde68a !important;
+            border-color: rgba(245, 158, 11, .28) !important;
+        }
+        html.dark .alert-success {
+            background: rgba(22, 163, 74, .12) !important;
+            color: #bbf7d0 !important;
+            border-color: rgba(34, 197, 94, .28) !important;
+        }
+        html.dark .alert-danger {
+            background: rgba(220, 38, 38, .12) !important;
+            color: #fecaca !important;
+            border-color: rgba(239, 68, 68, .28) !important;
+        }
+        html.dark .badge-soft-warning {
+            background: rgba(217, 119, 6, .14) !important;
+            border-color: rgba(245, 158, 11, .35) !important;
+            color: #fde68a !important;
+        }
+        html.dark .badge-soft-success {
+            background: rgba(22, 163, 74, .14) !important;
+            border-color: rgba(34, 197, 94, .35) !important;
+            color: #bbf7d0 !important;
+        }
+        html.dark .badge-soft-danger {
+            background: rgba(220, 38, 38, .14) !important;
+            border-color: rgba(239, 68, 68, .35) !important;
+            color: #fecaca !important;
+        }
+        html.dark .badge-soft-info {
+            background: rgba(37, 99, 235, .14) !important;
+            border-color: rgba(59, 130, 246, .35) !important;
+            color: #bfdbfe !important;
+        }
+        html.dark .badge-soft-dark {
+            background: var(--admin-surface-2, #253244) !important;
+            border-color: var(--admin-border, #374151) !important;
+            color: #cbd5e1 !important;
+        }
+        html.dark .dataTables_wrapper,
+        html.dark .dataTables_wrapper .dataTables_length,
+        html.dark .dataTables_wrapper .dataTables_filter,
+        html.dark .dataTables_wrapper .dataTables_info,
+        html.dark .dataTables_wrapper .dataTables_paginate {
+            color: var(--admin-muted, #9ca3af) !important;
+        }
+        html.dark .dataTables_wrapper .dataTables_filter input,
+        html.dark .dataTables_wrapper .dataTables_length select {
+            background: var(--admin-input, #111827) !important;
+            color: var(--admin-text, #e5e7eb) !important;
+            border: 1px solid var(--admin-border, #4b5563) !important;
+        }
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+            color: var(--admin-text, #e5e7eb) !important;
+        }
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover,
+        html.dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            color: #fff !important;
+            border-color: #2563eb !important;
+            background: #2563eb !important;
+        }
+        html.dark .admin-theme-toggle {
+            color: #f8fafc !important;
+        }
+        html.dark .admin-theme-toggle:hover,
+        html.dark .admin-theme-toggle:focus {
+            background: rgba(255, 255, 255, .08);
+        }
+        html.dark .admin-page-logout-btn {
+            border-color: rgba(248, 113, 113, .30);
+            background: rgba(127, 29, 29, .16);
+            color: #fca5a5 !important;
+            box-shadow: none;
+        }
+        html.dark .admin-page-logout-btn:hover,
+        html.dark .admin-page-logout-btn:focus {
+            border-color: rgba(248, 113, 113, .55);
+            background: rgba(127, 29, 29, .28);
+            color: #fecaca !important;
+        }
+        @media (max-width: 575.98px) {
+            .admin-page-logout-btn {
+                width: 40px;
+                min-width: 40px;
+                height: 40px;
+                min-height: 40px;
+                margin: 0 10px 0 4px;
+                padding: 0;
+                border-radius: 10px;
+            }
+            .admin-page-logout-btn span {
+                display: none;
+            }
+            .admin-page-logout-btn i {
+                font-size: 18px;
+            }
+            .admin-theme-switch {
+                padding: 0 2px;
+            }
+            .quick-filters input {
+                min-width: 100%;
+            }
+        }
+</style>
+    <script>
+    (function () {
+        try {
+            const savedTheme = localStorage.getItem('hoa-theme');
+            const dark =
+                savedTheme === 'dark' ||
+                (
+                    !savedTheme &&
+                    window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches
+                );
+            document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {}
+    })();
+    </script>
 </head>
 <body>
-
 <div class="header">
     <div class="header-left">
         <div class="menu-icon dw dw-menu"></div>
         <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
     </div>
     <div class="header-right">
-        <div class="user-info-dropdown">
-            <div class="dropdown">
-                <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-                    <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
-                </a>
-                <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-                    <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-                </div>
-            </div>
+        <div class="admin-theme-switch">
+            <button
+                type="button"
+                id="themeToggle"
+                class="admin-theme-toggle"
+                aria-label="Switch theme"
+                title="Switch theme"
+            >
+                <span id="themeIcon">☾</span>
+            </button>
         </div>
+        <a href="logout.php"
+           class="admin-page-logout-btn"
+           title="Log out"
+           aria-label="Log out">
+            <i class="dw dw-logout" aria-hidden="true"></i>
+            <span>Log Out</span>
+        </a>
     </div>
 </div>
-
 <?php include 'sidebar.php'; ?>
-
 <div class="mobile-menu-overlay"></div>
-
 <div class="main-container">
     <div class="pd-ltr-20">
-
         <div class="page-header mb-20">
             <div class="row">
                 <div class="col-md-12 col-sm-12">
@@ -691,11 +975,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
-
         <?php if ($flash !== ''): ?>
             <div class="alert alert-<?= esc($flashType) ?>"><?= esc($flash) ?></div>
         <?php endif; ?>
-
         <div class="card-box mb-30 p-3">
             <h5 class="mb-2">Requirements for Yearly Parking Stickers/Permits</h5>
             <ul class="req-list mb-2">
@@ -707,22 +989,18 @@ $stmt->close();
                 Cash payments are activated here after payment is physically received. Normal renewal requests must start from the homeowner/tenant portal.
             </div>
         </div>
-
         <div class="card-box mb-30 p-3">
             <ul class="nav nav-tabs" role="tablist">
                 <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabPending" role="tab">Pending Requests (<?= count($pendingRows) ?>)</a></li>
                 <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabActive" role="tab">Current Permits (<?= count($activeRows) ?>)</a></li>
                 <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabAll" role="tab">All Permits</a></li>
             </ul>
-
             <div class="tab-content pt-3">
-
                 <div class="tab-pane fade show active" id="tabPending" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterPendingName" class="form-control form-control-sm" placeholder="Search homeowner...">
                         <input type="text" id="filterPendingPlate" class="form-control form-control-sm" placeholder="Search plate no...">
                     </div>
-
                     <div class="table-responsive">
                         <table id="tblPending" class="table table-striped table-hover">
                             <thead class="table-light">
@@ -743,25 +1021,21 @@ $stmt->close();
                                 <?php
                                 $name = trim(($r['first_name'] ?? '') . ' ' . ($r['middle_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
                                 $veh  = trim(($r['vehicle_make'] ?? '') . ' ' . ($r['vehicle_model'] ?? '') . ' ' . ($r['vehicle_color'] ?? ''));
-
                                 $missingCount = 0;
                                 foreach (['vehicle_front_path', 'vehicle_back_path'] as $k) {
                                     if (empty($r[$k])) $missingCount++;
                                 }
-
                                 $pay = strtolower((string)($r['payment_status'] ?? 'unpaid'));
                                 $payBadge = 'badge-soft-warning';
                                 if ($pay === 'paid') $payBadge = 'badge-soft-success';
                                 elseif ($pay === 'failed') $payBadge = 'badge-soft-danger';
                                 elseif (in_array($pay, ['waived', 'for payment'], true)) $payBadge = 'badge-soft-info';
-
                                 $paymentMethod = strtolower(trim((string)($r['payment_method'] ?? '')));
                                 $isFreshRequest = in_array($pay, ['unpaid', 'failed', ''], true);
                                 $canRecordCashPayment = ($pay === 'for payment' && $paymentMethod === 'cash');
                                 $waitingOnlinePayment = ($pay === 'for payment' && $paymentMethod === 'online');
                                 $paidPendingReview = ($pay === 'paid');
                                 $canApprove = ($missingCount === 0);
-
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
                                     'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
@@ -817,7 +1091,6 @@ $stmt->close();
                                                 data-json='<?= esc(json_encode($detailsPayload, JSON_UNESCAPED_SLASHES)) ?>'>
                                             <i class="dw dw-eye"></i> Details
                                         </button>
-
                                         <button class="btn btn-sm btn-outline-primary btnReq"
                                                 data-json='<?= esc(json_encode([
                                                     "Picture of Vehicle (Front)" => normalize_asset_url($r['vehicle_front_path'] ?? ""),
@@ -842,13 +1115,11 @@ $stmt->close();
                         </table>
                     </div>
                 </div>
-
                 <div class="tab-pane fade" id="tabActive" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterActiveName" class="form-control form-control-sm" placeholder="Search homeowner...">
                         <input type="text" id="filterActivePlate" class="form-control form-control-sm" placeholder="Search plate no...">
                     </div>
-
                     <div class="table-responsive">
                         <table id="tblActive" class="table table-striped table-hover">
                             <thead class="table-light">
@@ -873,7 +1144,6 @@ $stmt->close();
                                 if ($pay === 'paid') $payBadge = 'badge-soft-success';
                                 elseif ($pay === 'failed') $payBadge = 'badge-soft-danger';
                                 elseif ($pay === 'waived') $payBadge = 'badge-soft-info';
-
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
                                     'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
@@ -917,7 +1187,6 @@ $stmt->close();
                                                 data-json='<?= esc(json_encode($detailsPayload, JSON_UNESCAPED_SLASHES)) ?>'>
                                             <i class="dw dw-eye"></i> Details
                                         </button>
-
                                         <button class="btn btn-sm btn-outline-danger btnRevoke"
                                                 data-id="<?= (int)$r['id'] ?>"
                                                 data-permit="<?= esc($r['permit_no'] ?? '') ?>"
@@ -931,13 +1200,11 @@ $stmt->close();
                         </table>
                     </div>
                 </div>
-
                 <div class="tab-pane fade" id="tabAll" role="tabpanel">
                     <div class="quick-filters">
                         <input type="text" id="filterAllName" class="form-control form-control-sm" placeholder="Search homeowner...">
                         <input type="text" id="filterAllPlate" class="form-control form-control-sm" placeholder="Search plate no...">
                     </div>
-
                     <div class="table-responsive">
                         <table id="tblAll" class="table table-striped table-hover">
                             <thead class="table-light">
@@ -966,9 +1233,7 @@ $stmt->close();
                                     $pay === 'paid' &&
                                     $validFrom !== '' &&
                                     $validFrom > date('Y-m-d');
-
                                 $displayStatus = $isUpcoming ? 'upcoming' : $st;
-
                                 $badge = 'badge-soft-info';
                                 if ($displayStatus === 'pending') $badge = 'badge-soft-warning';
                                 if ($displayStatus === 'active') $badge = 'badge-soft-success';
@@ -978,9 +1243,7 @@ $stmt->close();
                                 if ($pay === 'paid') $payBadge = 'badge-soft-success';
                                 elseif ($pay === 'failed') $payBadge = 'badge-soft-danger';
                                 elseif (in_array($pay, ['waived', 'for payment'], true)) $payBadge = 'badge-soft-info';
-
                                 $valid = trim((string)($r['valid_from'] ?? '')) . ' → ' . trim((string)($r['valid_until'] ?? ''));
-
                                 $detailsPayload = [
                                     'id' => $r['id'] ?? '',
                                     'permit_no' => !empty($r['permit_no']) ? $r['permit_no'] : '—',
@@ -1040,17 +1303,13 @@ $stmt->close();
                         </table>
                     </div>
                 </div>
-
             </div>
         </div>
-
         <div class="footer-wrap pd-20 mb-20 card-box">
             © Copyright South Meridian Homes All Rights Reserved
         </div>
-
     </div>
 </div>
-
 <div class="modal fade" id="modalReq" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -1070,7 +1329,6 @@ $stmt->close();
         </div>
     </div>
 </div>
-
 <div class="modal fade" id="modalDetails" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -1085,7 +1343,6 @@ $stmt->close();
         </div>
     </div>
 </div>
-
 <div class="modal fade" id="modalApprove" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1109,7 +1366,6 @@ $stmt->close();
         </form>
     </div>
 </div>
-
 <div class="modal fade" id="modalReject" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1134,31 +1390,26 @@ $stmt->close();
         </form>
     </div>
 </div>
-
 <div class="modal fade" id="modalCashActivate" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
             <input type="hidden" name="csrf_token" value="<?= esc($_SESSION['csrf_token']) ?>">
             <input type="hidden" name="action" value="activate_cash">
             <input type="hidden" name="id" id="cashActivateId">
-
             <div class="modal-header">
                 <h5 class="modal-title">Record Cash Payment & Activate</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span>&times;</span>
                 </button>
             </div>
-
             <div class="modal-body">
                 <div class="text-secondary mb-3" id="cashActivateInfo"></div>
-
                 <div class="alert alert-info mb-0">
                     Confirm this only after the HOA office has actually received the cash payment.
                     The permit's final validity period will begin from the activation date, or after
                     the previous permit ends for an eligible renewal.
                 </div>
             </div>
-
             <div class="modal-footer">
                 <button type="submit" class="btn btn-success">
                     <i class="dw dw-money-2"></i>
@@ -1169,7 +1420,6 @@ $stmt->close();
         </form>
     </div>
 </div>
-
 <div class="modal fade" id="modalRevoke" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <form method="POST" class="modal-content">
@@ -1194,22 +1444,19 @@ $stmt->close();
         </form>
     </div>
 </div>
-
 <script src="vendors/scripts/core.js"></script>
 <script src="vendors/scripts/script.min.js"></script>
 <script src="vendors/scripts/process.js"></script>
 <script src="vendors/scripts/layout-settings.js"></script>
-
+<script src="vendors/scripts/admin_theme.js"></script>
 <script src="src/plugins/datatables/js/jquery.dataTables.min.js"></script>
 <script src="src/plugins/datatables/js/dataTables.bootstrap4.min.js"></script>
 <script src="src/plugins/datatables/js/dataTables.responsive.min.js"></script>
 <script src="src/plugins/datatables/js/responsive.bootstrap4.min.js"></script>
-
 <script>
 function isImagePath(path) {
     return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(path || '');
 }
-
 function loadScript(src) {
     return new Promise(function(resolve, reject) {
         var s = document.createElement('script');
@@ -1219,37 +1466,29 @@ function loadScript(src) {
         document.body.appendChild(s);
     });
 }
-
 function simpleTableFilter(tableId, nameInputId, plateInputId) {
     const table = document.getElementById(tableId);
     const nameInput = document.getElementById(nameInputId);
     const plateInput = document.getElementById(plateInputId);
     if (!table || !nameInput || !plateInput) return;
-
     function applyFilter() {
         const nameVal = (nameInput.value || '').toLowerCase();
         const plateVal = (plateInput.value || '').toLowerCase();
         const rows = table.querySelectorAll('tbody tr');
-
         rows.forEach(function(row) {
             const tds = row.querySelectorAll('td');
             if (!tds.length) return;
-
             const rowText = row.innerText.toLowerCase();
             const homeownerText = tds[1] ? tds[1].innerText.toLowerCase() : rowText;
             const plateText = tds[3] ? tds[3].innerText.toLowerCase() : rowText;
-
             const okName = !nameVal || homeownerText.indexOf(nameVal) !== -1;
             const okPlate = !plateVal || plateText.indexOf(plateVal) !== -1;
-
             row.style.display = (okName && okPlate) ? '' : 'none';
         });
     }
-
     nameInput.addEventListener('input', applyFilter);
     plateInput.addEventListener('input', applyFilter);
 }
-
 function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -1258,14 +1497,11 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
-
 function detailRow(label, value) {
     return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value || '—')}</td></tr>`;
 }
-
 function openDetailsModal(data) {
     let html = '';
-
     html += `<div class="section-label">Permit Information</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Permit ID', data.id);
@@ -1278,14 +1514,12 @@ function openDetailsModal(data) {
     html += detailRow('Validity Start', data.valid_from);
     html += detailRow('Validity End', data.valid_until);
     html += `</table>`;
-
     html += `<div class="section-label">Homeowner Information</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Homeowner', data.homeowner);
     html += detailRow('Email', data.email);
     html += detailRow('Blk/Lot', data.house_lot_number);
     html += `</table>`;
-
     html += `<div class="section-label">Vehicle Information</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Plate No.', data.plate_no);
@@ -1294,13 +1528,11 @@ function openDetailsModal(data) {
     html += detailRow('Vehicle Model', data.vehicle_model);
     html += detailRow('Vehicle Color', data.vehicle_color);
     html += `</table>`;
-
     html += `<div class="section-label">Payment Information</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Payment Status', data.payment_status);
     html += detailRow('Payment Method', data.payment_method);
     html += `</table>`;
-
     if (data.rejected_reason || data.revoked_reason) {
         html += `<div class="section-label">Remarks</div>`;
         html += `<table class="table table-bordered detail-table">`;
@@ -1308,34 +1540,28 @@ function openDetailsModal(data) {
         html += detailRow('Revoked Reason', data.revoked_reason);
         html += `</table>`;
     }
-
     html += `<div class="section-label">Timeline</div>`;
     html += `<table class="table table-bordered detail-table">`;
     html += detailRow('Requested At', data.requested_at);
     html += detailRow('Approved At', data.approved_at);
     html += detailRow('Updated At', data.updated_at);
     html += `</table>`;
-
     $('#detailsBody').html(html);
     $('#modalDetails').modal('show');
 }
-
 async function ensureDataTablesThenInit() {
     try {
         if (typeof window.jQuery === 'undefined') {
             await loadScript('https://code.jquery.com/jquery-3.7.1.min.js');
         }
-
         if (!jQuery.fn.DataTable) {
             await loadScript('https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js');
             await loadScript('https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap4.min.js');
             await loadScript('https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js');
             await loadScript('https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js');
         }
-
         if (jQuery.fn.DataTable) {
             let dtPending, dtActive, dtAll;
-
             if (!$.fn.DataTable.isDataTable('#tblPending')) {
                 dtPending = $('#tblPending').DataTable({
                     responsive: true,
@@ -1349,7 +1575,6 @@ async function ensureDataTablesThenInit() {
             } else {
                 dtPending = $('#tblPending').DataTable();
             }
-
             if (!$.fn.DataTable.isDataTable('#tblActive')) {
                 dtActive = $('#tblActive').DataTable({
                     responsive: true,
@@ -1363,7 +1588,6 @@ async function ensureDataTablesThenInit() {
             } else {
                 dtActive = $('#tblActive').DataTable();
             }
-
             if (!$.fn.DataTable.isDataTable('#tblAll')) {
                 dtAll = $('#tblAll').DataTable({
                     responsive: true,
@@ -1377,19 +1601,16 @@ async function ensureDataTablesThenInit() {
             } else {
                 dtAll = $('#tblAll').DataTable();
             }
-
             $('#filterPendingName, #filterPendingPlate').on('keyup change', function() {
                 dtPending.search(
                     ($('#filterPendingName').val() || '') + ' ' + ($('#filterPendingPlate').val() || '')
                 ).draw();
             });
-
             $('#filterActiveName, #filterActivePlate').on('keyup change', function() {
                 dtActive.search(
                     ($('#filterActiveName').val() || '') + ' ' + ($('#filterActivePlate').val() || '')
                 ).draw();
             });
-
             $('#filterAllName, #filterAllPlate').on('keyup change', function() {
                 dtAll.search(
                     ($('#filterAllName').val() || '') + ' ' + ($('#filterAllPlate').val() || '')
@@ -1406,10 +1627,8 @@ async function ensureDataTablesThenInit() {
         simpleTableFilter('tblAll', 'filterAllName', 'filterAllPlate');
     }
 }
-
 $(function() {
     ensureDataTablesThenInit();
-
     $(document).on('click', '.btnDetails', function() {
         let data = {};
         try {
@@ -1419,7 +1638,6 @@ $(function() {
         }
         openDetailsModal(data);
     });
-
     $(document).on('click', '.btnReq', function() {
         const id = $(this).data('id');
         const name = String($(this).data('name') || '');
@@ -1431,31 +1649,24 @@ $(function() {
         const canRecordCash = String($(this).data('can-record-cash')) === '1';
         const waitingOnline = String($(this).data('waiting-online')) === '1';
         const paidReview = String($(this).data('paid-review')) === '1';
-
         $('#reqInfo').text(`Homeowner: ${name} • Plate: ${plate}`);
         $('#reqPaymentInfo').text(`Payment Status: ${payment} • Method: ${method}`);
-
         let data = {};
         try {
             data = JSON.parse($(this).attr('data-json'));
         } catch (e) {
             data = {};
         }
-
         let html = '<div class="table-responsive"><table class="table table-sm table-bordered">';
         html += '<thead><tr><th>Requirement</th><th>Status</th><th>Preview / File</th></tr></thead><tbody>';
-
         Object.keys(data).forEach(function(k) {
             const p = String(data[k] || '');
             const status = p
                 ? '<span class="badge badge-success">Submitted</span>'
                 : '<span class="badge badge-danger">Missing</span>';
-
             let fileHtml = '—';
-
             if (p && /^uploads\/[a-z0-9_./-]+$/i.test(p)) {
                 const safePath = encodeURI(p);
-
                 if (isImagePath(p)) {
                     fileHtml = `
                         <a href="${safePath}" target="_blank" rel="noopener noreferrer">
@@ -1471,15 +1682,11 @@ $(function() {
                     `;
                 }
             }
-
             html += `<tr><td>${escapeHtml(k)}</td><td>${status}</td><td>${fileHtml}</td></tr>`;
         });
-
         html += '</tbody></table></div>';
         $('#reqList').html(html);
-
         let actionHtml = '';
-
         if (isFresh) {
             if (canApprove) {
                 actionHtml += `
@@ -1496,7 +1703,6 @@ $(function() {
                     </button>
                 `;
             }
-
             actionHtml += `
                 <button type="button"
                         class="btn btn-danger btnOpenRejectFromReq"
@@ -1504,7 +1710,6 @@ $(function() {
                     <i class="dw dw-delete-3"></i> Reject
                 </button>
             `;
-
         } else if (canRecordCash) {
             actionHtml += `
                 <button type="button"
@@ -1513,21 +1718,18 @@ $(function() {
                     <i class="dw dw-money-2"></i> Record Cash Payment & Activate
                 </button>
             `;
-
         } else if (waitingOnline) {
             actionHtml += `
                 <div class="alert alert-info mb-0">
                     This permit is waiting for the homeowner/tenant to complete the verified online payment.
                 </div>
             `;
-
         } else if (paidReview) {
             actionHtml += `
                 <div class="alert alert-warning mb-0">
                     Payment is marked paid while the permit is still pending. Review the payment record before making any manual database changes.
                 </div>
             `;
-
         } else {
             actionHtml += `
                 <div class="alert alert-info mb-0">
@@ -1535,11 +1737,9 @@ $(function() {
                 </div>
             `;
         }
-
         $('#reqActionArea').html(actionHtml);
         $('#modalReq').modal('show');
     });
-
     $(document).on('click', '.btnOpenApproveFromReq', function() {
         const info = $('#reqInfo').text();
         $('#modalReq').modal('hide');
@@ -1547,7 +1747,6 @@ $(function() {
         $('#approveInfo').text(info);
         $('#modalApprove').modal('show');
     });
-
     $(document).on('click', '.btnOpenRejectFromReq', function() {
         const info = $('#reqInfo').text();
         $('#modalReq').modal('hide');
@@ -1555,7 +1754,6 @@ $(function() {
         $('#rejectInfo').text(info);
         $('#modalReject').modal('show');
     });
-
     $(document).on('click', '.btnOpenCashActivate', function() {
         const info = $('#reqInfo').text();
         $('#modalReq').modal('hide');
@@ -1563,33 +1761,26 @@ $(function() {
         $('#cashActivateInfo').text(info);
         $('#modalCashActivate').modal('show');
     });
-
     $(document).on('click', '.btnRevoke', function() {
         $('#revokeId').val($(this).data('id'));
         $('#revokeInfo').text(`Permit: ${$(this).data('permit')} • Plate: ${$(this).data('plate')}`);
         $('#modalRevoke').modal('show');
     });
-
 });
 </script>
-
 <div id="accessToast" class="access-toast">
     🚫 You do not have access to that part.
 </div>
-
 <script>
 window.userPermissions = <?= json_encode($permissions) ?>;
-
 document.addEventListener('DOMContentLoaded', function () {
     const toast = document.getElementById('accessToast');
-
     function showAccessToast() {
         toast.classList.add('show');
         setTimeout(() => {
             toast.classList.remove('show');
         }, 2500);
     }
-
     document.querySelectorAll('.menu-access-link').forEach(function(link) {
         link.addEventListener('click', function(e) {
             const moduleKey = this.dataset.module || '';
@@ -1602,6 +1793,5 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
-
 </body>
 </html>

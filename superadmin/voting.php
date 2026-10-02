@@ -16,7 +16,6 @@ use PHPMailer\PHPMailer\Exception;
 
 require_once '../config/database.php';
 
-
 function esc($value): string {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
@@ -35,6 +34,20 @@ function statusLabel(string $status): string {
         'active'   => 'Live',
         'finished' => 'Done',
         default    => 'Not Started',
+    };
+}
+function votingRequestBadgeClass(string $status): string {
+    return match ($status) {
+        'processed' => 'badge-soft badge-soft-success',
+        'rejected'  => 'badge-soft badge-soft-danger',
+        default     => 'badge-soft badge-soft-warning',
+    };
+}
+function votingRequestStatusLabel(string $status): string {
+    return match ($status) {
+        'processed' => 'Processed',
+        'rejected'  => 'Rejected',
+        default     => 'Pending',
     };
 }
 function fullName(array $r): string {
@@ -218,7 +231,12 @@ $phaseOptions = ['Phase 1', 'Phase 2', 'Phase 3'];
 
 $success = '';
 $error = '';
-$adminId = (int)($_SESSION['admin_id'] ?? 1);
+$adminId = (int)($_SESSION['admin_id'] ?? ($_SESSION['user_id'] ?? 1));
+
+if (empty($_SESSION['voting_management_csrf'])) {
+    $_SESSION['voting_management_csrf'] = bin2hex(random_bytes(32));
+}
+$votingCsrf = (string)$_SESSION['voting_management_csrf'];
 
 /* =========================
    PAGE MODE
@@ -237,24 +255,245 @@ $publishedMeta = getPublishedSessionMeta($conn);
    POST ACTIONS
    ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postedCsrf = (string)($_POST['csrf_token'] ?? '');
+    $isVotingRequestAction =
+        isset($_POST['process_voting_request']) ||
+        isset($_POST['reject_voting_request']);
 
-    if (isset($_POST['create_session'])) {
-        $phase = trim($_POST['phase'] ?? '');
-        $title = trim($_POST['title'] ?? '');
+    if ($isVotingRequestAction && !hash_equals($votingCsrf, $postedCsrf)) {
+        $error = 'Your session expired. Please refresh the page and try again.';
+    } elseif (isset($_POST['process_voting_request'])) {
+        $requestId = (int)($_POST['request_id'] ?? 0);
+        $remarks = trim((string)($_POST['superadmin_remarks'] ?? ''));
 
-        if (!in_array($phase, $phaseOptions, true)) {
-            $error = 'Invalid phase selected.';
-        } elseif ($title === '') {
-            $error = 'Election title is required.';
+        if ($requestId <= 0) {
+            $error = 'Invalid voting request.';
+        } else {
+            $tableCheck = $conn->query("SHOW TABLES LIKE 'voting_requests'");
+            $requestTableReady = $tableCheck && $tableCheck->num_rows > 0;
+            if ($tableCheck) {
+                $tableCheck->close();
+            }
+
+            $tableCheck = $conn->query("SHOW TABLES LIKE 'voting_request_candidates'");
+            $requestCandidateTableReady = $tableCheck && $tableCheck->num_rows > 0;
+            if ($tableCheck) {
+                $tableCheck->close();
+            }
+
+            if (!$requestTableReady || !$requestCandidateTableReady) {
+                $error = 'Voting Request setup is not installed yet. Run the updated voting_requests.sql first.';
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT id, phase, election_title, reason, status, requested_by_admin_id
+                    FROM voting_requests
+                    WHERE id=?
+                    LIMIT 1
+                ");
+                $stmt->bind_param('i', $requestId);
+                $stmt->execute();
+                $requestRow = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                if (!$requestRow) {
+                    $error = 'Voting request not found.';
+                } elseif (($requestRow['status'] ?? '') !== 'pending') {
+                    $error = 'This voting request has already been processed.';
+                } else {
+                    $requestPhase = (string)$requestRow['phase'];
+                    $requestCandidatesForProcessing = [];
+
+                    $stmt = $conn->prepare("
+                        SELECT
+                            vrc.position,
+                            vrc.homeowner_id,
+                            h.status,
+                            h.phase,
+                            h.first_name,
+                            h.middle_name,
+                            h.last_name
+                        FROM voting_request_candidates vrc
+                        INNER JOIN homeowners h
+                            ON h.id = vrc.homeowner_id
+                        WHERE vrc.voting_request_id=?
+                        ORDER BY
+                            FIELD(
+                                vrc.position,
+                                'President',
+                                'Vice President',
+                                'Secretary',
+                                'Treasurer',
+                                'Auditor',
+                                'Board of Director'
+                            ),
+                            vrc.id ASC
+                    ");
+                    $stmt->bind_param('i', $requestId);
+                    $stmt->execute();
+                    $candidateResult = $stmt->get_result();
+
+                    while ($candidate = $candidateResult->fetch_assoc()) {
+                        $requestCandidatesForProcessing[] = $candidate;
+                    }
+                    $stmt->close();
+
+                    $candidatePositions = [];
+                    $invalidCandidate = false;
+
+                    foreach ($requestCandidatesForProcessing as $candidate) {
+                        $candidatePositions[(string)$candidate['position']] = true;
+
+                        if (
+                            (string)($candidate['status'] ?? '') !== 'approved' ||
+                            (string)($candidate['phase'] ?? '') !== $requestPhase
+                        ) {
+                            $invalidCandidate = true;
+                            break;
+                        }
+                    }
+
+                    $missingCandidatePosition = '';
+
+                    foreach ($positions as $requiredPosition) {
+                        if (!isset($candidatePositions[$requiredPosition])) {
+                            $missingCandidatePosition = $requiredPosition;
+                            break;
+                        }
+                    }
+
+                    if (!$requestCandidatesForProcessing) {
+                        $error = 'No candidates were submitted with this request. Ask the President to submit a new request with candidates.';
+                    } elseif ($invalidCandidate) {
+                        $error = 'One or more submitted candidates is no longer an approved homeowner from the requested phase.';
+                    } elseif ($missingCandidatePosition !== '') {
+                        $error = 'The request has no candidate for ' . $missingCandidatePosition . '. Ask the President to complete the candidate list.';
+                    }
+
+                    $openSession = null;
+
+                    if ($error === '') {
+                        $stmt = $conn->prepare("
+                            SELECT id, title, status
+                            FROM election_sessions
+                            WHERE phase=?
+                            ORDER BY id DESC
+                        ");
+                        $stmt->bind_param('s', $requestPhase);
+                        $stmt->execute();
+                        $existingSessions = $stmt->get_result();
+                        while ($existingSession = $existingSessions->fetch_assoc()) {
+                            $existingId = (int)$existingSession['id'];
+                            if (!isSessionPublished($existingId, $publishedMeta)) {
+                                $openSession = $existingSession;
+                                break;
+                            }
+                        }
+                        $stmt->close();
+                    }
+
+                    if ($error !== '') {
+                        // Keep the candidate/request validation message.
+                    } elseif ($openSession) {
+                        $error = 'This phase already has an election that must be completed and published before another request can be processed.';
+                    } else {
+                        $conn->begin_transaction();
+                        try {
+                            $requestTitle = trim((string)$requestRow['election_title']);
+
+                            $stmt = $conn->prepare("
+                                INSERT INTO election_sessions
+                                    (phase, title, status, created_by_admin_id)
+                                VALUES (?, ?, 'draft', ?)
+                            ");
+                            $stmt->bind_param('ssi', $requestPhase, $requestTitle, $adminId);
+                            $stmt->execute();
+                            $newSessionId = (int)$conn->insert_id;
+                            $stmt->close();
+
+                            $nomineeStmt = $conn->prepare("
+                                INSERT INTO election_nominations
+                                    (
+                                        election_id,
+                                        phase,
+                                        position,
+                                        homeowner_id,
+                                        created_by_admin_id
+                                    )
+                                VALUES (?, ?, ?, ?, ?)
+                            ");
+
+                            foreach ($requestCandidatesForProcessing as $candidate) {
+                                $candidatePosition = (string)$candidate['position'];
+                                $candidateHomeownerId = (int)$candidate['homeowner_id'];
+
+                                $nomineeStmt->bind_param(
+                                    'issii',
+                                    $newSessionId,
+                                    $requestPhase,
+                                    $candidatePosition,
+                                    $candidateHomeownerId,
+                                    $adminId
+                                );
+                                $nomineeStmt->execute();
+                            }
+
+                            $nomineeStmt->close();
+
+                            $stmt = $conn->prepare("
+                                UPDATE voting_requests
+                                SET status='processed',
+                                    processed_by_admin_id=?,
+                                    election_session_id=?,
+                                    superadmin_remarks=?,
+                                    processed_at=NOW()
+                                WHERE id=? AND status='pending'
+                                LIMIT 1
+                            ");
+                            $stmt->bind_param('iisi', $adminId, $newSessionId, $remarks, $requestId);
+                            $stmt->execute();
+
+                            if ($stmt->affected_rows !== 1) {
+                                throw new RuntimeException('Voting request could not be updated.');
+                            }
+                            $stmt->close();
+
+                            $conn->commit();
+                            $success = 'Voting request processed. A draft election session was created and the President\'s submitted candidates were added as nominees. You can review or adjust the nominees before starting voting.';
+                        } catch (Throwable $e) {
+                            $conn->rollback();
+                            $error = 'Failed to process the voting request.';
+                        }
+                    }
+                }
+            }
+        }
+    } elseif (isset($_POST['reject_voting_request'])) {
+        $requestId = (int)($_POST['request_id'] ?? 0);
+        $remarks = trim((string)($_POST['superadmin_remarks'] ?? ''));
+
+        if ($requestId <= 0) {
+            $error = 'Invalid voting request.';
+        } elseif ($remarks === '') {
+            $error = 'Please enter a short reason before rejecting the voting request.';
         } else {
             $stmt = $conn->prepare("
-                INSERT INTO election_sessions (phase, title, status, created_by_admin_id)
-                VALUES (?, ?, 'draft', ?)
+                UPDATE voting_requests
+                SET status='rejected',
+                    processed_by_admin_id=?,
+                    superadmin_remarks=?,
+                    processed_at=NOW()
+                WHERE id=? AND status='pending'
+                LIMIT 1
             ");
-            $stmt->bind_param("ssi", $phase, $title, $adminId);
+            $stmt->bind_param('isi', $adminId, $remarks, $requestId);
             $stmt->execute();
+
+            if ($stmt->affected_rows === 1) {
+                $success = 'Voting request rejected. The President can see your remarks on the Voting Request page.';
+            } else {
+                $error = 'Voting request not found or it has already been processed.';
+            }
             $stmt->close();
-            $success = 'Election session created successfully.';
         }
     }
 
@@ -592,6 +831,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* =========================
+   VOTING REQUESTS
+   ========================= */
+$votingRequests = [];
+$pendingVotingRequests = 0;
+$votingRequestCandidates = [];
+$votingRequestsTableReady = false;
+$votingRequestCandidatesTableReady = false;
+
+$tableCheck = $conn->query("SHOW TABLES LIKE 'voting_requests'");
+if ($tableCheck && $tableCheck->num_rows > 0) {
+    $votingRequestsTableReady = true;
+}
+if ($tableCheck) {
+    $tableCheck->close();
+}
+
+$tableCheck = $conn->query("SHOW TABLES LIKE 'voting_request_candidates'");
+if ($tableCheck && $tableCheck->num_rows > 0) {
+    $votingRequestCandidatesTableReady = true;
+}
+if ($tableCheck) {
+    $tableCheck->close();
+}
+
+$votingRequestsTableReady =
+    $votingRequestsTableReady &&
+    $votingRequestCandidatesTableReady;
+
+if ($votingRequestsTableReady) {
+    $sqlRequests = "
+        SELECT
+            vr.id,
+            vr.phase,
+            vr.election_title,
+            vr.reason,
+            vr.status,
+            vr.superadmin_remarks,
+            vr.election_session_id,
+            vr.created_at,
+            vr.processed_at,
+            a.full_name AS requester_name,
+            a.email AS requester_email,
+            a.position AS requester_position,
+            es.status AS election_status
+        FROM voting_requests vr
+        LEFT JOIN admins a ON a.id = vr.requested_by_admin_id
+        LEFT JOIN election_sessions es ON es.id = vr.election_session_id
+        ORDER BY
+            FIELD(vr.status, 'pending', 'processed', 'rejected'),
+            vr.created_at DESC,
+            vr.id DESC
+        LIMIT 100
+    ";
+    $requestResult = $conn->query($sqlRequests);
+    while ($requestRow = $requestResult->fetch_assoc()) {
+        $votingRequests[] = $requestRow;
+        if (($requestRow['status'] ?? '') === 'pending') {
+            $pendingVotingRequests++;
+        }
+    }
+    $requestResult->close();
+
+    $candidateSql = "
+        SELECT
+            vrc.voting_request_id,
+            vrc.position,
+            vrc.homeowner_id,
+            h.public_id,
+            h.first_name,
+            h.middle_name,
+            h.last_name,
+            h.house_lot_number
+        FROM voting_request_candidates vrc
+        INNER JOIN homeowners h
+            ON h.id = vrc.homeowner_id
+        ORDER BY
+            vrc.voting_request_id DESC,
+            FIELD(
+                vrc.position,
+                'President',
+                'Vice President',
+                'Secretary',
+                'Treasurer',
+                'Auditor',
+                'Board of Director'
+            ),
+            vrc.id ASC
+    ";
+
+    $candidateResult = $conn->query($candidateSql);
+
+    while ($candidate = $candidateResult->fetch_assoc()) {
+        $requestId = (int)$candidate['voting_request_id'];
+        $candidatePosition = (string)$candidate['position'];
+
+        if (!isset($votingRequestCandidates[$requestId])) {
+            $votingRequestCandidates[$requestId] = [];
+        }
+
+        if (!isset($votingRequestCandidates[$requestId][$candidatePosition])) {
+            $votingRequestCandidates[$requestId][$candidatePosition] = [];
+        }
+
+        $votingRequestCandidates[$requestId][$candidatePosition][] = $candidate;
+    }
+
+    $candidateResult->close();
+}
+
+/* =========================
    COUNTS
    ========================= */
 $totalSessions = 0;
@@ -754,12 +1103,14 @@ if ($selectedSession) {
 <!DOCTYPE html>
 <html>
 <head>
+    <?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
     <meta charset="utf-8">
     <title>Voting Management</title>
 
-    <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -952,6 +1303,10 @@ if ($selectedSession) {
             vertical-align:middle;
         }
 
+        .table td{
+            word-break:break-word;
+        }
+
         .form-control{
             border-radius:12px;
             min-height:44px;
@@ -1094,7 +1449,7 @@ if ($selectedSession) {
                         <?php elseif ($viewMode === 'history'): ?>
                             View previously published voting sessions.
                         <?php else: ?>
-                            Manage election sessions, nominees, and results.
+                            Review President voting requests, prepare nominees, and manage election sessions.
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1178,103 +1533,210 @@ if ($selectedSession) {
         </div>
 
         <?php if ($viewMode === 'management'): ?>
-            <div class="row">
-                <div class="col-md-5 mb-30">
-                    <div class="card-box pd-20">
-                        <div class="section-title">Create Election Session</div>
-                        <form method="POST">
-                            <div class="form-group">
-                                <label>Phase</label>
-                                <select name="phase" class="form-control" required>
-                                    <option value="">-- Select Phase --</option>
-                                    <?php foreach ($phaseOptions as $phase): ?>
-                                        <option value="<?= esc($phase) ?>"><?= esc($phase) ?></option>
+            <div class="card-box pd-20 mb-30">
+                <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                    <div>
+                        <div class="section-title mb-1">Voting Requests from HOA Presidents</div>
+                        <div class="mini-note">Review the President's election request and proposed candidates. Processing the request creates a draft session and copies the submitted candidates into the nominee list.</div>
+                    </div>
+                    <span class="badge-soft badge-soft-warning mt-2 mt-md-0">
+                        <?= (int)$pendingVotingRequests ?> Pending
+                    </span>
+                </div>
+
+                <?php if (!$votingRequestsTableReady): ?>
+                    <div class="alert alert-warning mb-0">
+                        Voting Request setup is not installed yet. Run the updated <strong>voting_requests.sql</strong> once, then refresh this page.
+                    </div>
+                <?php elseif (empty($votingRequests)): ?>
+                    <div class="alert alert-info mb-0">
+                        No voting request has been submitted by an HOA President yet.
+                    </div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Requested</th>
+                                    <th>Phase</th>
+                                    <th>President</th>
+                                    <th>Election</th>
+                                    <th>Reason</th>
+                                    <th>Proposed Candidates</th>
+                                    <th>Status</th>
+                                    <th>Superadmin Remarks / Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($votingRequests as $request): ?>
+                                    <tr>
+                                        <td><?= esc($request['created_at'] ?? '-') ?></td>
+                                        <td><strong><?= esc($request['phase'] ?? '-') ?></strong></td>
+                                        <td>
+                                            <strong><?= esc($request['requester_name'] ?: 'HOA President') ?></strong>
+                                            <?php if (!empty($request['requester_email'])): ?>
+                                                <div class="mini-note"><?= esc($request['requester_email']) ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?= esc($request['election_title'] ?? '-') ?></td>
+                                        <td style="min-width:220px;white-space:normal;"><?= nl2br(esc($request['reason'] ?? '')) ?></td>
+                                        <td style="min-width:330px;white-space:normal;">
+                                            <?php
+                                            $submittedCandidates =
+                                                $votingRequestCandidates[(int)$request['id']] ??
+                                                [];
+                                            ?>
+                                            <?php if (!$submittedCandidates): ?>
+                                                <span class="text-danger">
+                                                    No candidates were submitted with this request.
+                                                </span>
+                                            <?php else: ?>
+                                                <?php foreach ($positions as $candidatePosition): ?>
+                                                    <?php
+                                                    $candidateRows =
+                                                        $submittedCandidates[$candidatePosition] ??
+                                                        [];
+                                                    ?>
+                                                    <?php if ($candidateRows): ?>
+                                                        <div class="mb-1">
+                                                            <strong><?= esc($candidatePosition) ?>:</strong>
+                                                            <?php
+                                                            $candidateNames = [];
+                                                            foreach ($candidateRows as $candidateRow) {
+                                                                $candidateNames[] =
+                                                                    fullName($candidateRow);
+                                                            }
+                                                            ?>
+                                                            <?= esc(implode(', ', $candidateNames)) ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="<?= votingRequestBadgeClass((string)($request['status'] ?? 'pending')) ?>">
+                                                <?= esc(votingRequestStatusLabel((string)($request['status'] ?? 'pending'))) ?>
+                                            </span>
+                                            <?php if (($request['status'] ?? '') === 'processed' && !empty($request['election_session_id'])): ?>
+                                                <div class="mini-note mt-1">
+                                                    Session #<?= (int)$request['election_session_id'] ?>
+                                                    <?= !empty($request['election_status']) ? ' • ' . esc(statusLabel((string)$request['election_status'])) : '' ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="min-width:280px;">
+                                            <?php if (($request['status'] ?? '') === 'pending'): ?>
+                                                <form method="POST">
+                                                    <input type="hidden" name="csrf_token" value="<?= esc($votingCsrf) ?>">
+                                                    <input type="hidden" name="request_id" value="<?= (int)$request['id'] ?>">
+                                                    <input
+                                                        type="text"
+                                                        name="superadmin_remarks"
+                                                        class="form-control form-control-sm mb-2"
+                                                        maxlength="500"
+                                                        placeholder="Optional note for Process; required for Reject"
+                                                    >
+                                                    <div class="table-actions">
+                                                        <button type="submit" name="process_voting_request" class="btn btn-sm btn-success">
+                                                            Process Request
+                                                        </button>
+                                                        <button
+                                                            type="submit"
+                                                            name="reject_voting_request"
+                                                            class="btn btn-sm btn-danger"
+                                                            onclick="return confirm('Reject this voting request?');"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            <?php else: ?>
+                                                <div><?= esc($request['superadmin_remarks'] ?: 'No additional remarks.') ?></div>
+                                                <?php if (!empty($request['processed_at'])): ?>
+                                                    <div class="mini-note mt-1">Processed: <?= esc($request['processed_at']) ?></div>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="card-box pd-20 mb-30">
+                <div class="section-title">Add Nominee</div>
+
+                <?php if ($selectedSession): ?>
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-4 form-group">
+                                <label>Session</label>
+                                <select name="session_id" class="form-control" required>
+                                    <?php foreach ($electionSessions as $session): ?>
+                                        <option value="<?= (int)$session['id'] ?>" <?= ((int)$session['id'] === $selectedSessionId) ? 'selected' : '' ?>>
+                                            <?= esc($session['title']) ?> (<?= esc($session['phase']) ?>)
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
 
-                            <div class="form-group">
-                                <label>Election Title</label>
-                                <input type="text" name="title" class="form-control" placeholder="Example: Phase 1 HOA Election 2026" required>
+                            <div class="col-md-4 form-group">
+                                <label>Position</label>
+                                <select name="position" class="form-control" required>
+                                    <option value="">-- Select Position --</option>
+                                    <?php foreach ($positions as $position): ?>
+                                        <option value="<?= esc($position) ?>"><?= esc($position) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
 
-                            <button type="submit" name="create_session" class="btn btn-primary">Create Session</button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="col-md-7 mb-30">
-                    <div class="card-box pd-20">
-                        <div class="section-title">Add Nominee</div>
-
-                        <?php if ($selectedSession): ?>
-                            <form method="POST">
-                                <div class="row">
-                                    <div class="col-md-4 form-group">
-                                        <label>Session</label>
-                                        <select name="session_id" class="form-control" required>
-                                            <?php foreach ($electionSessions as $session): ?>
-                                                <option value="<?= (int)$session['id'] ?>" <?= ((int)$session['id'] === $selectedSessionId) ? 'selected' : '' ?>>
-                                                    <?= esc($session['title']) ?> (<?= esc($session['phase']) ?>)
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-4 form-group">
-                                        <label>Position</label>
-                                        <select name="position" class="form-control" required>
-                                            <option value="">-- Select Position --</option>
-                                            <?php foreach ($positions as $position): ?>
-                                                <option value="<?= esc($position) ?>"><?= esc($position) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-4 form-group">
-                                        <label>Homeowner</label>
-                                        <select name="homeowner_id" class="form-control" required>
-                                            <option value="">-- Select Homeowner --</option>
-                                            <?php foreach ($approvedHomeowners as $homeowner): ?>
-                                                <option value="<?= (int)$homeowner['id'] ?>">
-                                                    <?= esc(fullName($homeowner)) ?><?= !empty($homeowner['house_lot_number']) ? ' - ' . esc($homeowner['house_lot_number']) : '' ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <button type="submit" name="add_nominee" class="btn btn-success">Add Nominee</button>
-                                <div class="mini-note mt-2">
-                                    Only approved homeowners from <strong><?= esc($selectedSession['phase']) ?></strong> are shown.
-                                </div>
-                            </form>
-                        <?php else: ?>
-                            <div class="alert alert-info mb-0">Create or select an election session first.</div>
-                        <?php endif; ?>
-
-                        <hr>
-
-                        <div class="section-title mb-3">Select Session to View</div>
-                        <form method="GET">
-                            <input type="hidden" name="view" value="management">
-                            <div class="row">
-                                <div class="col-md-10 form-group">
-                                    <select name="session_id" class="form-control">
-                                        <?php foreach ($electionSessions as $session): ?>
-                                            <option value="<?= (int)$session['id'] ?>" <?= ((int)$session['id'] === $selectedSessionId) ? 'selected' : '' ?>>
-                                                <?= esc($session['title']) ?> (<?= esc($session['phase']) ?>)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <div class="col-md-2 form-group">
-                                    <button type="submit" class="btn btn-info btn-block">View</button>
-                                </div>
+                            <div class="col-md-4 form-group">
+                                <label>Homeowner</label>
+                                <select name="homeowner_id" class="form-control" required>
+                                    <option value="">-- Select Homeowner --</option>
+                                    <?php foreach ($approvedHomeowners as $homeowner): ?>
+                                        <option value="<?= (int)$homeowner['id'] ?>">
+                                            <?= esc(fullName($homeowner)) ?><?= !empty($homeowner['house_lot_number']) ? ' - ' . esc($homeowner['house_lot_number']) : '' ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
-                        </form>
+                        </div>
+
+                        <button type="submit" name="add_nominee" class="btn btn-success">Add Nominee</button>
+                        <div class="mini-note mt-2">
+                            Only approved homeowners from <strong><?= esc($selectedSession['phase']) ?></strong> are shown.
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <div class="alert alert-info mb-0">
+                        Process a President voting request first. The processed request will create a draft election session here.
                     </div>
-                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($electionSessions)): ?>
+                    <hr>
+                    <div class="section-title mb-3">Select Session to View</div>
+                    <form method="GET">
+                        <input type="hidden" name="view" value="management">
+                        <div class="row">
+                            <div class="col-md-10 form-group">
+                                <select name="session_id" class="form-control">
+                                    <?php foreach ($electionSessions as $session): ?>
+                                        <option value="<?= (int)$session['id'] ?>" <?= ((int)$session['id'] === $selectedSessionId) ? 'selected' : '' ?>>
+                                            <?= esc($session['title']) ?> (<?= esc($session['phase']) ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2 form-group">
+                                <button type="submit" class="btn btn-info btn-block">View</button>
+                            </div>
+                        </div>
+                    </form>
+                <?php endif; ?>
             </div>
         <?php elseif ($viewMode === 'results'): ?>
             <div class="card-box pd-20 mb-30">

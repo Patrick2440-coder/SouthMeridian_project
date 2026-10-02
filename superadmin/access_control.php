@@ -5,15 +5,43 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 require_once '../config/database.php';
 
-/* =========================
-   SUPERADMIN GUARD
-   ========================= */
-if (
-    empty($_SESSION['admin_id']) ||
-    empty($_SESSION['admin_role']) ||
-    $_SESSION['admin_role'] !== 'superadmin'
-) {
-    echo "<script>alert('Access denied. Superadmin only.'); window.location='../index.php';</script>";
+function esc($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+/*
+|--------------------------------------------------------------------------
+| Superadmin guard
+|--------------------------------------------------------------------------
+| Superadmin can VIEW the current officer permission matrix only.
+| Permission changes are handled on the Admin side by:
+| President, Vice President, and Secretary.
+*/
+$sessionAdminId = (int)($_SESSION['admin_id'] ?? $_SESSION['user_id'] ?? 0);
+$sessionRole = (string)($_SESSION['admin_role'] ?? $_SESSION['role'] ?? '');
+
+if ($sessionAdminId <= 0 || $sessionRole !== 'superadmin') {
+    header('Location: ../index.php');
+    exit;
+}
+
+/* Confirm the logged-in account is still the Superadmin account. */
+$adminStmt = $conn->prepare("
+    SELECT id, full_name, email, role, phase
+    FROM admins
+    WHERE id = ?
+      AND role = 'superadmin'
+    LIMIT 1
+");
+$adminStmt->bind_param('i', $sessionAdminId);
+$adminStmt->execute();
+$superadmin = $adminStmt->get_result()->fetch_assoc();
+$adminStmt->close();
+
+if (!$superadmin) {
+    session_destroy();
+    header('Location: ../index.php');
     exit;
 }
 
@@ -26,207 +54,77 @@ $positions = [
     'Board of Director'
 ];
 
-$defaultPermissions = [
-    'President' => [
-        'dashboard' => 1,
-        'homeowner_management' => 1,
-        'user_management' => 1,
-        'announcements' => 1,
-        'complaints' => 1,
-        'finance' => 1,
-        'parking' => 1,
-        'community' => 1,
-        'voting_management' => 1,
-        'settings' => 1,
-    ],
-    'Vice President' => [
-        'dashboard' => 1,
-        'homeowner_management' => 1,
-        'user_management' => 0,
-        'announcements' => 1,
-        'complaints' => 1,
-        'finance' => 1,
-        'parking' => 1,
-        'community' => 1,
-        'voting_management' => 0,
-        'settings' => 0,
-    ],
-    'Secretary' => [
-        'dashboard' => 1,
-        'homeowner_management' => 1,
-        'user_management' => 0,
-        'announcements' => 1,
-        'complaints' => 1,
-        'finance' => 0,
-        'parking' => 0,
-        'community' => 0,
-        'voting_management' => 0,
-        'settings' => 0,
-    ],
-    'Treasurer' => [
-        'dashboard' => 1,
-        'homeowner_management' => 0,
-        'user_management' => 0,
-        'announcements' => 0,
-        'complaints' => 0,
-        'finance' => 1,
-        'parking' => 0,
-        'community' => 0,
-        'voting_management' => 0,
-        'settings' => 0,
-    ],
-    'Auditor' => [
-        'dashboard' => 1,
-        'homeowner_management' => 0,
-        'user_management' => 0,
-        'announcements' => 0,
-        'complaints' => 0,
-        'finance' => 1,
-        'parking' => 0,
-        'community' => 0,
-        'voting_management' => 0,
-        'settings' => 0,
-    ],
-    'Board of Director' => [
-        'dashboard' => 1,
-        'homeowner_management' => 0,
-        'user_management' => 0,
-        'announcements' => 1,
-        'complaints' => 1,
-        'finance' => 1,
-        'parking' => 1,
-        'community' => 1,
-        'voting_management' => 0,
-        'settings' => 0,
-    ],
-];
-
-function get_modules(mysqli $conn): array {
+function get_modules(mysqli $conn): array
+{
     $modules = [];
-    $res = $conn->query("SELECT module_key, module_name FROM access_modules ORDER BY sort_order ASC, module_name ASC");
+
+    $res = $conn->query("
+        SELECT module_key, module_name
+        FROM access_modules
+        ORDER BY sort_order ASC, module_name ASC
+    ");
+
     while ($row = $res->fetch_assoc()) {
         $modules[] = $row;
     }
+
     return $modules;
 }
 
-function ensure_permissions_exist(mysqli $conn, array $positions, array $defaultPermissions): void {
-    $modules = get_modules($conn);
+function load_matrix(mysqli $conn): array
+{
+    $matrix = [];
 
-    $stmt = $conn->prepare("
-        INSERT INTO access_permissions (position, module_key, is_allowed)
-        VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE is_allowed = is_allowed
+    $res = $conn->query("
+        SELECT position, module_key, is_allowed
+        FROM access_permissions
     ");
 
-    foreach ($positions as $position) {
-        foreach ($modules as $module) {
-            $moduleKey = (string)$module['module_key'];
-            $allowed = (int)($defaultPermissions[$position][$moduleKey] ?? 0);
-            $stmt->bind_param("ssi", $position, $moduleKey, $allowed);
-            $stmt->execute();
-        }
-    }
-
-    $stmt->close();
-}
-
-function load_matrix(mysqli $conn): array {
-    $matrix = [];
-    $res = $conn->query("SELECT position, module_key, is_allowed FROM access_permissions");
     while ($row = $res->fetch_assoc()) {
-        $matrix[$row['position']][$row['module_key']] = (int)$row['is_allowed'];
+        $matrix[(string)$row['position']][(string)$row['module_key']] =
+            (int)$row['is_allowed'];
     }
+
     return $matrix;
 }
 
-function save_permissions(mysqli $conn, array $positions, array $modules): void {
-    $stmt = $conn->prepare("
-        INSERT INTO access_permissions (position, module_key, is_allowed)
-        VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE is_allowed = VALUES(is_allowed)
-    ");
-
-    foreach ($positions as $position) {
-        foreach ($modules as $module) {
-            $moduleKey = (string)$module['module_key'];
-            $field = 'perm_' . md5($position . '|' . $moduleKey);
-            $allowed = isset($_POST[$field]) ? 1 : 0;
-            $stmt->bind_param("ssi", $position, $moduleKey, $allowed);
-            $stmt->execute();
-        }
-    }
-
-    $stmt->close();
-}
-
-function reset_permissions_to_defaults(mysqli $conn, array $positions, array $modules, array $defaultPermissions): void {
-    $stmt = $conn->prepare("
-        INSERT INTO access_permissions (position, module_key, is_allowed)
-        VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE is_allowed = VALUES(is_allowed)
-    ");
-
-    foreach ($positions as $position) {
-        foreach ($modules as $module) {
-            $moduleKey = (string)$module['module_key'];
-            $allowed = (int)($defaultPermissions[$position][$moduleKey] ?? 0);
-            $stmt->bind_param("ssi", $position, $moduleKey, $allowed);
-            $stmt->execute();
-        }
-    }
-
-    $stmt->close();
-}
-
-ensure_permissions_exist($conn, $positions, $defaultPermissions);
-
-$success = '';
-$error = '';
-
 $modules = get_modules($conn);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $conn->begin_transaction();
-
-    try {
-        if (isset($_POST['save_access_control'])) {
-            save_permissions($conn, $positions, $modules);
-            $success = 'Access control updated successfully.';
-        } elseif (isset($_POST['reset_defaults'])) {
-            reset_permissions_to_defaults($conn, $positions, $modules, $defaultPermissions);
-            $success = 'Permissions reset to default successfully.';
-        }
-        $conn->commit();
-    } catch (Throwable $e) {
-        $conn->rollback();
-        $error = 'Failed to process request: ' . $e->getMessage();
-    }
-}
-
 $matrix = load_matrix($conn);
 
-/* counts for quick summary */
+/* Read-only summary counts. */
 $summaryCounts = [];
+
 foreach ($positions as $position) {
     $summaryCounts[$position] = 0;
+
     foreach ($modules as $module) {
-        $moduleKey = $module['module_key'];
+        $moduleKey = (string)$module['module_key'];
+
         if (!empty($matrix[$position][$moduleKey])) {
             $summaryCounts[$position]++;
         }
     }
 }
+
+$adminDisplayName = trim(
+    (string)($superadmin['full_name'] ?? '')
+);
+
+if ($adminDisplayName === '') {
+    $adminDisplayName = 'Superadmin';
+}
 ?>
 <!DOCTYPE html>
 <html>
 <head>
+  <?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
   <meta charset="utf-8">
-  <title>Superadmin - Access Control</title>
+  <title>Superadmin - Access Control Overview</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="../admin/vendors/images/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="../admin/vendors/images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="../admin/vendors/images/favicon-16x16.png">
+
 
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -303,31 +201,50 @@ foreach ($positions as $position) {
       background: #fafafa;
     }
 
-    .perm-switch {
-      transform: scale(1.15);
-      cursor: pointer;
-    }
-
     .badge-soft {
       padding: .35rem .6rem;
       border-radius: 999px;
       font-weight: 800;
       font-size: 12px;
       display: inline-block;
+      white-space: nowrap;
     }
 
-    .badge-soft-success { background:#ecfdf5; border:1px solid #bbf7d0; color:#166534; }
-    .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
-    .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
+    .badge-soft-success {
+      background:#ecfdf5;
+      border:1px solid #bbf7d0;
+      color:#166534;
+    }
 
-    .top-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+    .badge-soft-info {
+      background:#eff6ff;
+      border:1px solid #bfdbfe;
+      color:#1d4ed8;
+    }
+
+    .badge-soft-warning {
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#9a3412;
+    }
+
+    .badge-soft-secondary {
+      background:#f1f5f9;
+      border:1px solid #cbd5e1;
+      color:#475569;
     }
 
     .mini-note {
       color: #64748b;
+      font-size: 13px;
+    }
+
+    .view-only-note {
+      border-left: 4px solid #077f46;
+      background: #f8fafc;
+      padding: 12px 14px;
+      border-radius: 8px;
+      color: #475569;
       font-size: 13px;
     }
   </style>
@@ -346,12 +263,19 @@ foreach ($positions as $position) {
             <span class="user-icon">
               <img src="../admin/vendors/images/photo1.jpg" alt="">
             </span>
-            <span class="user-name">Superadmin</span>
+            <span class="user-name"><?= esc($adminDisplayName) ?></span>
           </a>
+
           <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-            <a class="dropdown-item" href="logs.html"><i class="dw dw-list3"></i> Activity Logs</a>
-            <a class="dropdown-item" href="../index.php"><i class="dw dw-logout"></i> Log Out</a>
+            <a class="dropdown-item" href="profile.html">
+              <i class="dw dw-user1"></i> Profile
+            </a>
+            <a class="dropdown-item" href="logs.php">
+              <i class="dw dw-list3"></i> Activity Logs
+            </a>
+            <a class="dropdown-item" href="../index.php">
+              <i class="dw dw-logout"></i> Log Out
+            </a>
           </div>
         </div>
       </div>
@@ -368,9 +292,11 @@ foreach ($positions as $position) {
       <div class="page-header mb-20">
         <div class="row">
           <div class="col-md-12 col-sm-12">
-            <div class="title"><h4>Officers Access Control</h4></div>
+            <div class="title">
+              <h4>Officer Access Control</h4>
+            </div>
             <div class="text-secondary">
-              Manage module permissions for each HOA officer position.
+              View the current module permissions assigned to HOA officer positions.
             </div>
           </div>
         </div>
@@ -383,13 +309,21 @@ foreach ($positions as $position) {
               <div class="col-md-4">
                 <img src="../admin/vendors/images/banner-img.png" alt="">
               </div>
+
               <div class="col-md-8">
                 <h4 class="font-20 weight-500 mb-10 text-capitalize">
-                  <div class="weight-600 font-30 text-blue">Access Control Panel</div>
+                  <div class="weight-600 font-30 text-blue">
+                    Access Control Overview
+                  </div>
                 </h4>
-                <p class="font-18 max-width-600">
-                  Turn access on or off for each position and control which modules officers can use inside the system.
+
+                <p class="font-18 max-width-600 mb-2">
+                  Superadmin can monitor officer access but cannot change permission settings here.
                 </p>
+
+                <div class="view-only-note">
+                  Permission changes are managed by the President, Vice President, and Secretary on the Admin side.
+                </div>
               </div>
             </div>
           </div>
@@ -412,102 +346,94 @@ foreach ($positions as $position) {
             </div>
 
             <div class="mb-2 d-flex justify-content-between">
-              <span class="text-secondary">Default Profiles</span>
-              <span class="badge-soft badge-soft-warning">Ready</span>
+              <span class="text-secondary">Access Mode</span>
+              <span class="badge-soft badge-soft-warning">View Only</span>
             </div>
 
             <div class="mt-3 mini-note">
-              Use the matrix below to update access, then save your changes.
+              Changes are made by authorized HOA officers, not by Superadmin.
             </div>
           </div>
         </div>
       </div>
 
-      <?php if ($success): ?>
-        <div class="alert alert-success"><?= esc($success) ?></div>
-      <?php endif; ?>
-
-      <?php if ($error): ?>
-        <div class="alert alert-danger"><?= esc($error) ?></div>
-      <?php endif; ?>
-
       <div class="row">
         <?php foreach ($positions as $position): ?>
           <div class="col-xl-2 col-lg-4 col-md-6 mb-30">
             <div class="summary-card">
-              <div class="summary-number"><?= (int)$summaryCounts[$position] ?></div>
-              <div class="summary-label"><?= esc($position) ?> allowed modules</div>
+              <div class="summary-number">
+                <?= (int)$summaryCounts[$position] ?>
+              </div>
+              <div class="summary-label">
+                <?= esc($position) ?> allowed modules
+              </div>
             </div>
           </div>
         <?php endforeach; ?>
       </div>
 
       <div class="card-box mb-30 p-3">
-        <form method="post" id="accessControlForm">
-          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
-            <div>
-              <h5 class="mb-1">Permission Matrix</h5>
-              <div class="mini-note">Enable or disable modules per officer position.</div>
-            </div>
-
-            <div class="top-actions">
-              <button type="button" class="btn btn-outline-warning" id="resetDefaultsBtn">
-                Reset to Defaults
-              </button>
-              <button type="submit" name="save_access_control" class="btn btn-success">
-                Save Access Control
-              </button>
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+          <div>
+            <h5 class="mb-1">Permission Matrix</h5>
+            <div class="mini-note">
+              Current access settings are shown below. This page is view-only.
             </div>
           </div>
 
-          <div class="matrix-wrap">
-            <table class="table table-bordered table-hover matrix-table">
-              <thead>
+          <span class="badge-soft badge-soft-warning mt-2 mt-md-0">
+            View Only
+          </span>
+        </div>
+
+        <div class="matrix-wrap">
+          <table class="table table-bordered table-hover matrix-table">
+            <thead>
+              <tr>
+                <th class="module-col text-left">Module</th>
+                <?php foreach ($positions as $position): ?>
+                  <th><?= esc($position) ?></th>
+                <?php endforeach; ?>
+              </tr>
+            </thead>
+
+            <tbody>
+              <?php if (!$modules): ?>
                 <tr>
-                  <th class="module-col text-left">Module</th>
-                  <?php foreach ($positions as $position): ?>
-                    <th><?= esc($position) ?></th>
-                  <?php endforeach; ?>
+                  <td colspan="<?= count($positions) + 1 ?>" class="text-center text-secondary">
+                    No access modules are configured.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
+              <?php else: ?>
                 <?php foreach ($modules as $module): ?>
                   <tr>
-                    <td class="module-col text-left"><?= esc($module['module_name']) ?></td>
+                    <td class="module-col text-left">
+                      <?= esc($module['module_name']) ?>
+                    </td>
+
                     <?php foreach ($positions as $position): ?>
                       <?php
                         $moduleKey = (string)$module['module_key'];
-                        $checked = !empty($matrix[$position][$moduleKey]);
-                        $field = 'perm_' . md5($position . '|' . $moduleKey);
+                        $allowed = !empty($matrix[$position][$moduleKey]);
                       ?>
                       <td>
-                        <div class="custom-control custom-switch d-flex justify-content-center">
-                          <input
-                            type="checkbox"
-                            class="custom-control-input perm-switch"
-                            name="<?= esc($field) ?>"
-                            id="<?= esc($field) ?>"
-                            <?= $checked ? 'checked' : '' ?>
-                          >
-                          <label class="custom-control-label" for="<?= esc($field) ?>"></label>
-                        </div>
+                        <?php if ($allowed): ?>
+                          <span class="badge-soft badge-soft-success">
+                            <i class="dw dw-check"></i> Allowed
+                          </span>
+                        <?php else: ?>
+                          <span class="badge-soft badge-soft-secondary">
+                            No Access
+                          </span>
+                        <?php endif; ?>
                       </td>
                     <?php endforeach; ?>
                   </tr>
                 <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="mt-4 d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-outline-warning" id="resetDefaultsBtnBottom">
-              Reset to Defaults
-            </button>
-            <button type="submit" name="save_access_control" class="btn btn-success">
-              Save Access Control
-            </button>
-          </div>
-        </form>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="footer-wrap pd-20 mb-20 card-box">
@@ -516,55 +442,9 @@ foreach ($positions as $position) {
     </div>
   </div>
 
-  <!-- Reset Confirmation Modal -->
-  <div class="modal fade" id="resetConfirmModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Reset Permissions</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          Are you sure you want to reset all officer permissions to default settings?
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger" id="confirmReset">Reset Permissions</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="../admin/vendors/scripts/core.js"></script>
   <script src="../admin/vendors/scripts/script.min.js"></script>
   <script src="../admin/vendors/scripts/process.js"></script>
   <script src="../admin/vendors/scripts/layout-settings.js"></script>
-
-  <script>
-    function openResetModal() {
-      $('#resetConfirmModal').modal('show');
-    }
-
-    $('#resetDefaultsBtn, #resetDefaultsBtnBottom').on('click', function () {
-      openResetModal();
-    });
-
-    $('#confirmReset').on('click', function () {
-      const form = document.getElementById('accessControlForm');
-
-      const existing = form.querySelector('input[name="reset_defaults"]');
-      if (existing) existing.remove();
-
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'reset_defaults';
-      input.value = '1';
-      form.appendChild(input);
-
-      form.submit();
-    });
-  </script>
 </body>
 </html>

@@ -403,6 +403,10 @@ foreach ($publishedRows as $row) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 <meta charset="UTF-8">
 <title><?= esc($pageTitle) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">

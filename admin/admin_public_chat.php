@@ -9,22 +9,47 @@ require_once 'admin_access.php';
 requireAccess('community');
 
 /* =========================
-   1) AUTH GUARD
+   AUTH / CURRENT ADMIN
    ========================= */
-if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
-    !in_array($_SESSION['admin_role'], ['admin', 'superadmin'], true)) {
-  echo "<script>alert('Access denied. Please login as admin.'); window.location='index.php';</script>";
+/*
+ * admin_access.php + requireAccess('community') remains the primary
+ * authentication and module-permission guard. Validate the current admin
+ * from the database instead of depending on a second admin_role session check.
+ */
+$adminId = (int)($_SESSION['admin_id'] ?? 0);
+
+if ($adminId <= 0) {
+  header('Location: ../index.php');
   exit;
 }
 
-/* Superadmin is not allowed here */
-if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
-  echo "<script>alert('Superadmin cannot access President Dashboard.'); window.location='index.php';</script>";
+$stmt = $conn->prepare("
+  SELECT id, email, full_name, phase, role, position
+  FROM admins
+  WHERE id = ?
+  LIMIT 1
+");
+$stmt->bind_param("i", $adminId);
+$stmt->execute();
+$me = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$me) {
+  header('Location: ../index.php');
   exit;
 }
 
+$adminRole = strtolower(trim((string)($me['role'] ?? '')));
 
+if ($adminRole === 'superadmin') {
+  http_response_code(403);
+  exit('Superadmin cannot access this module.');
+}
 
+if ($adminRole !== 'admin') {
+  header('Location: ../index.php');
+  exit;
+}
 
 function esc($v){
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -136,26 +161,9 @@ function uploadChatAttachment(array $file): array {
   ];
 }
 
-/* =========================
-   3) ADMIN INFO
-   ========================= */
-$adminId = (int)($_SESSION['admin_id'] ?? 0);
-
-$stmt = $conn->prepare("SELECT id, email, full_name, phase, role, position FROM admins WHERE id=? LIMIT 1");
-$stmt->bind_param("i", $adminId);
-$stmt->execute();
-$me = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-if (!$me) {
-  session_destroy();
-  echo "<script>alert('Session error. Please login again.'); window.location='index.php';</script>";
-  exit;
-}
-
 $adminEmail = (string)($me['email'] ?? '');
-$adminName  = trim((string)($me['full_name'] ?? ''));
-$myPhase    = (string)($me['phase'] ?? 'Phase 1');
+$adminName = trim((string)($me['full_name'] ?? ''));
+$myPhase = (string)($me['phase'] ?? 'Phase 1');
 $myPosition = trim((string)($me['position'] ?? 'Officer'));
 
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
@@ -677,9 +685,10 @@ $stmt->close();
   <meta charset="utf-8">
   <title>Community Chat Monitor</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -687,6 +696,7 @@ $stmt->close();
   <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
   <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/admin_theme.css">
 
   <style>
     .chat-stats .card-box { min-height: 130px; }
@@ -1319,7 +1329,401 @@ $stmt->close();
         max-width:140px;
       }
     }
-  </style>
+
+    .admin-theme-switch {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+    }
+
+    .admin-theme-toggle {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: inherit;
+      font-size: 22px;
+      cursor: pointer;
+      transition: background .18s ease, color .18s ease;
+    }
+
+    .admin-theme-toggle:hover,
+    .admin-theme-toggle:focus {
+      background: rgba(15, 23, 42, .06);
+      outline: none;
+    }
+
+    .admin-page-logout-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 98px;
+      min-height: 40px;
+      margin: 0 18px 0 6px;
+      padding: 8px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 11px;
+      background: #fff;
+      color: #b91c1c !important;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 800;
+      text-decoration: none !important;
+      white-space: nowrap;
+      transition:
+        background .18s ease,
+        color .18s ease,
+        border-color .18s ease,
+        transform .18s ease,
+        box-shadow .18s ease;
+    }
+
+    .admin-page-logout-btn i {
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .admin-page-logout-btn:hover,
+    .admin-page-logout-btn:focus {
+      border-color: #ef4444;
+      background: #fef2f2;
+      color: #991b1b !important;
+      box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    /* Community Chat dark mode */
+    html.dark body,
+    html.dark .main-container {
+      background: var(--admin-bg, #0f172a) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+
+    html.dark .page-header,
+    html.dark .card-box,
+    html.dark .footer-wrap {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+
+    html.dark .page-header h4,
+    html.dark .card-box h4,
+    html.dark .card-box h5,
+    html.dark .card-box h6,
+    html.dark .stat-value,
+    html.dark .footer-wrap {
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+
+    html.dark .text-secondary,
+    html.dark .text-muted,
+    html.dark .stat-label,
+    html.dark .refresh-note,
+    html.dark .thread-sub,
+    html.dark .conv-meta,
+    html.dark .mini-muted {
+      color: var(--admin-muted, #9ca3af) !important;
+    }
+
+    html.dark .mode-btn {
+      background: var(--admin-surface, #1f2937) !important;
+      color: #cbd5e1 !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+
+    html.dark .mode-btn:hover,
+    html.dark .mode-btn:focus {
+      background: var(--admin-hover, #334155) !important;
+      color: #fff !important;
+    }
+
+    html.dark .mode-btn.active {
+      background: #15803d !important;
+      border-color: #15803d !important;
+      color: #fff !important;
+    }
+
+    html.dark .chat-board,
+    html.dark .thread-list-card,
+    html.dark .conversation-card {
+      background: var(--admin-surface, #1f2937) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+
+    html.dark .chat-board-head,
+    html.dark .thread-list-head,
+    html.dark .conversation-head,
+    html.dark .conversation-foot {
+      background: var(--admin-surface, #1f2937) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+
+    html.dark .chat-board-body,
+    html.dark .thread-list-body,
+    html.dark .conversation-body {
+      background: #111827 !important;
+    }
+
+    html.dark .chat-empty {
+      color: var(--admin-muted, #9ca3af) !important;
+    }
+
+    html.dark .msg-item,
+    html.dark .thread-item {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #374151) !important;
+      box-shadow: none !important;
+    }
+
+    html.dark .thread-item:hover {
+      background: var(--admin-hover, #334155) !important;
+      border-color: #60a5fa !important;
+    }
+
+    html.dark .thread-item.active {
+      background: rgba(37, 99, 235, .18) !important;
+      border-color: #3b82f6 !important;
+    }
+
+    html.dark .msg-name,
+    html.dark .thread-name,
+    html.dark .conv-name,
+    html.dark .msg-text,
+    html.dark .thread-preview {
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+
+    html.dark .pill-phase {
+      background: rgba(22, 163, 74, .14) !important;
+      border-color: rgba(34, 197, 94, .35) !important;
+      color: #bbf7d0 !important;
+    }
+
+    html.dark .pill-private {
+      background: rgba(37, 99, 235, .14) !important;
+      border-color: rgba(59, 130, 246, .35) !important;
+      color: #bfdbfe !important;
+    }
+
+    html.dark .mute-badge {
+      background: rgba(220, 38, 38, .14) !important;
+      border-color: rgba(239, 68, 68, .35) !important;
+      color: #fecaca !important;
+    }
+
+    html.dark .conv-bubble {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #475569) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+
+    html.dark .conv-row.mine .conv-bubble {
+      background: #15803d !important;
+      border-color: #15803d !important;
+      color: #fff !important;
+    }
+
+    html.dark .attachment-image {
+      background: #111827 !important;
+      border-color: rgba(255,255,255,.10) !important;
+    }
+
+    html.dark .attachment-link {
+      background: var(--admin-input, #111827) !important;
+      border-color: var(--admin-border, #475569) !important;
+      color: #dbeafe !important;
+    }
+
+    html.dark .conv-row.mine .attachment-link {
+      background: rgba(255,255,255,.12) !important;
+      color: #fff !important;
+      border-color: rgba(255,255,255,.24) !important;
+    }
+
+    html.dark .reply-input,
+    html.dark .form-control {
+      background: var(--admin-input, #111827) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border-color: var(--admin-border, #4b5563) !important;
+    }
+
+    html.dark .reply-input:focus,
+    html.dark .form-control:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 .2rem rgba(59, 130, 246, .16) !important;
+      outline: none;
+    }
+
+    html.dark .reply-tool-btn {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #475569) !important;
+      color: #e5e7eb !important;
+    }
+
+    html.dark .reply-tool-btn:hover,
+    html.dark .reply-tool-btn:focus {
+      background: var(--admin-hover, #334155) !important;
+      color: #fff !important;
+    }
+
+    html.dark .reply-selected-file {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #475569) !important;
+      color: #e5e7eb !important;
+    }
+
+    html.dark .modalx .box {
+      background: var(--admin-surface, #1f2937) !important;
+      color: var(--admin-text, #e5e7eb) !important;
+      border: 1px solid var(--admin-border, #374151) !important;
+    }
+
+    html.dark .modalx .boxhead,
+    html.dark .modalx .boxfoot {
+      background: var(--admin-surface-2, #253244) !important;
+      border-color: var(--admin-border, #374151) !important;
+    }
+
+    html.dark .modalx .closebtn,
+    html.dark .notice-text,
+    html.dark .modalx .form-label {
+      color: var(--admin-text, #e5e7eb) !important;
+    }
+
+    html.dark .image-preview-close {
+      background: #1f2937 !important;
+      color: #fff !important;
+    }
+
+    html.dark .btn-outline-primary {
+      color: #93c5fd !important;
+      border-color: #3b82f6 !important;
+    }
+
+    html.dark .btn-outline-primary:hover,
+    html.dark .btn-outline-primary:focus {
+      background: #2563eb !important;
+      color: #fff !important;
+    }
+
+    html.dark .btn-outline-danger {
+      color: #fca5a5 !important;
+      border-color: #ef4444 !important;
+    }
+
+    html.dark .btn-outline-danger:hover,
+    html.dark .btn-outline-danger:focus {
+      background: #b91c1c !important;
+      color: #fff !important;
+    }
+
+    html.dark .btn-outline-success {
+      color: #86efac !important;
+      border-color: #22c55e !important;
+    }
+
+    html.dark .btn-outline-success:hover,
+    html.dark .btn-outline-success:focus {
+      background: #15803d !important;
+      color: #fff !important;
+    }
+
+    html.dark .btn-outline-warning {
+      color: #fde68a !important;
+      border-color: #f59e0b !important;
+    }
+
+    html.dark .btn-outline-warning:hover,
+    html.dark .btn-outline-warning:focus {
+      background: #b45309 !important;
+      color: #fff !important;
+    }
+
+    html.dark .admin-theme-toggle {
+      color: #f8fafc !important;
+    }
+
+    html.dark .admin-theme-toggle:hover,
+    html.dark .admin-theme-toggle:focus {
+      background: rgba(255,255,255,.08);
+    }
+
+    html.dark .admin-page-logout-btn {
+      border-color: rgba(248, 113, 113, .30);
+      background: rgba(127, 29, 29, .16);
+      color: #fca5a5 !important;
+      box-shadow: none;
+    }
+
+    html.dark .admin-page-logout-btn:hover,
+    html.dark .admin-page-logout-btn:focus {
+      border-color: rgba(248, 113, 113, .55);
+      background: rgba(127, 29, 29, .28);
+      color: #fecaca !important;
+    }
+
+    /* Hidden access toast must never block header controls. */
+    .access-toast {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .access-toast.show {
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    @media (max-width: 575.98px) {
+      .admin-page-logout-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        margin: 0 10px 0 4px;
+        padding: 0;
+        border-radius: 10px;
+      }
+
+      .admin-page-logout-btn span {
+        display: none;
+      }
+
+      .admin-page-logout-btn i {
+        font-size: 18px;
+      }
+
+      .admin-theme-switch {
+        padding: 0 2px;
+      }
+    }
+
+</style>
+
+  <script>
+  (function () {
+    try {
+      const savedTheme = localStorage.getItem('hoa-theme');
+      const dark =
+        savedTheme === 'dark' ||
+        (
+          !savedTheme &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+
+      document.documentElement.classList.toggle('dark', dark);
+    } catch (e) {}
+  })();
+  </script>
+
 </head>
 <body>
 
@@ -1330,16 +1734,25 @@ $stmt->close();
     </div>
 
     <div class="header-right">
-      <div class="user-info-dropdown">
-        <div class="dropdown">
-          <a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-            <span class="user-icon"><img src="vendors/images/photo1.jpg" alt=""></span>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-            <a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-          </div>
-        </div>
+      <div class="admin-theme-switch">
+        <button
+          type="button"
+          id="themeToggle"
+          class="admin-theme-toggle"
+          aria-label="Switch theme"
+          title="Switch theme"
+        >
+          <span id="themeIcon">☾</span>
+        </button>
       </div>
+
+      <a href="logout.php"
+         class="admin-page-logout-btn"
+         title="Log out"
+         aria-label="Log out">
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+      </a>
     </div>
   </div>
 
@@ -1599,6 +2012,7 @@ $stmt->close();
   <script src="vendors/scripts/script.min.js"></script>
   <script src="vendors/scripts/process.js"></script>
   <script src="vendors/scripts/layout-settings.js"></script>
+  <script src="vendors/scripts/admin_theme.js"></script>
 
   <script>
     const chatBoardBody = document.getElementById('chatBoardBody');
@@ -2332,6 +2746,43 @@ $stmt->close();
     loadMessages(true);
     loadThreads();
 
+    /*
+     * REALTIME
+     * The shared sidebar client dispatches hoa:realtime whenever
+     * realtime.php receives a new database event.
+     */
+    document.addEventListener('hoa:realtime', function(event) {
+      const activity = event.detail || {};
+
+      if (activity.module_key !== 'community_chat') {
+        return;
+      }
+
+      if (activity.event_type === 'public_chat_message') {
+        loadMessages(false);
+        return;
+      }
+
+      if (activity.event_type === 'private_chat_message') {
+        loadThreads();
+
+        const homeownerId = Number(
+          activity.payload?.homeowner_id || 0
+        );
+
+        if (
+          selectedHomeownerId &&
+          homeownerId === Number(selectedHomeownerId)
+        ) {
+          loadConversation(false);
+        }
+      }
+    });
+
+    /*
+     * Slow fallback only. This is not the primary realtime mechanism.
+     * It protects the page if EventSource is temporarily unavailable.
+     */
     setInterval(() => {
       if (currentMode === 'public') {
         loadMessages(false);
@@ -2339,7 +2790,7 @@ $stmt->close();
         loadThreads();
         loadConversation(false);
       }
-    }, 4000);
+    }, 30000);
   </script>
 
   <div id="accessToast" class="access-toast">

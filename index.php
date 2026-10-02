@@ -89,12 +89,25 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
         $_SESSION['tenant_phase'],
         $_SESSION['user_id'],
         $_SESSION['role'],
-        $_SESSION['phase']
+        $_SESSION['phase'],
+        $_SESSION['position']
     );
 
-    $account = null;
+    /*
+    |--------------------------------------------------------------------------
+    | Find every account that uses this email
+    |--------------------------------------------------------------------------
+    | One person may be both:
+    | - a homeowner in `homeowners`
+    | - an HOA officer/admin in `admins`
+    |
+    | The password decides which account is being used.
+    | If two records happen to share the same password, admin keeps priority.
+    |--------------------------------------------------------------------------
+    */
+    $candidates = [];
 
-    // 1) Admins first - same priority as the original login flow.
+    // 1) Officer / admin account created and managed from the Superadmin side.
     $stmt = $conn->prepare("
         SELECT
             id,
@@ -124,7 +137,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     $stmt->close();
 
     if ($admin) {
-        $account = [
+        $candidates[] = [
             'type' => 'admin',
             'id' => (int)$admin['id'],
             'email' => (string)$admin['email'],
@@ -137,106 +150,103 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
         ];
     }
 
-    // 2) Homeowners
-    if (!$account) {
-        $stmt = $conn->prepare("
-            SELECT
-                id,
-                email,
-                first_name,
-                last_name,
-                password,
-                status,
-                phase,
-                IFNULL(
-                    must_change_password,
-                    1
-                ) AS must_change_password
-            FROM homeowners
-            WHERE email = ?
-            LIMIT 1
-        ");
+    // 2) Homeowner account. This is checked even when the same email
+    //    already exists in the admins table.
+    $stmt = $conn->prepare("
+        SELECT
+            id,
+            email,
+            first_name,
+            last_name,
+            password,
+            status,
+            phase,
+            IFNULL(
+                must_change_password,
+                1
+            ) AS must_change_password
+        FROM homeowners
+        WHERE email = ?
+        LIMIT 1
+    ");
 
-        $stmt->bind_param(
-            's',
-            $email
-        );
+    $stmt->bind_param(
+        's',
+        $email
+    );
 
-        $stmt->execute();
+    $stmt->execute();
 
-        $home =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
+    $home =
+        $stmt
+            ->get_result()
+            ->fetch_assoc();
 
-        $stmt->close();
+    $stmt->close();
 
-        if ($home) {
-            $account = [
-                'type' => 'homeowner',
-                'id' => (int)$home['id'],
-                'email' => (string)$home['email'],
-                'name' =>
-                    trim(
-                        (string)($home['first_name'] ?? '') .
-                        ' ' .
-                        (string)($home['last_name'] ?? '')
-                    ),
-                'phase' => (string)($home['phase'] ?? ''),
-                'record' => $home
-            ];
-        }
+    if ($home) {
+        $candidates[] = [
+            'type' => 'homeowner',
+            'id' => (int)$home['id'],
+            'email' => (string)$home['email'],
+            'name' =>
+                trim(
+                    (string)($home['first_name'] ?? '') .
+                    ' ' .
+                    (string)($home['last_name'] ?? '')
+                ),
+            'phase' => (string)($home['phase'] ?? ''),
+            'record' => $home
+        ];
     }
 
-    // 3) Tenants
-    if (!$account) {
-        $stmt = $conn->prepare("
-            SELECT
-                id,
-                homeowner_id,
-                email,
-                first_name,
-                last_name,
-                password,
-                status,
-                phase
-            FROM tenants
-            WHERE email = ?
-            LIMIT 1
-        ");
+    // 3) Tenant account.
+    $stmt = $conn->prepare("
+        SELECT
+            id,
+            homeowner_id,
+            email,
+            first_name,
+            last_name,
+            password,
+            status,
+            phase
+        FROM tenants
+        WHERE email = ?
+        LIMIT 1
+    ");
 
-        $stmt->bind_param(
-            's',
-            $email
-        );
+    $stmt->bind_param(
+        's',
+        $email
+    );
 
-        $stmt->execute();
+    $stmt->execute();
 
-        $tenant =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
+    $tenant =
+        $stmt
+            ->get_result()
+            ->fetch_assoc();
 
-        $stmt->close();
+    $stmt->close();
 
-        if ($tenant) {
-            $account = [
-                'type' => 'tenant',
-                'id' => (int)$tenant['id'],
-                'email' => (string)$tenant['email'],
-                'name' =>
-                    trim(
-                        (string)($tenant['first_name'] ?? '') .
-                        ' ' .
-                        (string)($tenant['last_name'] ?? '')
-                    ),
-                'phase' => (string)($tenant['phase'] ?? ''),
-                'record' => $tenant
-            ];
-        }
+    if ($tenant) {
+        $candidates[] = [
+            'type' => 'tenant',
+            'id' => (int)$tenant['id'],
+            'email' => (string)$tenant['email'],
+            'name' =>
+                trim(
+                    (string)($tenant['first_name'] ?? '') .
+                    ' ' .
+                    (string)($tenant['last_name'] ?? '')
+                ),
+            'phase' => (string)($tenant['phase'] ?? ''),
+            'record' => $tenant
+        ];
     }
 
-    if (!$account) {
+    if (!$candidates) {
         login_json([
             'success' => false,
             'code' => 'not_found',
@@ -247,14 +257,66 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
     /*
     |--------------------------------------------------------------------------
-    | Check existing cooldown / hard lock BEFORE password verification.
+    | Match the password to the correct account
+    |--------------------------------------------------------------------------
+    | Candidate order is intentional:
+    | admin -> homeowner -> tenant.
+    |
+    | Different passwords:
+    | officer password   -> admin dashboard
+    | homeowner password -> homeowner dashboard
+    |
+    | If the exact same password is used for more than one account,
+    | the admin/officer account wins to keep the existing priority rule.
     |--------------------------------------------------------------------------
     */
+    $account = null;
+
+    foreach ($candidates as $candidate) {
+        $candidatePasswordOk = false;
+
+        if ($candidate['type'] === 'admin') {
+            $candidatePasswordOk =
+                login_admin_password_ok(
+                    $password,
+                    (string)$candidate['record']['password']
+                );
+        } else {
+            $candidatePasswordOk =
+                password_verify(
+                    $password,
+                    (string)$candidate['record']['password']
+                );
+        }
+
+        if ($candidatePasswordOk) {
+            $account = $candidate;
+            break;
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Login security target
+    |--------------------------------------------------------------------------
+    | When the password identifies an account, cooldown/lock checks apply
+    | only to that account.
+    |
+    | If the password matches none of several accounts sharing one email,
+    | there is no safe way to know which account the user intended. To keep
+    | the existing lockout behavior, the first candidate (admin priority)
+    | receives the failed-attempt count.
+    |--------------------------------------------------------------------------
+    */
+    $securityAccount =
+        $account ??
+        $candidates[0];
+
     try {
         $block =
             security_current_block(
                 $conn,
-                $account
+                $securityAccount
             );
     } catch (\mysqli_sql_exception $e) {
         error_log(
@@ -277,6 +339,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
                 (string)($block['code'] ?? 'blocked'),
             'seconds' =>
                 (int)($block['seconds'] ?? 0),
+            'mail_sent' =>
+                (bool)($block['mail_sent'] ?? false),
+            'appeal_url' =>
+                (string)($block['appeal_url'] ?? ''),
             'message' =>
                 (string)($block['message'] ?? 'Login temporarily unavailable.')
         ], 423);
@@ -284,60 +350,15 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
     /*
     |--------------------------------------------------------------------------
-    | Account-status checks
+    | No account password matched
     |--------------------------------------------------------------------------
     */
-    if (
-        $account['type'] === 'homeowner' &&
-        (string)$account['record']['status'] !== 'approved'
-    ) {
-        login_json([
-            'success' => false,
-            'code' => 'not_approved',
-            'message' =>
-                'Your account is not approved yet.'
-        ], 403);
-    }
-
-    if (
-        $account['type'] === 'tenant' &&
-        (string)$account['record']['status'] !== 'active'
-    ) {
-        login_json([
-            'success' => false,
-            'code' => 'inactive',
-            'message' =>
-                'Your tenant account is inactive.'
-        ], 403);
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Verify password
-    |--------------------------------------------------------------------------
-    */
-    $passwordOk = false;
-
-    if ($account['type'] === 'admin') {
-        $passwordOk =
-            login_admin_password_ok(
-                $password,
-                (string)$account['record']['password']
-            );
-    } else {
-        $passwordOk =
-            password_verify(
-                $password,
-                (string)$account['record']['password']
-            );
-    }
-
-    if (!$passwordOk) {
+    if (!$account) {
         try {
             $failure =
                 security_register_failure(
                     $conn,
-                    $account
+                    $securityAccount
                 );
         } catch (\mysqli_sql_exception $e) {
             error_log(
@@ -368,6 +389,35 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             'message' =>
                 (string)($failure['message'] ?? 'Incorrect password.')
         ], 401);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Account-status checks
+    |--------------------------------------------------------------------------
+    */
+    if (
+        $account['type'] === 'homeowner' &&
+        (string)$account['record']['status'] !== 'approved'
+    ) {
+        login_json([
+            'success' => false,
+            'code' => 'not_approved',
+            'message' =>
+                'Your account is not approved yet.'
+        ], 403);
+    }
+
+    if (
+        $account['type'] === 'tenant' &&
+        (string)$account['record']['status'] !== 'active'
+    ) {
+        login_json([
+            'success' => false,
+            'code' => 'inactive',
+            'message' =>
+                'Your tenant account is inactive.'
+        ], 403);
     }
 
     /*
@@ -1043,6 +1093,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     .landing-download-btn:hover{
       color:#173d2b;
       transform:translateY(-2px);
+    }
+
+    .landing-download-btn-disabled{
+      border:0;
+      opacity:.62;
+      cursor:not-allowed;
+      text-align:left;
+      font-family:inherit;
+    }
+
+    .landing-download-btn-disabled:hover{
+      color:#173d2b;
+      transform:none;
     }
 
     .landing-download-btn i{
@@ -2846,9 +2909,27 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
               <label for="email">Email address</label>
             </div>
 
-            <div class="form-floating mb-3 text-start">
-              <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+            <div class="form-floating mb-3 text-start position-relative">
+              <input
+                type="password"
+                class="form-control pe-5"
+                id="password"
+                name="password"
+                placeholder="Password"
+                autocomplete="current-password"
+                required
+              >
               <label for="password">Password</label>
+              <button
+                type="button"
+                id="toggleLoginPassword"
+                class="btn btn-link position-absolute top-50 end-0 translate-middle-y me-2 p-2 text-secondary"
+                style="z-index:5;text-decoration:none;"
+                aria-label="Show password"
+                title="Show password"
+              >
+                <i id="toggleLoginPasswordIcon" class="bi bi-eye"></i>
+              </button>
             </div>
 
             <div class="loading text-primary mb-2" style="display:none;">Checking credentials...</div>
@@ -2860,11 +2941,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
             </button>
           </form>
 
-          <div class="d-flex justify-content-start mt-3">
-            <a href="forgot_password.php" class="text-success text-decoration-none small fw-semibold">
-              Forgot password?
-            </a>
-          </div>
 
         </div>
       </div>
@@ -3225,13 +3301,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
                     </div>
                   </a>
 
-                  <a href="ios_source.tar" download class="landing-download-btn">
+                  <button
+                    type="button"
+                    class="landing-download-btn landing-download-btn-disabled"
+                    disabled
+                    aria-disabled="true"
+                    title="iOS is temporarily unavailable"
+                  >
                     <i class="bi bi-apple"></i>
                     <div>
-                      <small>Download for</small>
-                      <strong>iOS</strong>
+                      <small>iOS</small>
+                      <strong>Temporarily Unavailable</strong>
                     </div>
-                  </a>
+                  </button>
 
                 </div>
               </div>
@@ -3379,7 +3461,73 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
   <script src="assets/js/main.js"></script>
 
+  <script>
+  document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+      const params =
+        new URLSearchParams(
+          window.location.search
+        );
 
+      if (params.get('login') !== '1') {
+        return;
+      }
+
+      const loginModalElement =
+        document.getElementById('loginModal');
+
+      if (
+        !loginModalElement ||
+        typeof bootstrap === 'undefined'
+      ) {
+        return;
+      }
+
+      const loginModal =
+        bootstrap.Modal.getOrCreateInstance(
+          loginModalElement
+        );
+
+      loginModal.show();
+
+      loginModalElement.addEventListener(
+        'shown.bs.modal',
+        function () {
+          const emailInput =
+            document.getElementById('email');
+
+          if (emailInput) {
+            emailInput.focus();
+          }
+        },
+        {
+          once: true
+        }
+      );
+
+      params.delete('login');
+
+      const cleanQuery =
+        params.toString();
+
+      const cleanUrl =
+        window.location.pathname +
+        (
+          cleanQuery !== ''
+            ? '?' + cleanQuery
+            : ''
+        ) +
+        window.location.hash;
+
+      window.history.replaceState(
+        {},
+        document.title,
+        cleanUrl
+      );
+    }
+  );
+  </script>
 
   <script>
   document.addEventListener('DOMContentLoaded', function () {
@@ -3575,6 +3723,53 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
   <script>
   (function () {
+    const passwordInput =
+      document.getElementById('password');
+    const toggleButton =
+      document.getElementById('toggleLoginPassword');
+    const toggleIcon =
+      document.getElementById('toggleLoginPasswordIcon');
+
+    if (!passwordInput || !toggleButton || !toggleIcon) {
+      return;
+    }
+
+    toggleButton.addEventListener(
+      'click',
+      function () {
+        const isHidden =
+          passwordInput.type === 'password';
+
+        passwordInput.type =
+          isHidden ? 'text' : 'password';
+
+        toggleIcon.className =
+          isHidden
+            ? 'bi bi-eye-slash'
+            : 'bi bi-eye';
+
+        toggleButton.setAttribute(
+          'aria-label',
+          isHidden
+            ? 'Hide password'
+            : 'Show password'
+        );
+
+        toggleButton.setAttribute(
+          'title',
+          isHidden
+            ? 'Hide password'
+            : 'Show password'
+        );
+
+        passwordInput.focus();
+      }
+    );
+  })();
+  </script>
+
+  <script>
+  (function () {
     const form = document.getElementById('loginForm');
 
     if (!form) return;
@@ -3621,7 +3816,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
       let remaining =
         Math.max(
           1,
-          Number(seconds || 10)
+          Number(seconds || 30)
         );
 
       submitButton.disabled = true;
@@ -3648,7 +3843,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
               submitButton.textContent = 'Log in';
 
               showError(
-                'You may try again. Three more incorrect passwords will lock the account until an administrator unlocks it.'
+                'You may try again. The next incorrect password will lock the account until an administrator unlocks it.'
               );
 
               return;
@@ -3663,26 +3858,16 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
     function showAppeal(data) {
       if (!securityActions) return;
 
-      const url =
-        String(data.appeal_url || '');
-
-      const emailMessage =
-        data.mail_sent
-          ? '<div class="small text-muted mb-2">A security notification and appeal link were sent to your account email.</div>'
-          : '<div class="small text-warning mb-2">The security email could not be delivered. You can still submit the appeal using the button below.</div>';
-
       securityActions.innerHTML =
-        emailMessage +
-        (
-          url
-            ? `<a class="btn btn-outline-danger btn-sm w-100 fw-semibold" href="${url}">
-                 <i class="bi bi-shield-exclamation me-1"></i>
-                 Submit Unlock Appeal
-               </a>`
-            : `<div class="small text-muted">
-                 Use the appeal link sent to your email. An administrator must unlock the account.
-               </div>`
-        );
+        data.mail_sent
+          ? `<div class="small text-muted mb-2">
+               A security notification was sent to your account email.
+               Use the unlock appeal link in that email to request access.
+             </div>`
+          : `<div class="small text-warning mb-2">
+               Your account is locked, but the security email could not be delivered.
+               Please contact the HOA office for assistance.
+             </div>`;
 
       securityActions.style.display =
         'block';
@@ -3751,7 +3936,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'login') {
 
           if (data.code === 'cooldown') {
             startCooldown(
-              data.seconds || 10
+              data.seconds || 30
             );
             return;
           }

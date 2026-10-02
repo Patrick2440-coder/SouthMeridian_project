@@ -335,33 +335,34 @@ $balanceBasisLabel =
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- Basic Page Info -->
-	<meta charset="utf-8">
-	<title>HOA-ADMIN</title>
+  <!-- Basic Page Info -->
+  <meta charset="utf-8">
+  <title>HOA-ADMIN</title>
 
-	<!-- Site favicon -->
-	<link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+  <!-- Site favicon -->
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
 
-	<!-- Mobile Specific Metas -->
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <!-- Mobile Specific Metas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
-	<!-- Google Font -->
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-	<!-- CSS -->
-	<link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
-	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
-	<link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
-	<link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
-	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS -->
+  <link rel="stylesheet" type="text/css" href="vendors/styles/core.css">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
+  <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/dataTables.bootstrap4.min.css">
+  <link rel="stylesheet" type="text/css" href="src/plugins/datatables/css/responsive.bootstrap4.min.css">
+  <link rel="stylesheet" type="text/css" href="vendors/styles/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-	<!-- Global site tag (gtag.js) - Google Analytics -->
-	 <!-- Include CSS for DataTables -->
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+   <!-- Include CSS for DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
-	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=UA-119386393-1"></script>
 <style>
     /* ACCESS TOAST */
 .access-toast {
@@ -475,6 +476,72 @@ $balanceBasisLabel =
   html.dark .row > [class*="col-"] > .card-box.h-100 {
     box-shadow: none !important;
   }
+
+  /* Direct header logout */
+  .admin-page-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 98px;
+    min-height: 40px;
+    margin: 0 18px 0 10px;
+    padding: 8px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 11px;
+    background: #fff;
+    color: #b91c1c !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+    text-decoration: none !important;
+    white-space: nowrap;
+    transition: background .18s ease, color .18s ease, border-color .18s ease,
+                transform .18s ease, box-shadow .18s ease;
+  }
+  .admin-page-logout-btn i {
+    font-size: 17px;
+    line-height: 1;
+  }
+  .admin-page-logout-btn:hover,
+  .admin-page-logout-btn:focus {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #991b1b !important;
+    box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+    transform: translateY(-1px);
+    outline: none;
+  }
+  html.dark .admin-page-logout-btn {
+    border-color: rgba(248, 113, 113, .30);
+    background: rgba(127, 29, 29, .16);
+    color: #fca5a5 !important;
+    box-shadow: none;
+  }
+  html.dark .admin-page-logout-btn:hover,
+  html.dark .admin-page-logout-btn:focus {
+    border-color: rgba(248, 113, 113, .55);
+    background: rgba(127, 29, 29, .28);
+    color: #fecaca !important;
+  }
+  @media (max-width: 575.98px) {
+    .admin-page-logout-btn {
+      width: 40px;
+      min-width: 40px;
+      height: 40px;
+      min-height: 40px;
+      margin: 0 10px 0 6px;
+      padding: 0;
+      border-radius: 10px;
+    }
+    .admin-page-logout-btn span {
+      display: none;
+    }
+    .admin-page-logout-btn i {
+      font-size: 18px;
+    }
+  }
 </style>
 
 <!-- Apply saved theme before body paint -->
@@ -497,176 +564,115 @@ $balanceBasisLabel =
 </script>
 </head>
 <body>
-	
-	<div class="header">
-		<div class="header-left">
-			<div class="menu-icon dw dw-menu"></div>
-			<div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
-			
-		</div>
-		<div class="header-right">
 
-			<!-- SHARED ADMIN DARK MODE TOGGLE -->
-			<div class="admin-theme-switch">
-				<button
-					type="button"
-					id="themeToggle"
-					class="admin-theme-toggle"
-					aria-label="Switch theme"
-					title="Switch theme"
-				>
-					<span id="themeIcon">☾</span>
-				</button>
-			</div>
-	
-			<div class="user-notification">
-				<div class="dropdown">
-					<a class="dropdown-toggle no-arrow" href="#" role="button" data-toggle="dropdown">
-						<i class="icon-copy dw dw-notification"></i>
-						<span class="badge notification-active"></span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right">
-						<div class="notification-list mx-h-350 customscroll">
-							<ul>
-								<li>
-									<a href="#">
-										<img src="vendors/images/img.jpg" alt="">
-										<h3>John Doe</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-								<li>
-									<a href="#">
-										<img src="vendors/images/photo1.jpg" alt="">
-										<h3>Lea R. Frith</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-								<li>
-									<a href="#">
-										<img src="vendors/images/photo2.jpg" alt="">
-										<h3>Erik L. Richards</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-								<li>
-									<a href="#">
-										<img src="vendors/images/photo3.jpg" alt="">
-										<h3>John Doe</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-								<li>
-									<a href="#">
-										<img src="vendors/images/photo4.jpg" alt="">
-										<h3>Renee I. Hansen</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-								<li>
-									<a href="#">
-										<img src="vendors/images/img.jpg" alt="">
-										<h3>Vicki M. Coleman</h3>
-										<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed...</p>
-									</a>
-								</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="user-info-dropdown">
-				<div class="dropdown">
-					<a class="dropdown-toggle" href="#" role="button" data-toggle="dropdown">
-						<span class="user-icon">
-							<img src="vendors/images/photo1.jpg" alt="">
-						</span>
-					</a>
-					<div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-user1"></i> Profile</a>
-						<a class="dropdown-item" href="profile.html"><i class="dw dw-settings2"></i> Setting</a>
-						<a class="dropdown-item" href="logout.php"><i class="dw dw-logout"></i> Log Out</a>
-					</div>
-				</div>
-			</div>
-		
-		</div>
-	</div>
+  <div class="header">
+    <div class="header-left">
+      <div class="menu-icon dw dw-menu"></div>
+      <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 
-	<div class="right-sidebar">
-		<div class="sidebar-title">
-			<h3 class="weight-600 font-16 text-blue">
-				Layout Settings
-				<span class="btn-block font-weight-400 font-12">User Interface Settings</span>
-			</h3>
-			<div class="close-sidebar" data-toggle="right-sidebar-close">
-				<i class="icon-copy ion-close-round"></i>
-			</div>
-		</div>
-		<div class="right-sidebar-body customscroll">
-			<div class="right-sidebar-body-content">
-				<h4 class="weight-600 font-18 pb-10">Header Background</h4>
-				<div class="sidebar-btn-group pb-30 mb-10">
-					<a href="javascript:void(0);" class="btn btn-outline-primary header-white active">White</a>
-					<a href="javascript:void(0);" class="btn btn-outline-primary header-dark">Dark</a>
-				</div>
+    </div>
+    <div class="header-right">
 
-				<h4 class="weight-600 font-18 pb-10">Sidebar Background</h4>
-				<div class="sidebar-btn-group pb-30 mb-10">
-					<a href="javascript:void(0);" class="btn btn-outline-primary sidebar-light ">White</a>
-					<a href="javascript:void(0);" class="btn btn-outline-primary sidebar-dark active">Dark</a>
-				</div>
+      <!-- SHARED ADMIN DARK MODE TOGGLE -->
+      <div class="admin-theme-switch">
+        <button
+          type="button"
+          id="themeToggle"
+          class="admin-theme-toggle"
+          aria-label="Switch theme"
+          title="Switch theme"
+        >
+          <span id="themeIcon">☾</span>
+        </button>
+      </div>
 
-				<h4 class="weight-600 font-18 pb-10">Menu Dropdown Icon</h4>
-				<div class="sidebar-radio-group pb-10 mb-10">
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebaricon-1" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-1" checked="">
-						<label class="custom-control-label" for="sidebaricon-1"><i class="fa fa-angle-down"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebaricon-2" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-2">
-						<label class="custom-control-label" for="sidebaricon-2"><i class="ion-plus-round"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebaricon-3" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-3">
-						<label class="custom-control-label" for="sidebaricon-3"><i class="fa fa-angle-double-right"></i></label>
-					</div>
-				</div>
 
-				<h4 class="weight-600 font-18 pb-10">Menu List Icon</h4>
-				<div class="sidebar-radio-group pb-30 mb-10">
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-1" name="menu-list-icon" class="custom-control-input" value="icon-list-style-1" checked="">
-						<label class="custom-control-label" for="sidebariconlist-1"><i class="ion-minus-round"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-2" name="menu-list-icon" class="custom-control-input" value="icon-list-style-2">
-						<label class="custom-control-label" for="sidebariconlist-2"><i class="fa fa-circle-o" aria-hidden="true"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-3" name="menu-list-icon" class="custom-control-input" value="icon-list-style-3">
-						<label class="custom-control-label" for="sidebariconlist-3"><i class="dw dw-check"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-4" name="menu-list-icon" class="custom-control-input" value="icon-list-style-4" checked="">
-						<label class="custom-control-label" for="sidebariconlist-4"><i class="icon-copy dw dw-next-2"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-5" name="menu-list-icon" class="custom-control-input" value="icon-list-style-5">
-						<label class="custom-control-label" for="sidebariconlist-5"><i class="dw dw-fast-forward-1"></i></label>
-					</div>
-					<div class="custom-control custom-radio custom-control-inline">
-						<input type="radio" id="sidebariconlist-6" name="menu-list-icon" class="custom-control-input" value="icon-list-style-6">
-						<label class="custom-control-label" for="sidebariconlist-6"><i class="dw dw-next"></i></label>
-					</div>
-				</div>
+      <!-- DIRECT LOGOUT BUTTON -->
+      <a href="logout.php"
+         class="admin-page-logout-btn"
+         title="Log out"
+         aria-label="Log out">
+        <i class="dw dw-logout" aria-hidden="true"></i>
+        <span>Log Out</span>
+      </a>
 
-				<div class="reset-options pt-30 text-center">
-					<button class="btn btn-danger" id="reset-settings">Reset Settings</button>
-				</div>
-			</div>
-		</div>
-	</div>
+    </div>
+  </div>
+
+  <div class="right-sidebar">
+    <div class="sidebar-title">
+      <h3 class="weight-600 font-16 text-blue">
+        Layout Settings
+        <span class="btn-block font-weight-400 font-12">User Interface Settings</span>
+      </h3>
+      <div class="close-sidebar" data-toggle="right-sidebar-close">
+        <i class="icon-copy ion-close-round"></i>
+      </div>
+    </div>
+    <div class="right-sidebar-body customscroll">
+      <div class="right-sidebar-body-content">
+        <h4 class="weight-600 font-18 pb-10">Header Background</h4>
+        <div class="sidebar-btn-group pb-30 mb-10">
+          <a href="javascript:void(0);" class="btn btn-outline-primary header-white active">White</a>
+          <a href="javascript:void(0);" class="btn btn-outline-primary header-dark">Dark</a>
+        </div>
+
+        <h4 class="weight-600 font-18 pb-10">Sidebar Background</h4>
+        <div class="sidebar-btn-group pb-30 mb-10">
+          <a href="javascript:void(0);" class="btn btn-outline-primary sidebar-light ">White</a>
+          <a href="javascript:void(0);" class="btn btn-outline-primary sidebar-dark active">Dark</a>
+        </div>
+
+        <h4 class="weight-600 font-18 pb-10">Menu Dropdown Icon</h4>
+        <div class="sidebar-radio-group pb-10 mb-10">
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebaricon-1" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-1" checked="">
+            <label class="custom-control-label" for="sidebaricon-1"><i class="fa fa-angle-down"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebaricon-2" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-2">
+            <label class="custom-control-label" for="sidebaricon-2"><i class="ion-plus-round"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebaricon-3" name="menu-dropdown-icon" class="custom-control-input" value="icon-style-3">
+            <label class="custom-control-label" for="sidebaricon-3"><i class="fa fa-angle-double-right"></i></label>
+          </div>
+        </div>
+
+        <h4 class="weight-600 font-18 pb-10">Menu List Icon</h4>
+        <div class="sidebar-radio-group pb-30 mb-10">
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-1" name="menu-list-icon" class="custom-control-input" value="icon-list-style-1" checked="">
+            <label class="custom-control-label" for="sidebariconlist-1"><i class="ion-minus-round"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-2" name="menu-list-icon" class="custom-control-input" value="icon-list-style-2">
+            <label class="custom-control-label" for="sidebariconlist-2"><i class="fa fa-circle-o" aria-hidden="true"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-3" name="menu-list-icon" class="custom-control-input" value="icon-list-style-3">
+            <label class="custom-control-label" for="sidebariconlist-3"><i class="dw dw-check"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-4" name="menu-list-icon" class="custom-control-input" value="icon-list-style-4" checked="">
+            <label class="custom-control-label" for="sidebariconlist-4"><i class="icon-copy dw dw-next-2"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-5" name="menu-list-icon" class="custom-control-input" value="icon-list-style-5">
+            <label class="custom-control-label" for="sidebariconlist-5"><i class="dw dw-fast-forward-1"></i></label>
+          </div>
+          <div class="custom-control custom-radio custom-control-inline">
+            <input type="radio" id="sidebariconlist-6" name="menu-list-icon" class="custom-control-input" value="icon-list-style-6">
+            <label class="custom-control-label" for="sidebariconlist-6"><i class="dw dw-next"></i></label>
+          </div>
+        </div>
+
+        <div class="reset-options pt-30 text-center">
+          <button class="btn btn-danger" id="reset-settings">Reset Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- SIDEBAR -->
    <?php include 'sidebar.php'; ?>

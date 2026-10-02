@@ -2,7 +2,15 @@
 
 
 
+
+
+
+
 session_start();
+
+
+
+
 
 
 
@@ -10,7 +18,15 @@ require_once 'admin_access.php';
 
 
 
+
+
+
+
 require_once '../config/database.php';
+
+
+
+
 
 
 
@@ -18,7 +34,15 @@ requireAccess('complaints');
 
 
 
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -26,7 +50,15 @@ requireAccess('complaints');
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -34,7 +66,15 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 
 
 
+
+
+
+
     !in_array($_SESSION['admin_role'], ['admin', 'superadmin'], true)) {
+
+
+
+
 
 
 
@@ -42,11 +82,27 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 
 
 
+
+
+
+
   exit;
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -58,7 +114,15 @@ if (empty($_SESSION['admin_id']) || empty($_SESSION['admin_role']) ||
 
 
 
+
+
+
+
 if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
+
+
+
+
 
 
 
@@ -66,7 +130,15 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
 
 
 
+
+
+
+
   exit;
+
+
+
+
 
 
 
@@ -78,7 +150,19 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
 
 
 
+
+
+
+
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -86,7 +170,15 @@ if (($_SESSION['admin_role'] ?? '') === 'superadmin') {
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -102,7 +194,23 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 function esc($v){
+
+
+
+
 
 
 
@@ -110,7 +218,15 @@ function esc($v){
 
 
 
+
+
+
+
 }
+
+
+
+
 
 
 
@@ -118,7 +234,15 @@ function complaintStatusBadgeClass($s){
 
 
 
+
+
+
+
   $s = (string)$s;
+
+
+
+
 
 
 
@@ -126,7 +250,15 @@ function complaintStatusBadgeClass($s){
 
 
 
+
+
+
+
   if ($s === 'in_progress') return 'badge-soft-info';
+
+
+
+
 
 
 
@@ -134,7 +266,15 @@ function complaintStatusBadgeClass($s){
 
 
 
+
+
+
+
   if ($s === 'closed') return 'badge-soft-secondary';
+
+
+
+
 
 
 
@@ -142,7 +282,15 @@ function complaintStatusBadgeClass($s){
 
 
 
+
+
+
+
 }
+
+
+
+
 
 
 
@@ -150,7 +298,15 @@ function complaintPriorityClass($p){
 
 
 
+
+
+
+
   $p = (string)$p;
+
+
+
+
 
 
 
@@ -158,7 +314,15 @@ function complaintPriorityClass($p){
 
 
 
+
+
+
+
   if ($p === 'high') return 'ann-badge important';
+
+
+
+
 
 
 
@@ -166,11 +330,25 @@ function complaintPriorityClass($p){
 
 
 
+
+
+
+
   return 'ann-badge';
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
 
 
 
@@ -180,17 +358,35 @@ function complaintAttachmentUrl($path){
 
 
 
+
+
+
+
   $path = str_replace('\\', '/', trim((string)$path));
+
+
 
   $path = ltrim($path, '/');
 
 
 
+
+
+
+
   if ($path === '' || !str_starts_with($path, 'uploads/complaints/')) {
+
+
 
     return '';
 
+
+
   }
+
+
+
+
 
 
 
@@ -198,7 +394,15 @@ function complaintAttachmentUrl($path){
 
 
 
+
+
+
+
 }
+
+
+
+
 
 
 
@@ -206,23 +410,47 @@ function formatComplaintFileSize($bytes){
 
 
 
+
+
+
+
   $bytes = max(0, (int)$bytes);
+
+
+
+
 
 
 
   if ($bytes >= 1024 * 1024) {
 
+
+
     return number_format($bytes / (1024 * 1024), 1) . ' MB';
 
+
+
   }
+
+
+
+
 
 
 
   if ($bytes >= 1024) {
 
+
+
     return number_format($bytes / 1024, 1) . ' KB';
 
+
+
   }
+
+
+
+
 
 
 
@@ -230,7 +458,19 @@ function formatComplaintFileSize($bytes){
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -242,11 +482,23 @@ function formatComplaintFileSize($bytes){
 
 
 
+
+
+
+
    3) ADMIN INFO
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -258,7 +510,19 @@ $adminId = (int)($_SESSION['admin_id'] ?? 0);
 
 
 
+
+
+
+
+
+
+
+
 $stmt = $conn->prepare("SELECT id, email, full_name, phase, role FROM admins WHERE id=? LIMIT 1");
+
+
+
+
 
 
 
@@ -266,11 +530,23 @@ $stmt->bind_param("i", $adminId);
 
 
 
+
+
+
+
 $stmt->execute();
 
 
 
+
+
+
+
 $me = $stmt->get_result()->fetch_assoc();
+
+
+
+
 
 
 
@@ -282,7 +558,19 @@ $stmt->close();
 
 
 
+
+
+
+
+
+
+
+
 if (!$me) {
+
+
+
+
 
 
 
@@ -290,7 +578,15 @@ if (!$me) {
 
 
 
+
+
+
+
   echo "<script>alert('Session error. Please login again.'); window.location='index.php';</script>";
+
+
+
+
 
 
 
@@ -298,7 +594,19 @@ if (!$me) {
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -310,7 +618,15 @@ $adminEmail = (string)($me['email'] ?? '');
 
 
 
+
+
+
+
 $adminName  = trim((string)($me['full_name'] ?? ''));
+
+
+
+
 
 
 
@@ -322,7 +638,19 @@ $phase      = (string)($me['phase'] ?? 'Phase 1');
 
 
 
+
+
+
+
+
+
+
+
 $allowedPhases = ['Phase 1', 'Phase 2', 'Phase 3'];
+
+
+
+
 
 
 
@@ -330,7 +658,15 @@ if (!in_array($phase, $allowedPhases, true)) {
 
 
 
+
+
+
+
   $phase = 'Phase 1';
+
+
+
+
 
 
 
@@ -342,7 +678,19 @@ if (!in_array($phase, $allowedPhases, true)) {
 
 
 
+
+
+
+
+
+
+
+
 $filter = (string)($_GET['filter'] ?? 'all');
+
+
+
+
 
 
 
@@ -350,7 +698,19 @@ $allowedFilters = ['all','open','in_progress','resolved','closed'];
 
 
 
+
+
+
+
 if (!in_array($filter, $allowedFilters, true)) $filter = 'all';
+
+
+
+
+
+
+
+
 
 
 
@@ -366,7 +726,19 @@ $selectedComplaintId = (int)($_GET['complaint_id'] ?? 0);
 
 
 
+
+
+
+
+
+
+
+
 $ok = '';
+
+
+
+
 
 
 
@@ -378,7 +750,19 @@ $err = '';
 
 
 
+
+
+
+
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -386,7 +770,15 @@ $err = '';
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -398,7 +790,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
   /* send reply */
+
+
+
+
 
 
 
@@ -406,7 +810,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     $complaintId = (int)($_POST['complaint_id'] ?? 0);
+
+
+
+
 
 
 
@@ -418,7 +830,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
     if ($complaintId <= 0) {
+
+
+
+
 
 
 
@@ -426,7 +850,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     } elseif ($message === '') {
+
+
+
+
 
 
 
@@ -434,7 +866,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     } else {
+
+
+
+
 
 
 
@@ -442,7 +882,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       $stmt->bind_param("is", $complaintId, $phase);
+
+
+
+
 
 
 
@@ -450,7 +898,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       $chk = $stmt->get_result()->fetch_assoc();
+
+
+
+
 
 
 
@@ -462,7 +918,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
       if (!$chk) {
+
+
+
+
 
 
 
@@ -470,7 +938,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       } else {
+
+
+
+
 
 
 
@@ -478,7 +954,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
           INSERT INTO complaint_messages (complaint_id, sender_type, sender_admin_id, message)
+
+
+
+
 
 
 
@@ -486,7 +970,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         ");
+
+
+
+
 
 
 
@@ -494,11 +986,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         $stmt->execute();
 
 
 
+
+
+
+
         $stmt->close();
+
+
+
+
+
+
+
+
 
 
 
@@ -510,11 +1018,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
           $stmt = $conn->prepare("UPDATE complaints SET admin_id=?, status='in_progress', updated_at=NOW() WHERE id=?");
 
 
 
+
+
+
+
           $stmt->bind_param("ii", $adminId, $complaintId);
+
+
+
+
 
 
 
@@ -522,7 +1042,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
           $stmt = $conn->prepare("UPDATE complaints SET admin_id=?, updated_at=NOW() WHERE id=?");
+
+
+
+
 
 
 
@@ -530,11 +1058,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         }
 
 
 
+
+
+
+
         $stmt->execute();
+
+
+
+
 
 
 
@@ -546,7 +1086,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
         header("Location: admin_complaints.php?filter=" . urlencode($filter) . "&complaint_id=" . $complaintId);
+
+
+
+
 
 
 
@@ -554,11 +1106,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       }
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -570,7 +1134,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
   /* update status */
+
+
+
+
 
 
 
@@ -578,11 +1154,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     $complaintId = (int)($_POST['complaint_id'] ?? 0);
 
 
 
+
+
+
+
     $newStatus   = trim((string)($_POST['status'] ?? ''));
+
+
+
+
+
+
+
+
 
 
 
@@ -598,7 +1190,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
     if ($complaintId <= 0) {
+
+
+
+
 
 
 
@@ -606,7 +1210,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     } elseif (!in_array($newStatus, $allowedStatuses, true)) {
+
+
+
+
 
 
 
@@ -614,7 +1226,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
     } else {
+
+
+
+
 
 
 
@@ -622,7 +1242,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       $stmt->bind_param("is", $complaintId, $phase);
+
+
+
+
 
 
 
@@ -630,7 +1258,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       $chk = $stmt->get_result()->fetch_assoc();
+
+
+
+
 
 
 
@@ -642,7 +1278,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
       if (!$chk) {
+
+
+
+
 
 
 
@@ -650,7 +1298,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       } else {
+
+
+
+
 
 
 
@@ -658,7 +1314,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         $stmt->bind_param("sii", $newStatus, $adminId, $complaintId);
+
+
+
+
 
 
 
@@ -666,7 +1330,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         $stmt->close();
+
+
+
+
+
+
+
+
 
 
 
@@ -678,7 +1354,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         $systemMsg = "Complaint status updated to " . $statusLabel . ".";
+
+
+
+
+
+
+
+
 
 
 
@@ -690,7 +1378,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
           INSERT INTO complaint_messages (complaint_id, sender_type, sender_admin_id, message)
+
+
+
+
 
 
 
@@ -698,7 +1394,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         ");
+
+
+
+
 
 
 
@@ -706,7 +1410,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
         $stmt->execute();
+
+
+
+
 
 
 
@@ -718,7 +1430,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
         header("Location: admin_complaints.php?filter=" . urlencode($filter) . "&complaint_id=" . $complaintId);
+
+
+
+
 
 
 
@@ -726,7 +1450,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
       }
+
+
+
+
 
 
 
@@ -734,7 +1466,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
   }
+
+
+
+
 
 
 
@@ -746,7 +1486,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -754,7 +1506,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -762,7 +1522,15 @@ $counts = [
 
 
 
+
+
+
+
   'all' => 0,
+
+
+
+
 
 
 
@@ -770,7 +1538,15 @@ $counts = [
 
 
 
+
+
+
+
   'in_progress' => 0,
+
+
+
+
 
 
 
@@ -778,7 +1554,15 @@ $counts = [
 
 
 
+
+
+
+
   'closed' => 0
+
+
+
+
 
 
 
@@ -790,7 +1574,19 @@ $counts = [
 
 
 
+
+
+
+
+
+
+
+
 $stmt = $conn->prepare("
+
+
+
+
 
 
 
@@ -798,7 +1594,15 @@ $stmt = $conn->prepare("
 
 
 
+
+
+
+
   FROM complaints
+
+
+
+
 
 
 
@@ -806,7 +1610,15 @@ $stmt = $conn->prepare("
 
 
 
+
+
+
+
   GROUP BY status
+
+
+
+
 
 
 
@@ -814,7 +1626,15 @@ $stmt = $conn->prepare("
 
 
 
+
+
+
+
 $stmt->bind_param("s", $phase);
+
+
+
+
 
 
 
@@ -822,7 +1642,15 @@ $stmt->execute();
 
 
 
+
+
+
+
 $res = $stmt->get_result();
+
+
+
+
 
 
 
@@ -830,7 +1658,15 @@ while ($r = $res->fetch_assoc()) {
 
 
 
+
+
+
+
   $st = (string)$r['status'];
+
+
+
+
 
 
 
@@ -838,11 +1674,23 @@ while ($r = $res->fetch_assoc()) {
 
 
 
+
+
+
+
   $counts['all'] += (int)$r['c'];
 
 
 
+
+
+
+
 }
+
+
+
+
 
 
 
@@ -854,7 +1702,19 @@ $stmt->close();
 
 
 
+
+
+
+
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -862,7 +1722,15 @@ $stmt->close();
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -870,21 +1738,43 @@ $attachmentTableReady = false;
 
 
 
+
+
+
+
 try {
+
+
+
+
 
 
 
   $tableCheck = $conn->query("SHOW TABLES LIKE 'complaint_attachments'");
 
+
+
   $attachmentTableReady = ($tableCheck && $tableCheck->num_rows > 0);
+
+
+
+
 
 
 
   if ($tableCheck) {
 
+
+
     $tableCheck->free();
 
+
+
   }
+
+
+
+
 
 
 
@@ -892,7 +1782,15 @@ try {
 
 
 
+
+
+
+
   error_log('Complaint attachment table check failed: ' . $e->getMessage());
+
+
+
+
 
 
 
@@ -900,11 +1798,23 @@ try {
 
 
 
+
+
+
+
 $evidenceSelect = $attachmentTableReady
+
+
 
   ? ", (SELECT COUNT(*) FROM complaint_attachments ca WHERE ca.complaint_id = c.id) AS evidence_count"
 
+
+
   : ", 0 AS evidence_count";
+
+
+
+
 
 
 
@@ -912,7 +1822,15 @@ $sql = "
 
 
 
+
+
+
+
   SELECT c.*,
+
+
+
+
 
 
 
@@ -920,9 +1838,19 @@ $sql = "
 
 
 
+
+
+
+
          a.full_name AS assigned_admin_name
 
+
+
          {$evidenceSelect}
+
+
+
+
 
 
 
@@ -930,7 +1858,15 @@ $sql = "
 
 
 
+
+
+
+
   LEFT JOIN homeowners h ON h.id = c.homeowner_id
+
+
+
+
 
 
 
@@ -938,7 +1874,15 @@ $sql = "
 
 
 
+
+
+
+
   WHERE c.phase=?
+
+
+
+
 
 
 
@@ -946,7 +1890,15 @@ $sql = "
 
 
 
+
+
+
+
 $types = "s";
+
+
+
+
 
 
 
@@ -958,7 +1910,19 @@ $params = [$phase];
 
 
 
+
+
+
+
+
+
+
+
 if ($filter !== 'all') {
+
+
+
+
 
 
 
@@ -966,7 +1930,15 @@ if ($filter !== 'all') {
 
 
 
+
+
+
+
   $types .= "s";
+
+
+
+
 
 
 
@@ -974,7 +1946,19 @@ if ($filter !== 'all') {
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -990,7 +1974,19 @@ $sql .= " ORDER BY c.updated_at DESC, c.id DESC LIMIT 200";
 
 
 
+
+
+
+
+
+
+
+
 $stmt = $conn->prepare($sql);
+
+
+
+
 
 
 
@@ -998,7 +1994,15 @@ $stmt->bind_param($types, ...$params);
 
 
 
+
+
+
+
 $stmt->execute();
+
+
+
+
 
 
 
@@ -1006,22 +2010,45 @@ $complaints = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
 
 
+
+
+
+
 $stmt->close();
 
+
+
 /* Latest complaint ID for real-time new complaint watcher. */
+
 $latestComplaintId = 0;
+
 $rtLatestStmt = $conn->prepare("SELECT COALESCE(MAX(id), 0) AS latest_id FROM complaints WHERE phase = ?");
+
 $rtLatestStmt->bind_param("s", $phase);
+
 $rtLatestStmt->execute();
+
 $rtLatestRow = $rtLatestStmt->get_result()->fetch_assoc();
+
 $latestComplaintId = (int)($rtLatestRow['latest_id'] ?? 0);
+
 $rtLatestStmt->close();
+
+
 
 if ($selectedComplaintId <= 0 && !empty($complaints)) {
 
 
 
+
+
+
+
   $selectedComplaintId = (int)$complaints[0]['id'];
+
+
+
+
 
 
 
@@ -1033,7 +2060,19 @@ if ($selectedComplaintId <= 0 && !empty($complaints)) {
 
 
 
+
+
+
+
+
+
+
+
 /* =========================
+
+
+
+
 
 
 
@@ -1041,7 +2080,15 @@ if ($selectedComplaintId <= 0 && !empty($complaints)) {
 
 
 
+
+
+
+
    ========================= */
+
+
+
+
 
 
 
@@ -1049,7 +2096,15 @@ $selectedComplaint = null;
 
 
 
+
+
+
+
 if ($selectedComplaintId > 0) {
+
+
+
+
 
 
 
@@ -1057,7 +2112,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     SELECT c.*,
+
+
+
+
 
 
 
@@ -1065,7 +2128,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
            a.full_name AS assigned_admin_name
+
+
+
+
 
 
 
@@ -1073,7 +2144,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     LEFT JOIN homeowners h ON h.id = c.homeowner_id
+
+
+
+
 
 
 
@@ -1081,7 +2160,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     WHERE c.id=? AND c.phase=?
+
+
+
+
 
 
 
@@ -1089,7 +2176,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   ");
+
+
+
+
 
 
 
@@ -1097,7 +2192,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   $stmt->execute();
+
+
+
+
 
 
 
@@ -1105,7 +2208,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   $stmt->close();
+
+
+
+
+
+
+
+
 
 
 
@@ -1117,7 +2232,17 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
 
 
 
@@ -1127,7 +2252,15 @@ $complaintAttachments = [];
 
 
 
+
+
+
+
 if ($selectedComplaintId > 0 && $attachmentTableReady) {
+
+
+
+
 
 
 
@@ -1135,43 +2268,87 @@ if ($selectedComplaintId > 0 && $attachmentTableReady) {
 
 
 
+
+
+
+
     $stmt = $conn->prepare("
+
+
 
       SELECT
 
+
+
         id,
+
+
 
         complaint_id,
 
+
+
         file_path,
+
+
 
         original_name,
 
+
+
         mime_type,
+
+
 
         file_kind,
 
+
+
         file_size,
+
+
 
         created_at
 
+
+
       FROM complaint_attachments
+
+
 
       WHERE complaint_id = ?
 
+
+
       ORDER BY id ASC
+
+
 
     " );
 
 
 
+
+
+
+
     $stmt->bind_param('i', $selectedComplaintId);
+
+
 
     $stmt->execute();
 
+
+
     $complaintAttachments = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
+
+
     $stmt->close();
+
+
+
+
 
 
 
@@ -1179,9 +2356,19 @@ if ($selectedComplaintId > 0 && $attachmentTableReady) {
 
 
 
+
+
+
+
     error_log('Unable to load complaint evidence: ' . $e->getMessage());
 
+
+
     $complaintAttachments = [];
+
+
+
+
 
 
 
@@ -1189,7 +2376,17 @@ if ($selectedComplaintId > 0 && $attachmentTableReady) {
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
 
 
 
@@ -1199,7 +2396,15 @@ if ($selectedComplaintId > 0 && $attachmentTableReady) {
 
 
 
+
+
+
+
    8) MESSAGES
+
+
+
+
 
 
 
@@ -1207,7 +2412,15 @@ if ($selectedComplaintId > 0 && $attachmentTableReady) {
 
 
 
+
+
+
+
 $messages = [];
+
+
+
+
 
 
 
@@ -1215,7 +2428,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   $stmt = $conn->prepare("
+
+
+
+
 
 
 
@@ -1223,7 +2444,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
            h.first_name, h.middle_name, h.last_name,
+
+
+
+
 
 
 
@@ -1231,7 +2460,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     FROM complaint_messages cm
+
+
+
+
 
 
 
@@ -1239,7 +2476,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     LEFT JOIN admins a ON a.id = cm.sender_admin_id
+
+
+
+
 
 
 
@@ -1247,7 +2492,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     ORDER BY cm.created_at ASC, cm.id ASC
+
+
+
+
 
 
 
@@ -1255,7 +2508,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   $stmt->bind_param("i", $selectedComplaintId);
+
+
+
+
 
 
 
@@ -1263,7 +2524,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   $messages = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+
+
+
 
 
 
@@ -1271,7 +2540,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 }
+
+
+
+
 
 
 
@@ -1279,7 +2556,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 <!DOCTYPE html>
+
+
+
+
 
 
 
@@ -1287,11 +2572,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 <head>
 
 
 
+
+
+
+
   <meta charset="utf-8">
+
+
+
+
 
 
 
@@ -1303,15 +2600,33 @@ if ($selectedComplaintId > 0) {
 
 
 
-  <link rel="apple-touch-icon" sizes="180x180" href="vendors/images/apple-touch-icon.png">
 
 
 
-  <link rel="icon" type="image/png" sizes="32x32" href="vendors/images/favicon-32x32.png">
 
 
 
-  <link rel="icon" type="image/png" sizes="16x16" href="vendors/images/favicon-16x16.png">
+
+<?php
+require_once $_SERVER['DOCUMENT_ROOT'] .
+    '/SouthMeridian_project/includes/favicon.php';
+?>
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
 
 
 
@@ -1323,7 +2638,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+
+
+
+
+
+
+
 
 
 
@@ -1335,7 +2662,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   <link rel="stylesheet" type="text/css" href="vendors/styles/icon-font.min.css">
+
+
+
+
 
 
 
@@ -1343,7 +2678,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   <!-- ADMIN DARK MODE -->
+
+
+
+
 
 
 
@@ -1355,7 +2698,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
 <script>
+
+
+
+
 
 
 
@@ -1363,7 +2718,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     try {
+
+
+
+
 
 
 
@@ -1375,7 +2738,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
         const dark =
+
+
+
+
 
 
 
@@ -1383,7 +2758,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             (
+
+
+
+
 
 
 
@@ -1391,11 +2774,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 window.matchMedia &&
 
 
 
+
+
+
+
                 window.matchMedia('(prefers-color-scheme: dark)').matches
+
+
+
+
 
 
 
@@ -1407,7 +2802,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
         document.documentElement.classList.toggle('dark', dark);
+
+
+
+
 
 
 
@@ -1415,7 +2822,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 })();
+
+
+
+
 
 
 
@@ -1427,7 +2842,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
   <style>
+
+
+
+
 
 
 
@@ -1435,7 +2862,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     .badge-soft-warning { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; }
+
+
+
+
 
 
 
@@ -1443,7 +2878,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     .badge-soft-info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+
+
+
+
 
 
 
@@ -1455,7 +2898,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     .ann-badge {
+
+
+
+
 
 
 
@@ -1463,7 +2918,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       font-weight: 900;
+
+
+
+
 
 
 
@@ -1471,7 +2934,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border-radius: 999px;
+
+
+
+
 
 
 
@@ -1479,7 +2950,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background: #f8fafc;
+
+
+
+
 
 
 
@@ -1487,7 +2966,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       display: inline-block;
+
+
+
+
 
 
 
@@ -1495,11 +2982,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     .ann-badge.urgent { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
 
 
 
+
+
+
+
     .ann-badge.important { background:#fffbeb; border-color:#fed7aa; color:#9a3412; }
+
+
+
+
 
 
 
@@ -1511,11 +3010,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     .complaint-layout{
 
 
 
+
+
+
+
       display:grid;
+
+
+
+
 
 
 
@@ -1523,11 +3038,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       gap:20px;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1535,11 +3062,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background:#fff;
 
 
 
+
+
+
+
       border-radius:14px;
+
+
+
+
 
 
 
@@ -1547,11 +3086,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border:1px solid #eef2f7;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1559,11 +3110,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border:1px solid #e5e7eb;
 
 
 
+
+
+
+
       border-radius:12px;
+
+
+
+
 
 
 
@@ -1571,7 +3134,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       margin-bottom:10px;
+
+
+
+
 
 
 
@@ -1579,7 +3150,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       text-decoration:none;
+
+
+
+
 
 
 
@@ -1587,7 +3166,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1595,7 +3182,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border-color:#077f46;
+
+
+
+
 
 
 
@@ -1603,7 +3198,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1611,7 +3214,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       text-decoration:none;
+
+
+
+
 
 
 
@@ -1619,11 +3230,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       box-shadow:0 4px 12px rgba(0,0,0,.05);
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1631,7 +3254,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       height:430px;
+
+
+
+
 
 
 
@@ -1639,7 +3270,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background:#f8fafc;
+
+
+
+
 
 
 
@@ -1647,7 +3286,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border-radius:12px;
+
+
+
+
 
 
 
@@ -1655,7 +3302,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1663,7 +3318,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       display:flex;
+
+
+
+
 
 
 
@@ -1671,7 +3334,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1679,11 +3350,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       justify-content:flex-end;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1691,7 +3374,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       max-width:76%;
+
+
+
+
 
 
 
@@ -1699,7 +3390,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       border-radius:16px;
+
+
+
+
 
 
 
@@ -1707,7 +3406,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1715,11 +3422,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background:#077f46;
 
 
 
+
+
+
+
       color:#fff;
+
+
+
+
 
 
 
@@ -1727,7 +3446,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1735,7 +3462,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background:#fff;
+
+
+
+
 
 
 
@@ -1743,7 +3478,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       color:#0f172a;
+
+
+
+
 
 
 
@@ -1751,7 +3494,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1759,7 +3510,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       font-size:12px;
+
+
+
+
 
 
 
@@ -1767,11 +3526,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       margin-top:6px;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1779,11 +3550,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       display:flex;
 
 
 
+
+
+
+
       gap:8px;
+
+
+
+
 
 
 
@@ -1791,7 +3574,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1799,11 +3590,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       padding:7px 12px;
 
 
 
+
+
+
+
       border-radius:999px;
+
+
+
+
 
 
 
@@ -1811,7 +3614,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       font-weight:800;
+
+
+
+
 
 
 
@@ -1819,7 +3630,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       color:#0f172a;
+
+
+
+
 
 
 
@@ -1827,11 +3646,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       text-decoration:none;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1839,7 +3670,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       background:#077f46;
+
+
+
+
 
 
 
@@ -1847,11 +3686,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       color:#fff;
 
 
 
+
+
+
+
     }
+
+
+
+
 
 
 
@@ -1859,11 +3710,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       font-size:12px;
 
 
 
+
+
+
+
       color:#64748b;
+
+
+
+
 
 
 
@@ -1871,7 +3734,17 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     }
+
+
+
+
+
+
 
 
 
@@ -1879,353 +3752,705 @@ if ($selectedComplaintId > 0) {
 
     .evidence-panel{
 
+
+
       margin-top:18px;
+
+
 
       overflow:hidden;
 
+
+
       border:1px solid #e2e8f0;
+
+
 
       border-radius:14px;
 
+
+
       background:#fff;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-panel-header{
 
+
+
       display:flex;
+
+
 
       align-items:center;
 
+
+
       justify-content:space-between;
+
+
 
       gap:12px;
 
+
+
       padding:13px 15px;
+
+
 
       border-bottom:1px solid #e2e8f0;
 
+
+
       background:#f8fafc;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-panel-title{
 
+
+
       display:flex;
+
+
 
       align-items:center;
 
+
+
       gap:8px;
+
+
 
       margin:0;
 
+
+
       color:#0f172a;
+
+
 
       font-size:14px;
 
+
+
       font-weight:800;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-count{
 
+
+
       display:inline-flex;
+
+
 
       align-items:center;
 
+
+
       justify-content:center;
+
+
 
       min-width:28px;
 
+
+
       height:26px;
+
+
 
       padding:0 9px;
 
+
+
       border-radius:999px;
+
+
 
       background:#dcfce7;
 
+
+
       color:#166534;
+
+
 
       font-size:11px;
 
+
+
       font-weight:900;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-grid{
 
+
+
       display:grid;
+
+
 
       grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
 
+
+
       gap:14px;
+
+
 
       padding:15px;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-item{
 
+
+
       overflow:hidden;
+
+
 
       border:1px solid #e2e8f0;
 
+
+
       border-radius:12px;
+
+
 
       background:#fff;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-media{
 
+
+
       min-height:190px;
+
+
 
       display:flex;
 
+
+
       align-items:center;
+
+
 
       justify-content:center;
 
+
+
       background:#0f172a;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-media img,
 
+
+
     .evidence-media video{
+
+
 
       width:100%;
 
+
+
       max-height:360px;
+
+
 
       display:block;
 
+
+
       object-fit:contain;
+
+
 
       background:#0f172a;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-meta{
 
+
+
       padding:11px 12px;
+
+
 
       border-top:1px solid #e2e8f0;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-name{
 
+
+
       overflow:hidden;
+
+
 
       color:#0f172a;
 
+
+
       font-size:12px;
+
+
 
       font-weight:800;
 
+
+
       text-overflow:ellipsis;
+
+
 
       white-space:nowrap;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-submeta{
 
+
+
       margin-top:4px;
+
+
 
       color:#64748b;
 
+
+
       font-size:11px;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-open{
 
+
+
       display:inline-flex;
+
+
 
       align-items:center;
 
+
+
       gap:6px;
+
+
 
       margin-top:8px;
 
+
+
       color:#077f46;
+
+
 
       font-size:12px;
 
+
+
       font-weight:800;
+
+
 
       text-decoration:none;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-open:hover{
 
+
+
       color:#056437;
+
+
 
       text-decoration:none;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-empty{
 
+
+
       padding:18px;
+
+
 
       color:#64748b;
 
+
+
       font-size:13px;
+
+
 
       text-align:center;
 
+
+
     }
+
+
+
+
 
 
 
     .evidence-required-note{
 
+
+
       margin-top:6px;
+
+
 
       color:#64748b;
 
+
+
       font-size:11px;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-panel,
 
+
+
     html.dark .evidence-item{
+
+
 
       background:#172033;
 
+
+
       border-color:#334155;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-panel-header{
 
+
+
       background:#111827;
+
+
 
       border-color:#334155;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-panel-title,
 
+
+
     html.dark .evidence-name{
+
+
 
       color:#e5e7eb;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-meta{
 
+
+
       border-color:#334155;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-submeta,
 
+
+
     html.dark .evidence-empty,
+
+
 
     html.dark .evidence-required-note{
 
+
+
       color:#94a3b8;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-count{
 
+
+
       background:rgba(16,185,129,.14);
+
+
 
       color:#6ee7b7;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-open{
 
+
+
       color:#6ee7b7;
 
+
+
     }
+
+
+
+
 
 
 
     html.dark .evidence-open:hover{
 
+
+
       color:#a7f3d0;
 
+
+
     }
+
+
+
+
 
 
 
     /* Keep the footer at the real bottom of the admin content area. */
 
+
+
     .main-container > .pd-ltr-20{
+
+
 
       min-height:calc(100vh - 70px);
 
+
+
       display:flex;
+
+
 
       flex-direction:column;
 
+
+
     }
+
+
+
+
 
 
 
     .admin-page-footer{
 
+
+
       width:100%;
+
+
 
       margin-top:auto !important;
 
+
+
       margin-bottom:0 !important;
+
+
 
       text-align:center;
 
+
+
       flex-shrink:0;
 
+
+
     }
+
+
+
+
 
 
 
@@ -2233,7 +4458,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       .complaint-layout{
+
+
+
+
 
 
 
@@ -2241,7 +4474,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       }
+
+
+
+
 
 
 
@@ -2249,7 +4490,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 /* ACCESS TOAST */
+
+
+
+
 
 
 
@@ -2257,11 +4506,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     position: fixed;
 
 
 
+
+
+
+
     top: 20px;
+
+
+
+
 
 
 
@@ -2273,7 +4534,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     background: #ef4444;
+
+
+
+
 
 
 
@@ -2285,11 +4558,31 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     padding: 12px 18px;
 
 
 
+
+
+
+
     border-radius: 8px;
+
+
+
+
+
+
+
+
 
 
 
@@ -2305,7 +4598,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+
+
+
+
+
+
+
+
 
 
 
@@ -2321,7 +4630,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     opacity: 0;
+
+
+
+
 
 
 
@@ -2329,7 +4650,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     pointer-events: none;
+
+
+
+
+
+
+
+
 
 
 
@@ -2345,7 +4678,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     transition:
+
+
+
+
 
 
 
@@ -2353,7 +4698,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         transform .3s ease,
+
+
+
+
 
 
 
@@ -2361,7 +4714,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -2373,7 +4738,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     opacity: 1;
+
+
+
+
 
 
 
@@ -2381,7 +4754,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     transform: translateY(0);
+
+
+
+
 
 
 
@@ -2391,42 +4772,162 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
     /* ==========================================================
+
        REAL-TIME COMPLAINT ALERTS
+
        ========================================================== */
+
     .complaint-sound-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:800;cursor:pointer;transition:.18s ease;}
+
     .complaint-sound-btn:hover{border-color:#077f46;color:#077f46;box-shadow:0 4px 12px rgba(0,0,0,.06);}
+
     .complaint-sound-btn.is-on{background:#ecfdf5;border-color:#86efac;color:#166534;}
+
     .complaint-sound-btn.is-blocked{background:#fff7ed;border-color:#fdba74;color:#9a3412;}
+
     .complaint-rt-toast{position:fixed;top:90px;right:22px;z-index:100000;width:min(390px,calc(100vw - 32px));border-radius:16px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 20px 45px rgba(15,23,42,.22);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(-12px) scale(.98);transition:.22s ease;pointer-events:none;}
+
     .complaint-rt-toast.show{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;}
+
     .complaint-rt-toast.priority-low{border-left:6px solid #64748b;}
+
     .complaint-rt-toast.priority-normal{border-left:6px solid #2563eb;}
+
     .complaint-rt-toast.priority-high{border-left:6px solid #d97706;}
+
     .complaint-rt-toast.priority-urgent{border-left:6px solid #dc2626;animation:urgentComplaintPulse 1s ease-in-out infinite;}
+
     @keyframes urgentComplaintPulse{0%,100%{box-shadow:0 20px 45px rgba(15,23,42,.22);}50%{box-shadow:0 20px 50px rgba(220,38,38,.38);}}
+
     .complaint-rt-toast-head{display:flex;align-items:flex-start;gap:12px;padding:15px 16px 10px;}
+
     .complaint-rt-icon{width:42px;height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:center;border-radius:12px;font-size:20px;background:#f1f5f9;}
+
     .priority-urgent .complaint-rt-icon{background:#fee2e2;color:#b91c1c;}
+
     .priority-high .complaint-rt-icon{background:#fef3c7;color:#b45309;}
+
     .priority-normal .complaint-rt-icon{background:#dbeafe;color:#1d4ed8;}
+
     .priority-low .complaint-rt-icon{background:#f1f5f9;color:#475569;}
+
     .complaint-rt-title{font-weight:900;color:#0f172a;font-size:14px;line-height:1.25;}
+
     .complaint-rt-meta{margin-top:4px;color:#64748b;font-size:12px;line-height:1.45;}
+
     .complaint-rt-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 16px 14px;}
+
     .complaint-rt-actions a,.complaint-rt-actions button{border:0;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;}
+
     .complaint-rt-open{background:#077f46;color:#fff !important;}
+
     .complaint-rt-dismiss{background:#f1f5f9;color:#475569;}
+
     .rt-new-badge{display:inline-flex;align-items:center;gap:5px;margin-left:6px;border-radius:999px;background:#dcfce7;color:#166534;padding:2px 7px;font-size:10px;font-weight:900;}
+
     html.dark .complaint-sound-btn{background:#172033;border-color:#334155;color:#cbd5e1;}
+
     html.dark .complaint-sound-btn.is-on{background:rgba(16,185,129,.12);border-color:#065f46;color:#6ee7b7;}
+
     html.dark .complaint-sound-btn.is-blocked{background:rgba(249,115,22,.12);border-color:#9a3412;color:#fdba74;}
+
     html.dark .complaint-rt-toast{background:#172033;border-color:#334155;}
+
     html.dark .complaint-rt-title{color:#f8fafc;}
+
     html.dark .complaint-rt-meta{color:#94a3b8;}
+
     html.dark .complaint-rt-dismiss{background:#334155;color:#e2e8f0;}
 
-  </style>
+
+
+  
+
+    /* ---------------------------------------------------------
+       Header logout button
+       --------------------------------------------------------- */
+    .admin-page-logout-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 98px;
+      min-height: 40px;
+      margin: 0 18px 0 10px;
+      padding: 8px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 11px;
+      background: #ffffff;
+      color: #b91c1c !important;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 800;
+      text-decoration: none !important;
+      white-space: nowrap;
+      transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+    }
+
+    .admin-page-logout-btn i {
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .admin-page-logout-btn:hover,
+    .admin-page-logout-btn:focus {
+      border-color: #ef4444;
+      background: #fef2f2;
+      color: #991b1b !important;
+      box-shadow: 0 7px 18px rgba(220, 38, 38, .12);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    html.dark .admin-page-logout-btn {
+      border-color: rgba(248, 113, 113, .30);
+      background: rgba(127, 29, 29, .16);
+      color: #fca5a5 !important;
+      box-shadow: none;
+    }
+
+    html.dark .admin-page-logout-btn:hover,
+    html.dark .admin-page-logout-btn:focus {
+      border-color: rgba(248, 113, 113, .55);
+      background: rgba(127, 29, 29, .28);
+      color: #fecaca !important;
+    }
+
+    @media (max-width: 575.98px) {
+      .admin-page-logout-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        margin: 0 10px 0 6px;
+        padding: 0;
+        border-radius: 10px;
+      }
+
+      .admin-page-logout-btn span {
+        display: none;
+      }
+
+      .admin-page-logout-btn i {
+        font-size: 18px;
+      }
+    }
+</style>
+
+
+
+
 
 
 
@@ -2434,7 +4935,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 <body>
+
+
+
+
+
+
+
+
 
 
 
@@ -2450,7 +4963,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
     <div class="header-left">
+
+
+
+
 
 
 
@@ -2458,11 +4983,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="search-toggle-icon dw dw-search2" data-toggle="header_search"></div>
 
 
 
+
+
+
+
     </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2478,7 +5019,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
         <!-- DARK MODE TOGGLE -->
+
+
+
+
 
 
 
@@ -2486,7 +5039,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <button type="button"
+
+
+
+
 
 
 
@@ -2494,7 +5055,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     class="admin-theme-toggle"
+
+
+
+
 
 
 
@@ -2502,7 +5071,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     title="Switch theme">
+
+
+
+
 
 
 
@@ -2510,119 +5087,36 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             </button>
 
 
 
-        </div>
 
-
-
-
-
-
-
-        <!-- USER PROFILE -->
-
-
-
-        <div class="user-info-dropdown">
-
-
-
-            <div class="dropdown">
-
-
-
-
-
-
-
-                <a class="dropdown-toggle"
-
-
-
-                   href="#"
-
-
-
-                   role="button"
-
-
-
-                   data-toggle="dropdown">
-
-
-
-
-
-
-
-                    <span class="user-icon">
-
-
-
-                        <img src="vendors/images/photo1.jpg" alt="">
-
-
-
-                    </span>
-
-
-
-
-
-
-
-                </a>
-
-
-
-
-
-
-
-                <div class="dropdown-menu dropdown-menu-right dropdown-menu-icon-list">
-
-
-
-
-
-
-
-                    <a class="dropdown-item" href="logout.php">
-
-
-
-                        <i class="dw dw-logout"></i>
-
-
-
-                        Log Out
-
-
-
-                    </a>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-            </div>
 
 
 
         </div>
+
+        <!-- DIRECT LOGOUT BUTTON -->
+        <a href="logout.php"
+           class="admin-page-logout-btn"
+           title="Log out"
+           aria-label="Log out">
+            <i class="dw dw-logout" aria-hidden="true"></i>
+            <span>Log Out</span>
+        </a>
+
+
+
+
+
+
+
+
 
 
 
@@ -2638,7 +5132,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
 </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2654,7 +5164,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
   <div class="mobile-menu-overlay"></div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2666,7 +5192,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     <div class="pd-ltr-20">
+
+
+
+
+
+
+
+
 
 
 
@@ -2678,7 +5216,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="row">
+
+
+
+
 
 
 
@@ -2686,7 +5232,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div class="title"><h4>Complaints Management</h4></div>
+
+
+
+
 
 
 
@@ -2694,11 +5248,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               Phase: <b><?= esc($phase) ?></b> |
 
 
 
+
+
+
+
               Logged in as <b><?= esc($adminName !== '' ? $adminName : $adminEmail) ?></b>
+
+
+
+
 
 
 
@@ -2707,7 +5273,16 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
           </div>
+
+
+
+
 
 
 
@@ -2715,7 +5290,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2727,11 +5314,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="alert alert-success"><?= esc($ok) ?></div>
 
 
 
+
+
+
+
       <?php endif; ?>
+
+
+
+
 
 
 
@@ -2739,11 +5338,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="alert alert-danger"><?= esc($err) ?></div>
 
 
 
+
+
+
+
       <?php endif; ?>
+
+
+
+
+
+
+
+
 
 
 
@@ -2755,11 +5370,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="col-xl-3 col-lg-6 col-md-6 mb-20">
 
 
 
+
+
+
+
           <div class="card-box pd-20">
+
+
+
+
 
 
 
@@ -2767,7 +5394,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div id="rtCountAll" class="font-30 weight-700"><?= (int)$counts['all'] ?></div>
+
+
+
+
 
 
 
@@ -2775,7 +5410,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         </div>
+
+
+
+
 
 
 
@@ -2783,7 +5426,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <div class="card-box pd-20">
+
+
+
+
 
 
 
@@ -2791,7 +5442,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div id="rtCountOpen" class="font-30 weight-700 text-warning"><?= (int)$counts['open'] ?></div>
+
+
+
+
 
 
 
@@ -2799,7 +5458,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         </div>
+
+
+
+
 
 
 
@@ -2807,7 +5474,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <div class="card-box pd-20">
+
+
+
+
 
 
 
@@ -2815,7 +5490,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div id="rtCountInProgress" class="font-30 weight-700 text-primary"><?= (int)$counts['in_progress'] ?></div>
+
+
+
+
 
 
 
@@ -2823,7 +5506,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         </div>
+
+
+
+
 
 
 
@@ -2831,7 +5522,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <div class="card-box pd-20">
+
+
+
+
 
 
 
@@ -2839,7 +5538,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div id="rtCountResolvedClosed" class="font-30 weight-700 text-success"><?= (int)($counts['resolved'] + $counts['closed']) ?></div>
+
+
+
+
 
 
 
@@ -2847,11 +5554,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         </div>
 
 
 
+
+
+
+
       </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2863,7 +5586,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap:10px;">
+
+
+
+
 
 
 
@@ -2871,7 +5602,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <div class="filter-pills">
+
+
+
+
 
 
 
@@ -2879,7 +5618,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <a class="filter-pill <?= $filter==='open' ? 'active' : '' ?>" href="admin_complaints.php?filter=open">Open (<span id="rtFilterOpen"><?= (int)$counts['open'] ?></span>)</a>
+
+
+
+
 
 
 
@@ -2887,7 +5634,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <a class="filter-pill <?= $filter==='resolved' ? 'active' : '' ?>" href="admin_complaints.php?filter=resolved">Resolved (<span id="rtFilterResolved"><?= (int)$counts['resolved'] ?></span>)</a>
+
+
+
+
 
 
 
@@ -2895,7 +5650,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           </div>
+
+
+
+
 
 
 
@@ -2903,7 +5666,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -2915,7 +5690,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <!-- LEFT LIST -->
+
+
+
+
 
 
 
@@ -2923,7 +5706,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <div class="d-flex justify-content-between align-items-center mb-15">
+
+
+
+
 
 
 
@@ -2931,12 +5722,29 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <span class="badge-soft badge-soft-info"><span id="rtResultCount"><?= count($complaints) ?></span> result(s)</span>
 
 
 
+
+
+
+
           </div>
+
           <div id="rtComplaintList">
+
+
+
+
+
+
+
+
 
 
 
@@ -2948,7 +5756,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div class="text-secondary">No complaints found for this filter.</div>
+
+
+
+
 
 
 
@@ -2956,7 +5772,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <?php foreach ($complaints as $c): ?>
+
+
+
+
 
 
 
@@ -2964,7 +5788,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 $name = trim((string)($c['first_name'] ?? '') . ' ' . (string)($c['middle_name'] ?? '') . ' ' . (string)($c['last_name'] ?? ''));
+
+
+
+
 
 
 
@@ -2972,7 +5804,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               ?>
+
+
+
+
 
 
 
@@ -2980,7 +5820,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                  href="admin_complaints.php?filter=<?= urlencode($filter) ?>&complaint_id=<?= (int)$c['id'] ?>">
+
+
+
+
 
 
 
@@ -2988,7 +5836,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div>
+
+
+
+
 
 
 
@@ -2996,7 +5852,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <div class="text-secondary font-12"><?= esc($name !== '' ? $name : 'Unknown Homeowner') ?></div>
+
+
+
+
 
 
 
@@ -3004,7 +5868,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3012,7 +5884,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <span class="badge-soft <?= esc(complaintStatusBadgeClass((string)$c['status'])) ?>">
+
+
+
+
 
 
 
@@ -3020,7 +5900,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     </span>
+
+
+
+
 
 
 
@@ -3028,7 +5916,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3040,7 +5940,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="d-flex align-items-center flex-wrap" style="gap:6px;">
+
+
+
+
 
 
 
@@ -3048,7 +5956,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       <?= esc(strtoupper((string)$c['priority'])) ?>
+
+
+
+
 
 
 
@@ -3056,17 +5972,35 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <?php if ((int)($c['evidence_count'] ?? 0) > 0): ?>
+
+
+
+
 
 
 
                       <span class="badge-soft badge-soft-success" title="Complaint has proof/evidence">
 
+
+
                         <i class="dw dw-attachment"></i>
+
+
 
                         Evidence
 
+
+
                       </span>
+
+
+
+
 
 
 
@@ -3074,7 +6008,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3082,7 +6024,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
+
+
+
+
 
 
 
@@ -3090,16 +6040,37 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <?php endforeach; ?>
 
 
 
+
+
+
+
           <?php endif; ?>
+
           </div>
 
 
 
+
+
+
+
         </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3111,7 +6082,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         <div>
+
+
+
+
 
 
 
@@ -3119,7 +6098,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div class="complaint-chat-card pd-30 text-center text-secondary">
+
+
+
+
 
 
 
@@ -3127,7 +6114,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             </div>
+
+
+
+
 
 
 
@@ -3135,7 +6130,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <?php
+
+
+
+
 
 
 
@@ -3143,7 +6146,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 (string)($selectedComplaint['first_name'] ?? '') . ' ' .
+
+
+
+
 
 
 
@@ -3151,11 +6162,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 (string)($selectedComplaint['last_name'] ?? '')
 
 
 
+
+
+
+
               );
+
+
+
+
 
 
 
@@ -3167,7 +6190,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
             <!-- complaint info -->
+
+
+
+
 
 
 
@@ -3175,7 +6210,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               <div class="d-flex justify-content-between align-items-start flex-wrap" style="gap:12px;">
+
+
+
+
 
 
 
@@ -3183,11 +6226,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <h4 class="mb-5"><?= esc($selectedComplaint['subject']) ?></h4>
 
 
 
+
+
+
+
                   <div class="text-secondary">
+
+
+
+
 
 
 
@@ -3195,11 +6250,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
 
 
 
+
+
+
+
                   <div class="text-secondary">
+
+
+
+
 
 
 
@@ -3207,11 +6274,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
 
 
 
+
+
+
+
                   <div class="text-secondary">
+
+
+
+
 
 
 
@@ -3219,11 +6298,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
 
 
 
+
+
+
+
                   <div class="text-secondary">
+
+
+
+
 
 
 
@@ -3231,7 +6322,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3239,7 +6338,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     Assigned Admin: <b><?= esc((string)($selectedComplaint['assigned_admin_name'] ?: ($adminName ?: $adminEmail))) ?></b>
+
+
+
+
 
 
 
@@ -3247,7 +6354,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3259,7 +6378,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="mb-2">
+
+
+
+
 
 
 
@@ -3267,7 +6394,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       <?= esc(strtoupper(str_replace('_',' ', (string)$selectedComplaint['status']))) ?>
+
+
+
+
 
 
 
@@ -3275,7 +6410,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3283,7 +6426,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <span class="<?= esc(complaintPriorityClass((string)$selectedComplaint['priority'])) ?>">
+
+
+
+
 
 
 
@@ -3291,7 +6442,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     </span>
+
+
+
+
 
 
 
@@ -3299,11 +6458,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
 
 
 
+
+
+
+
               </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3315,7 +6490,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <div class="col-md-3 mb-2">
+
+
+
+
 
 
 
@@ -3323,7 +6506,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div><b><?= esc(ucwords(str_replace('_',' ', (string)$selectedComplaint['category']))) ?></b></div>
+
+
+
+
 
 
 
@@ -3331,7 +6522,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <div class="col-md-3 mb-2">
+
+
+
+
 
 
 
@@ -3339,7 +6538,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div><b><?= esc(date('M d, Y h:i A', strtotime((string)$selectedComplaint['created_at']))) ?></b></div>
+
+
+
+
 
 
 
@@ -3347,7 +6554,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <div class="col-md-3 mb-2">
+
+
+
+
 
 
 
@@ -3355,11 +6570,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div><b><?= esc(date('M d, Y h:i A', strtotime((string)$selectedComplaint['updated_at']))) ?></b></div>
 
 
 
+
+
+
+
                 </div>
+
+
+
+
 
 
 
@@ -3367,7 +6594,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="mini-label">Complaint ID</div>
+
+
+
+
 
 
 
@@ -3375,11 +6610,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
 
 
 
+
+
+
+
               </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3391,7 +6642,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <div class="mini-label mb-1">Initial Complaint</div>
+
+
+
+
 
 
 
@@ -3399,7 +6658,17 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               </div>
+
+
+
+
+
+
 
 
 
@@ -3409,23 +6678,47 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <div class="evidence-panel-header">
+
+
+
+
 
 
 
                   <div>
 
+
+
                     <div class="evidence-panel-title">
+
+
 
                       <i class="dw dw-attachment"></i>
 
+
+
                       Proof / Evidence
+
+
 
                     </div>
 
+
+
                     <div class="evidence-required-note">Evidence is required for newly submitted complaints.</div>
 
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3433,7 +6726,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
+
+
+
+
 
 
 
@@ -3441,11 +6742,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="evidence-empty">
+
+
 
                     Evidence storage is not initialized. Import <b>complaint_attachments.sql</b> first.
 
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3453,11 +6766,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="evidence-empty">
+
+
 
                     No proof/evidence is attached to this complaint. This can happen with complaints filed before evidence became required.
 
+
+
                   </div>
+
+
+
+
 
 
 
@@ -3465,7 +6790,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <div class="evidence-grid">
+
+
+
+
 
 
 
@@ -3473,15 +6806,31 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       <?php
+
+
 
                         $evidenceUrl = complaintAttachmentUrl($attachment['file_path'] ?? '');
 
+
+
                         $evidenceKind = (string)($attachment['file_kind'] ?? '');
+
+
 
                         $evidenceMime = (string)($attachment['mime_type'] ?? '');
 
+
+
                       ?>
+
+
+
+
 
 
 
@@ -3489,7 +6838,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                         <div class="evidence-item">
+
+
+
+
 
 
 
@@ -3497,15 +6854,31 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                             <?php if ($evidenceKind === 'image'): ?>
+
+
+
+
 
 
 
                               <a href="<?= esc($evidenceUrl) ?>" target="_blank" rel="noopener" style="display:block;width:100%;">
 
+
+
                                 <img src="<?= esc($evidenceUrl) ?>" alt="Complaint evidence">
 
+
+
                               </a>
+
+
+
+
 
 
 
@@ -3513,13 +6886,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                               <video controls preload="metadata">
+
+
 
                                 <source src="<?= esc($evidenceUrl) ?>" type="<?= esc($evidenceMime !== '' ? $evidenceMime : 'video/mp4') ?>">
 
+
+
                                 Your browser does not support video playback.
 
+
+
                               </video>
+
+
+
+
 
 
 
@@ -3527,7 +6914,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                               <div class="evidence-empty">Unsupported evidence type.</div>
+
+
+
+
 
 
 
@@ -3535,7 +6930,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                           </div>
+
+
+
+
 
 
 
@@ -3543,31 +6946,63 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                             <div class="evidence-name" title="<?= esc((string)($attachment['original_name'] ?? 'Evidence')) ?>">
+
+
 
                               <?= esc((string)($attachment['original_name'] ?? 'Evidence')) ?>
 
+
+
                             </div>
+
+
+
+
 
 
 
                             <div class="evidence-submeta">
 
+
+
                               <?= esc(strtoupper($evidenceKind !== '' ? $evidenceKind : 'FILE')) ?>
 
+
+
                               • <?= esc(formatComplaintFileSize((int)($attachment['file_size'] ?? 0))) ?>
+
+
 
                             </div>
 
 
 
+
+
+
+
                             <a class="evidence-open" href="<?= esc($evidenceUrl) ?>" target="_blank" rel="noopener">
+
+
 
                               <i class="dw dw-external-link"></i>
 
+
+
                               Open evidence
 
+
+
                             </a>
+
+
+
+
 
 
 
@@ -3575,7 +7010,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                         </div>
+
+
+
+
 
 
 
@@ -3583,7 +7026,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <?php endforeach; ?>
+
+
+
+
 
 
 
@@ -3591,11 +7042,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <?php endif; ?>
 
 
 
+
+
+
+
               </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3607,11 +7074,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <form method="POST" class="form-inline">
 
 
 
+
+
+
+
                   <input type="hidden" name="update_status_submit" value="1">
+
+
+
+
 
 
 
@@ -3623,7 +7102,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
                   <label class="mr-2 font-weight-bold">Update Status:</label>
+
+
+
+
 
 
 
@@ -3631,7 +7122,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <option value="open" <?= ((string)$selectedComplaint['status']==='open' ? 'selected' : '') ?>>Open</option>
+
+
+
+
 
 
 
@@ -3639,7 +7138,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <option value="resolved" <?= ((string)$selectedComplaint['status']==='resolved' ? 'selected' : '') ?>>Resolved</option>
+
+
+
+
 
 
 
@@ -3647,7 +7154,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   </select>
+
+
+
+
 
 
 
@@ -3655,7 +7170,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </form>
+
+
+
+
 
 
 
@@ -3663,7 +7186,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3675,7 +7210,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
             <div class="complaint-chat-card pd-20">
+
+
+
+
 
 
 
@@ -3683,7 +7226,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <h5 class="mb-0">Conversation</h5>
+
+
+
+
 
 
 
@@ -3691,7 +7242,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3703,7 +7266,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <?php if (empty($messages)): ?>
+
+
+
+
 
 
 
@@ -3711,7 +7282,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <?php else: ?>
+
+
+
+
 
 
 
@@ -3719,7 +7298,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     <?php
+
+
+
+
 
 
 
@@ -3727,7 +7314,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       $senderName = $isMine
+
+
+
+
 
 
 
@@ -3735,7 +7330,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                         : trim((string)($m['first_name'] ?? '') . ' ' . (string)($m['middle_name'] ?? '') . ' ' . (string)($m['last_name'] ?? ''));
+
+
+
+
 
 
 
@@ -3743,7 +7346,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                     ?>
+
+
+
+
 
 
 
@@ -3751,7 +7362,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       <div class="msg-bubble">
+
+
+
+
 
 
 
@@ -3759,7 +7378,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                         <div style="white-space:pre-wrap; line-height:1.45;"><?= esc((string)$m['message']) ?></div>
+
+
+
+
 
 
 
@@ -3767,7 +7394,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                       </div>
+
+
+
+
 
 
 
@@ -3775,11 +7410,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <?php endforeach; ?>
 
 
 
+
+
+
+
                 <?php endif; ?>
+
+
+
+
 
 
 
@@ -3791,7 +7438,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
               <form method="POST" class="mt-15">
+
+
+
+
 
 
 
@@ -3799,7 +7458,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 <input type="hidden" name="complaint_id" value="<?= (int)$selectedComplaint['id'] ?>">
+
+
+
+
 
 
 
@@ -3807,7 +7474,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <label class="font-weight-bold">Reply to Homeowner</label>
+
+
+
+
 
 
 
@@ -3815,7 +7490,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                 </div>
+
+
+
+
 
 
 
@@ -3823,7 +7506,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
                   <i class="dw dw-paper-plane1"></i> Send Reply
+
+
+
+
 
 
 
@@ -3831,7 +7522,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
               </form>
+
+
+
+
 
 
 
@@ -3839,7 +7538,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
           <?php endif; ?>
+
+
+
+
 
 
 
@@ -3847,7 +7554,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
       </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3859,7 +7578,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
         © Copyright South Meridian Homes All Rights Reserved
+
+
+
+
 
 
 
@@ -3867,11 +7594,27 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
     </div>
 
 
 
+
+
+
+
   </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -3883,11 +7626,23 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
   <script src="vendors/scripts/script.min.js"></script>
 
 
 
+
+
+
+
   <script src="vendors/scripts/process.js"></script>
+
+
+
+
 
 
 
@@ -3899,7 +7654,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
   <!-- ADMIN DARK MODE -->
+
+
+
+
 
 
 
@@ -3911,284 +7678,573 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
+
+
+
+
 <div id="complaintRealtimeToast" class="complaint-rt-toast" role="alert" aria-live="assertive">
+
   <div class="complaint-rt-toast-head">
+
     <div id="complaintRtIcon" class="complaint-rt-icon">🔔</div>
+
     <div style="min-width:0;flex:1;">
+
       <div id="complaintRtTitle" class="complaint-rt-title">New complaint received</div>
+
       <div id="complaintRtMeta" class="complaint-rt-meta"></div>
+
     </div>
+
   </div>
+
   <div class="complaint-rt-actions">
+
     <button type="button" id="complaintRtDismiss" class="complaint-rt-dismiss">Dismiss</button>
+
     <a id="complaintRtOpen" class="complaint-rt-open" href="#">Open Complaint</a>
+
   </div>
+
 </div>
 
+
+
 <script>
+
 /*
+
 |--------------------------------------------------------------------------
+
 | Real-time complaint page
+
 |--------------------------------------------------------------------------
+
 | Keeps list/counts/popups real-time. Sound is owned only by the persistent
+
 | complaint_alert_monitor.php so navigation between admin files does not
+
 | create competing Web Audio engines.
+
 */
+
 (function () {
+
   const apiUrl = 'admin_complaints_realtime_api.php';
+
   const currentFilter = <?= json_encode($filter, JSON_UNESCAPED_SLASHES) ?>;
+
   let lastComplaintId = <?= (int)$latestComplaintId ?>;
+
   let pollBusy = false;
+
   let toastTimer = null;
+
   let currentToastComplaintId = 0;
+
   const originalTitle = document.title;
+
   let titleResetTimer = null;
 
+
+
   const complaintChannel = ('BroadcastChannel' in window)
+
     ? new BroadcastChannel('south-meridian-complaint-alerts')
+
     : null;
 
+
+
   const toast = document.getElementById('complaintRealtimeToast');
+
   const toastIcon = document.getElementById('complaintRtIcon');
+
   const toastTitle = document.getElementById('complaintRtTitle');
+
   const toastMeta = document.getElementById('complaintRtMeta');
+
   const toastOpen = document.getElementById('complaintRtOpen');
+
   const toastDismiss = document.getElementById('complaintRtDismiss');
+
   const list = document.getElementById('rtComplaintList');
 
+
+
   function broadcast(type, payload) {
+
     if (!complaintChannel) return;
+
     complaintChannel.postMessage(Object.assign({
+
       type: type,
+
       source: 'admin-complaints-page'
+
     }, payload || {}));
+
   }
+
+
 
   function escapeHtml(value) {
+
     return String(value == null ? '' : value)
+
       .replace(/&/g, '&amp;')
+
       .replace(/</g, '&lt;')
+
       .replace(/>/g, '&gt;')
+
       .replace(/"/g, '&quot;')
+
       .replace(/'/g, '&#039;');
+
   }
+
+
 
   function priorityBadgeClass(p) {
+
     if (p === 'urgent') return 'ann-badge urgent';
+
     if (p === 'high') return 'ann-badge important';
+
     if (p === 'normal') return 'ann-badge normal';
+
     return 'ann-badge';
+
   }
+
+
 
   function statusBadgeClass(st) {
+
     if (st === 'open') return 'badge-soft badge-soft-warning';
+
     if (st === 'in_progress') return 'badge-soft badge-soft-info';
+
     if (st === 'resolved') return 'badge-soft badge-soft-success';
+
     if (st === 'closed') return 'badge-soft badge-soft-secondary';
+
     return 'badge-soft badge-soft-warning';
+
   }
+
+
 
   function showToast(c) {
+
     if (!toast) return;
 
+
+
     const p = String(c.priority || 'normal').toLowerCase();
+
     const iconMap = { low: '🔔', normal: '🔔', high: '⚠️', urgent: '🚨' };
+
     const labelMap = {
+
       low: 'LOW priority complaint',
+
       normal: 'New complaint received',
+
       high: 'HIGH priority complaint',
+
       urgent: 'URGENT complaint received'
+
     };
+
+
 
     currentToastComplaintId = Number(c.id || 0);
+
     toast.className = 'complaint-rt-toast priority-' + p + ' show';
+
     toastIcon.textContent = iconMap[p] || '🔔';
+
     toastTitle.textContent = labelMap[p] || 'New complaint received';
+
     toastMeta.textContent = c.subject + ' — ' + c.homeowner_name
+
       + (c.house_lot_number ? ' • ' + c.house_lot_number : '');
+
     toastOpen.href = 'admin_complaints.php?filter=' + encodeURIComponent(currentFilter)
+
       + '&complaint_id=' + encodeURIComponent(c.id);
 
+
+
     clearTimeout(toastTimer);
+
     // High and Urgent stay visible until Dismiss/Open.
+
     if (p !== 'high' && p !== 'urgent') {
+
       toastTimer = setTimeout(function () {
+
         toast.classList.remove('show');
+
       }, 8000);
+
     }
+
   }
+
+
 
   if (toastDismiss) {
+
     toastDismiss.addEventListener('click', function () {
+
       if (currentToastComplaintId > 0) {
+
         broadcast('dismiss', { complaintId: currentToastComplaintId });
+
       }
+
       toast.classList.remove('show');
+
       currentToastComplaintId = 0;
+
       document.title = originalTitle;
+
     });
+
   }
+
+
 
   if (toastOpen) {
+
     toastOpen.addEventListener('click', function () {
+
       if (currentToastComplaintId > 0) {
+
         broadcast('open', { complaintId: currentToastComplaintId });
+
       }
+
     });
+
   }
+
+
 
   if (complaintChannel) {
+
     complaintChannel.onmessage = function (event) {
+
       const message = event.data || {};
+
       if (
+
         (message.type === 'dismiss' || message.type === 'open') &&
+
         Number(message.complaintId || 0) === currentToastComplaintId
+
       ) {
+
         toast.classList.remove('show');
+
         currentToastComplaintId = 0;
+
         document.title = originalTitle;
+
       }
+
     };
+
   }
+
+
 
   function flashTitle(p) {
+
     clearTimeout(titleResetTimer);
+
     const labels = {
+
       urgent: '🚨 URGENT COMPLAINT',
+
       high: '⚠️ HIGH PRIORITY COMPLAINT',
+
       normal: '🔔 New Complaint',
+
       low: '🔔 Low Priority Complaint'
+
     };
+
     document.title = labels[p] || '🔔 New Complaint';
 
+
+
     if (p !== 'high' && p !== 'urgent') {
+
       titleResetTimer = setTimeout(function () {
+
         document.title = originalTitle;
+
       }, 7000);
+
     }
+
   }
+
+
 
   function setCount(id, value) {
+
     const el = document.getElementById(id);
+
     if (el) el.textContent = String(value || 0);
+
   }
+
+
 
   function updateCounts(c) {
+
     if (!c) return;
+
     setCount('rtCountAll', c.all);
+
     setCount('rtCountOpen', c.open);
+
     setCount('rtCountInProgress', c.in_progress);
+
     setCount('rtCountResolvedClosed', Number(c.resolved || 0) + Number(c.closed || 0));
+
     setCount('rtFilterAll', c.all);
+
     setCount('rtFilterOpen', c.open);
+
     setCount('rtFilterInProgress', c.in_progress);
+
     setCount('rtFilterResolved', c.resolved);
+
     setCount('rtFilterClosed', c.closed);
+
   }
+
+
 
   function shouldShow(c) {
+
     return currentFilter === 'all' || String(c.status) === currentFilter;
+
   }
 
+
+
   function prependComplaint(c) {
+
     if (!list || !shouldShow(c)) return;
+
+
 
     if (list.querySelector('[data-complaint-id="' + Number(c.id) + '"]')) return;
 
+
+
     const empty = Array.from(list.querySelectorAll('.text-secondary')).find(function (el) {
+
       return /No complaints found/.test(el.textContent || '');
+
     });
+
     if (empty) empty.remove();
 
+
+
     const a = document.createElement('a');
+
     a.className = 'complaint-item';
+
     a.dataset.complaintId = String(c.id);
+
     a.href = 'admin_complaints.php?filter=' + encodeURIComponent(currentFilter)
+
       + '&complaint_id=' + encodeURIComponent(c.id);
 
+
+
     const p = String(c.priority || 'normal').toLowerCase();
+
     const statusLabel = String(c.status || 'open').replace(/_/g, ' ').toUpperCase();
+
     const evidence = Number(c.evidence_count || 0) > 0
+
       ? '<span class="badge-soft badge-soft-success" title="Complaint has proof/evidence"><i class="dw dw-attachment"></i> Evidence</span>'
+
       : '';
 
+
+
     a.innerHTML =
+
       '<div class="d-flex justify-content-between align-items-start" style="gap:8px;">' +
+
         '<div>' +
+
           '<div class="font-weight-bold">' + escapeHtml(c.subject) + '<span class="rt-new-badge">NEW</span></div>' +
+
           '<div class="text-secondary font-12">' + escapeHtml(c.homeowner_name) + '</div>' +
+
           '<div class="text-secondary font-12">' + escapeHtml(c.house_lot_number || '') + '</div>' +
+
         '</div>' +
+
         '<div class="text-right">' +
+
           '<span class="' + statusBadgeClass(c.status) + '">' + escapeHtml(statusLabel) + '</span>' +
+
         '</div>' +
+
       '</div>' +
+
       '<div class="mt-10 d-flex justify-content-between align-items-center flex-wrap" style="gap:8px;">' +
+
         '<div class="d-flex align-items-center flex-wrap" style="gap:6px;">' +
+
           '<span class="' + priorityBadgeClass(p) + '">' + escapeHtml(p.toUpperCase()) + '</span>' +
+
           evidence +
+
         '</div>' +
+
         '<span class="font-12 text-secondary">' +
+
           escapeHtml(c.updated_at_display || c.created_at_display || '') +
+
         '</span>' +
+
       '</div>';
+
+
 
     list.prepend(a);
 
+
+
     const rc = document.getElementById('rtResultCount');
+
     if (rc) rc.textContent = String(Number(rc.textContent || 0) + 1);
+
   }
+
+
 
   function processNewComplaint(c, index) {
+
     prependComplaint(c);
+
     setTimeout(function () {
+
       const p = String(c.priority || 'normal').toLowerCase();
+
       showToast(c);
+
       flashTitle(p);
+
       broadcast('complaint', { complaint: c });
+
     }, index * 500);
+
   }
+
+
 
   async function pollComplaints() {
+
     if (pollBusy || document.hidden) return;
+
     pollBusy = true;
 
+
+
     try {
+
       const response = await fetch(
+
         apiUrl + '?after_id=' + encodeURIComponent(lastComplaintId),
+
         {
+
           credentials: 'same-origin',
+
           cache: 'no-store',
+
           headers: {
+
             'Accept': 'application/json',
+
             'X-Requested-With': 'XMLHttpRequest'
+
           }
+
         }
+
       );
 
+
+
       const data = await response.json();
+
       if (!response.ok || !data.success || data.authorized === false) return;
 
+
+
       lastComplaintId = Math.max(lastComplaintId, Number(data.latest_id || 0));
+
       updateCounts(data.counts || {});
 
+
+
       const items = Array.isArray(data.complaints) ? data.complaints : [];
+
       items.forEach(processNewComplaint);
+
     } catch (e) {
+
       // Silent retry. The persistent monitor also polls independently.
+
     } finally {
+
       pollBusy = false;
+
     }
+
   }
 
+
+
   setInterval(pollComplaints, 2000);
+
   document.addEventListener('visibilitychange', function () {
+
     if (!document.hidden) pollComplaints();
+
   });
+
 })();
+
 </script>
 
+
+
 <div id="accessToast" class="access-toast">
+
+
+
+
 
 
 
@@ -4196,7 +8252,15 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 </div>
+
+
+
+
 
 
 
@@ -4204,7 +8268,19 @@ if ($selectedComplaintId > 0) {
 
 
 
+
+
+
+
 window.userPermissions = <?= json_encode($permissions) ?>;
+
+
+
+
+
+
+
+
 
 
 
@@ -4220,7 +8296,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
+
+
+
+
   const toast = document.getElementById('accessToast');
+
+
+
+
+
+
+
+
 
 
 
@@ -4232,7 +8324,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
     toast.classList.add('show');
+
+
+
+
+
+
+
+
 
 
 
@@ -4244,7 +8348,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
       toast.classList.remove('show');
+
+
+
+
 
 
 
@@ -4252,7 +8364,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
   }
+
+
+
+
+
+
+
+
 
 
 
@@ -4268,7 +8392,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
+
+
+
+
     link.addEventListener('click', function(e){
+
+
+
+
+
+
+
+
 
 
 
@@ -4280,7 +8420,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
       const allowed = !!window.userPermissions[moduleKey];
+
+
+
+
+
+
+
+
 
 
 
@@ -4292,7 +8444,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
         e.preventDefault();
+
+
+
+
 
 
 
@@ -4300,7 +8460,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
       }
+
+
+
+
+
+
+
+
 
 
 
@@ -4316,7 +8488,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
+
+
+
+
   });
+
+
+
+
+
+
+
+
 
 
 
@@ -4328,11 +8516,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+
 </script>
 
 
 
+
+
+
+
 </body>
+
+
+
+
 
 
 

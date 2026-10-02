@@ -1,208 +1,186 @@
 <?php
+declare(strict_types=1);
+
+define('SMH_LOGIN_SECURITY_VERSION', '2026-10-02-30SEC-V4');
+
+/*
+|--------------------------------------------------------------------------
+| South Meridian Homes - Login Security Helper
+|--------------------------------------------------------------------------
+|
+| Expected flow:
+|   1st set: 3 wrong passwords -> 30-second cooldown
+|   Next wrong password after cooldown -> hard lock
+|   Hard lock -> email + appeal link
+|   Admin unlock -> failed-attempt cycle resets
+|
+*/
 
 if (!function_exists('security_client_ip')) {
     function security_client_ip(): string
     {
-        return substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+        $candidates = [
+            $_SERVER['HTTP_CF_CONNECTING_IP'] ?? '',
+            $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '',
+            $_SERVER['REMOTE_ADDR'] ?? ''
+        ];
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string)$candidate);
+
+            if ($candidate === '') {
+                continue;
+            }
+
+            if (str_contains($candidate, ',')) {
+                $candidate = trim(explode(',', $candidate)[0]);
+            }
+
+            return mb_substr($candidate, 0, 45);
+        }
+
+        return '';
     }
 }
 
 if (!function_exists('security_user_agent')) {
     function security_user_agent(): string
     {
-        return substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+        return mb_substr(
+            trim((string)($_SERVER['HTTP_USER_AGENT'] ?? '')),
+            0,
+            500
+        );
     }
 }
 
-if (!function_exists('security_base_url')) {
-    function security_base_url(): string
+if (!function_exists('security_config')) {
+    function security_config(): array
     {
-        $scheme =
+        static $config = null;
+
+        if (is_array($config)) {
+            return $config;
+        }
+
+        $config = [];
+
+        $secretsFile = __DIR__ . '/admin/private/hoa_secrets.php';
+
+        if (is_file($secretsFile)) {
+            $loaded = require $secretsFile;
+
+            if (is_array($loaded)) {
+                $config = $loaded;
+            }
+        }
+
+        return $config;
+    }
+}
+
+if (!function_exists('security_app_base_url')) {
+    function security_app_base_url(): string
+    {
+        $config = security_config();
+
+        $configured = rtrim(
+            trim((string)($config['app_base_url'] ?? '')),
+            '/'
+        );
+
+        if (
+            $configured !== '' &&
+            filter_var($configured, FILTER_VALIDATE_URL)
+        ) {
+            return $configured;
+        }
+
+        $https =
             (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                ? 'https'
-                : 'http';
+            || (string)($_SERVER['SERVER_PORT'] ?? '') === '443';
 
-        $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $scheme = $https ? 'https' : 'http';
+        $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
 
-        $scriptName =
+        if ($host === '') {
+            return '';
+        }
+
+        $scriptName = str_replace(
+            '\\',
+            '/',
+            (string)($_SERVER['SCRIPT_NAME'] ?? '/index.php')
+        );
+
+        $directory = rtrim(
             str_replace(
                 '\\',
                 '/',
-                (string)($_SERVER['SCRIPT_NAME'] ?? '/index.php')
-            );
-
-        $dir = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
-
-        if ($dir === '.' || $dir === '/') {
-            $dir = '';
-        }
-
-        return $scheme . '://' . $host . $dir;
-    }
-}
-
-if (!function_exists('security_load_smtp_config')) {
-    function security_load_smtp_config(): array
-    {
-        $username = trim((string)getenv('HOA_SMTP_USERNAME'));
-        $password = preg_replace(
-            '/\s+/',
-            '',
-            trim((string)getenv('HOA_SMTP_PASSWORD'))
+                dirname($scriptName)
+            ),
+            '/'
         );
 
-        if ($username !== '' && $password !== '') {
-            return [
-                'username' => $username,
-                'password' => $password
-            ];
+        /*
+         * index.php is in the project root.
+         * If this helper is called from /admin/login_security.php,
+         * step back from /admin to the project root.
+         */
+        if (str_ends_with($directory, '/admin')) {
+            $directory = substr($directory, 0, -6);
         }
 
-        $possibleFiles = [
-            __DIR__ . '/private/hoa_secrets.php',
-            __DIR__ . '/admin/private/hoa_secrets.php'
-        ];
-
-        foreach ($possibleFiles as $file) {
-            if (!is_file($file)) {
-                continue;
-            }
-
-            $secrets = require $file;
-
-            if (!is_array($secrets)) {
-                continue;
-            }
-
-            $username = trim(
-                (string)($secrets['smtp_username'] ?? '')
-            );
-
-            $password = preg_replace(
-                '/\s+/',
-                '',
-                trim(
-                    (string)($secrets['smtp_password'] ?? '')
-                )
-            );
-
-            if ($username !== '' && $password !== '') {
-                return [
-                    'username' => $username,
-                    'password' => $password
-                ];
-            }
-        }
-
-        return [
-            'username' => '',
-            'password' => ''
-        ];
+        return
+            $scheme .
+            '://' .
+            $host .
+            ($directory !== '' && $directory !== '.'
+                ? $directory
+                : '');
     }
 }
 
-if (!function_exists('security_send_email')) {
-    function security_send_email(
-        string $to,
-        string $recipientName,
-        string $subject,
-        string $htmlBody,
-        string $textBody = ''
-    ): bool {
-        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            return false;
+if (!function_exists('security_appeal_url')) {
+    function security_appeal_url(string $token): string
+    {
+        $baseUrl = security_app_base_url();
+
+        if ($baseUrl === '') {
+            return 'login_security_appeal.php?token=' .
+                rawurlencode($token);
         }
 
-        $autoload = __DIR__ . '/vendor/autoload.php';
-
-        if (!is_file($autoload)) {
-            error_log(
-                'Login security email not sent: vendor/autoload.php not found.'
-            );
-            return false;
-        }
-
-        require_once $autoload;
-
-        if (!class_exists(\PHPMailer\PHPMailer\PHPMailer::class)) {
-            error_log(
-                'Login security email not sent: PHPMailer is not installed.'
-            );
-            return false;
-        }
-
-        $smtp = security_load_smtp_config();
-
-        if (
-            $smtp['username'] === '' ||
-            $smtp['password'] === '' ||
-            !filter_var($smtp['username'], FILTER_VALIDATE_EMAIL)
-        ) {
-            error_log(
-                'Login security email not sent: SMTP credentials are not configured.'
-            );
-            return false;
-        }
-
-        try {
-            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = $smtp['username'];
-            $mail->Password = $smtp['password'];
-            $mail->SMTPSecure =
-                \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
-            $mail->CharSet = 'UTF-8';
-            $mail->Timeout = 30;
-            $mail->SMTPDebug = 0;
-
-            $mail->setFrom(
-                $smtp['username'],
-                'South Meridian HOA'
-            );
-
-            $mail->addAddress(
-                $to,
-                $recipientName !== ''
-                    ? $recipientName
-                    : $to
-            );
-
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body = $htmlBody;
-            $mail->AltBody =
-                $textBody !== ''
-                    ? $textBody
-                    : strip_tags($htmlBody);
-
-            $mail->send();
-
-            return true;
-
-        } catch (\Throwable $e) {
-            error_log(
-                'Login security email error: ' .
-                $e->getMessage()
-            );
-
-            return false;
-        }
+        return
+            $baseUrl .
+            '/login_security_appeal.php?token=' .
+            rawurlencode($token);
     }
 }
 
-if (!function_exists('security_upsert_state')) {
-    function security_upsert_state(
+if (!function_exists('security_ensure_state')) {
+    function security_ensure_state(
         mysqli $conn,
         array $account
-    ): int {
-        $type = (string)$account['type'];
-        $id = (int)$account['id'];
-        $email = trim((string)$account['email']);
+    ): array {
+        $accountType = trim((string)($account['type'] ?? ''));
+        $accountId = (int)($account['id'] ?? 0);
+        $email = strtolower(trim((string)($account['email'] ?? '')));
         $phase = trim((string)($account['phase'] ?? ''));
+
+        if (
+            !in_array(
+                $accountType,
+                ['admin', 'homeowner', 'tenant'],
+                true
+            )
+            || $accountId <= 0
+            || $email === ''
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid account data for login security.'
+            );
+        }
 
         $stmt = $conn->prepare("
             INSERT INTO login_security_state
@@ -212,7 +190,7 @@ if (!function_exists('security_upsert_state')) {
                 email,
                 phase
             )
-            VALUES (?,?,?,?)
+            VALUES (?, ?, ?, NULLIF(?, ''))
             ON DUPLICATE KEY UPDATE
                 email = VALUES(email),
                 phase = VALUES(phase)
@@ -220,8 +198,8 @@ if (!function_exists('security_upsert_state')) {
 
         $stmt->bind_param(
             'siss',
-            $type,
-            $id,
+            $accountType,
+            $accountId,
             $email,
             $phase
         );
@@ -230,7 +208,23 @@ if (!function_exists('security_upsert_state')) {
         $stmt->close();
 
         $stmt = $conn->prepare("
-            SELECT id
+            SELECT
+                *,
+                CASE
+                    WHEN hard_locked = 1 THEN 0
+                    WHEN cooldown_stage = 1
+                         AND failed_attempts = 0
+                         AND last_failed_at IS NOT NULL
+                    THEN GREATEST(
+                        30 - TIMESTAMPDIFF(
+                            SECOND,
+                            last_failed_at,
+                            NOW()
+                        ),
+                        0
+                    )
+                    ELSE 0
+                END AS cooldown_seconds
             FROM login_security_state
             WHERE account_type = ?
               AND account_id = ?
@@ -239,90 +233,362 @@ if (!function_exists('security_upsert_state')) {
 
         $stmt->bind_param(
             'si',
-            $type,
-            $id
+            $accountType,
+            $accountId
         );
 
         $stmt->execute();
 
-        $row =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
+        $state = $stmt
+            ->get_result()
+            ->fetch_assoc();
 
         $stmt->close();
 
-        return (int)($row['id'] ?? 0);
-    }
-}
-
-if (!function_exists('security_get_state')) {
-    function security_get_state(
-        mysqli $conn,
-        int $stateId,
-        bool $forUpdate = false
-    ): ?array {
-        $sql = "
-            SELECT *
-            FROM login_security_state
-            WHERE id = ?
-            LIMIT 1
-        ";
-
-        if ($forUpdate) {
-            $sql .= " FOR UPDATE";
+        if (!$state) {
+            throw new RuntimeException(
+                'Unable to create login security state.'
+            );
         }
 
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param('i', $stateId);
-        $stmt->execute();
-
-        $row =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
-
-        $stmt->close();
-
-        return $row ?: null;
+        return $state;
     }
 }
 
-if (!function_exists('security_reset_after_success')) {
-    function security_reset_after_success(
-        mysqli $conn,
-        array $account
-    ): void {
-        $stateId =
-            security_upsert_state(
-                $conn,
-                $account
+if (!function_exists('security_send_email')) {
+    function security_send_email(
+        string $toEmail,
+        string $toName,
+        string $subject,
+        string $htmlBody,
+        string $textBody
+    ): bool {
+        $toEmail = trim($toEmail);
+
+        if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        $autoload = __DIR__ . '/vendor/autoload.php';
+
+        if (!is_file($autoload)) {
+            error_log(
+                'Login security email failed: vendor/autoload.php not found.'
             );
 
-        if ($stateId <= 0) {
-            return;
+            return false;
         }
 
-        $stmt = $conn->prepare("
-            UPDATE login_security_state
-            SET
-                failed_attempts = 0,
-                cooldown_stage = 0,
-                cooldown_until = NULL,
-                last_failed_at = NULL,
-                last_failed_ip = NULL,
-                last_user_agent = NULL
-            WHERE id = ?
-              AND hard_locked = 0
-        ");
+        require_once $autoload;
 
-        $stmt->bind_param(
-            'i',
-            $stateId
+        if (!class_exists(\PHPMailer\PHPMailer\PHPMailer::class)) {
+            error_log(
+                'Login security email failed: PHPMailer is unavailable.'
+            );
+
+            return false;
+        }
+
+        $config = security_config();
+
+        $smtpHost = trim(
+            (string)($config['smtp_host'] ?? 'smtp.gmail.com')
         );
 
-        $stmt->execute();
-        $stmt->close();
+        $smtpUsername = trim(
+            (string)($config['smtp_username'] ?? '')
+        );
+
+        $smtpPassword = preg_replace(
+            '/\s+/',
+            '',
+            trim((string)($config['smtp_password'] ?? ''))
+        );
+
+        $smtpPort = (int)($config['smtp_port'] ?? 587);
+
+        $smtpEncryption = strtolower(
+            trim((string)($config['smtp_encryption'] ?? 'tls'))
+        );
+
+        $fromEmail = trim(
+            (string)($config['smtp_from_email'] ?? $smtpUsername)
+        );
+
+        $fromName = trim(
+            (string)($config['smtp_from_name'] ?? 'South Meridian HOA')
+        );
+
+        if (
+            $smtpUsername === ''
+            || $smtpPassword === ''
+            || !filter_var($smtpUsername, FILTER_VALIDATE_EMAIL)
+        ) {
+            error_log(
+                'Login security email failed: SMTP configuration is incomplete.'
+            );
+
+            return false;
+        }
+
+        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            $fromEmail = $smtpUsername;
+        }
+
+        try {
+            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+
+            $mail->isSMTP();
+            $mail->Host = $smtpHost;
+            $mail->SMTPAuth = true;
+            $mail->Username = $smtpUsername;
+            $mail->Password = $smtpPassword;
+            $mail->Port = $smtpPort;
+            $mail->CharSet = 'UTF-8';
+            $mail->Timeout = 30;
+            $mail->SMTPDebug = 0;
+
+            if ($smtpEncryption === 'ssl') {
+                $mail->SMTPSecure =
+                    \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+            } else {
+                $mail->SMTPSecure =
+                    \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+            }
+
+            $mail->setFrom(
+                $fromEmail,
+                $fromName
+            );
+
+            $mail->addAddress(
+                $toEmail,
+                $toName !== '' ? $toName : $toEmail
+            );
+
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $htmlBody;
+            $mail->AltBody = $textBody;
+
+            $mail->send();
+
+            return true;
+        } catch (Throwable $e) {
+            error_log(
+                'Login security email failed: ' .
+                $e->getMessage()
+            );
+
+            return false;
+        }
+    }
+}
+
+if (!function_exists('security_send_lock_email')) {
+    function security_send_lock_email(
+        string $email,
+        string $displayName,
+        string $appealUrl
+    ): bool {
+        $safeName = htmlspecialchars(
+            $displayName !== '' ? $displayName : 'User',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeAppealUrl = htmlspecialchars(
+            $appealUrl,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $subject =
+            'South Meridian HOA - Account Temporarily Locked';
+
+        $html = "
+            <div style=\"font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;\">
+                <h2 style=\"margin:0 0 12px;color:#b91c1c;\">
+                    Account Temporarily Locked
+                </h2>
+
+                <p>Hello <strong>{$safeName}</strong>,</p>
+
+                <p>
+                    Your South Meridian HOA account was temporarily locked
+                    after repeated incorrect password attempts.
+                </p>
+
+                <p>
+                    If this was you and you need access restored, submit an
+                    unlock appeal using the button below.
+                </p>
+
+                <p style=\"margin:22px 0;\">
+                    <a
+                        href=\"{$safeAppealUrl}\"
+                        style=\"display:inline-block;background:#b91c1c;color:#fff;padding:11px 16px;text-decoration:none;border-radius:8px;font-weight:bold;\"
+                    >
+                        Submit Unlock Appeal
+                    </a>
+                </p>
+
+                <p>
+                    An authorized HOA administrator must review and unlock
+                    the account before you can sign in again.
+                </p>
+
+                <p>
+                    If you did not attempt to sign in, please include that
+                    information in your appeal.
+                </p>
+
+                <p>
+                    Regards,<br>
+                    <strong>South Meridian HOA</strong>
+                </p>
+            </div>
+        ";
+
+        $text =
+            "Hello {$displayName},\n\n" .
+            "Your South Meridian HOA account was temporarily locked after repeated incorrect password attempts.\n\n" .
+            "Submit an unlock appeal here:\n{$appealUrl}\n\n" .
+            "An authorized HOA administrator must unlock the account before you can sign in again.\n\n" .
+            "South Meridian HOA";
+
+        return security_send_email(
+            $email,
+            $displayName,
+            $subject,
+            $html,
+            $text
+        );
+    }
+}
+
+if (!function_exists('security_send_unlock_email')) {
+    function security_send_unlock_email(
+        string $email,
+        string $displayName,
+        string $passwordChangeUrl = ''
+    ): bool {
+        $safeName = htmlspecialchars(
+            $displayName !== '' ? $displayName : 'User',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $passwordChangeRequired =
+            trim($passwordChangeUrl) !== '';
+
+        if ($passwordChangeRequired) {
+            $actionUrl =
+                trim($passwordChangeUrl);
+        } else {
+            $actionUrl =
+                security_app_base_url();
+
+            if ($actionUrl === '') {
+                $actionUrl =
+                    'index.php?login=1';
+            } else {
+                $actionUrl =
+                    rtrim(
+                        $actionUrl,
+                        '/'
+                    ) .
+                    '/index.php?login=1';
+            }
+        }
+
+        $safeActionUrl =
+            htmlspecialchars(
+                $actionUrl,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+
+        $subject =
+            $passwordChangeRequired
+                ? 'South Meridian HOA - Account Unlocked / Change Password'
+                : 'South Meridian HOA - Account Unlocked';
+
+        $passwordNoticeHtml =
+            $passwordChangeRequired
+                ? "
+                    <div style=\"margin:18px 0;padding:13px 15px;border:1px solid #fde68a;border-radius:9px;background:#fffbeb;color:#92400e;\">
+                        <strong>Password change required</strong><br>
+                        Your account has been unlocked. For security, you must
+                        create a new password using the button below before
+                        continuing to use your homeowner account.
+                    </div>
+                "
+                : '';
+
+        $buttonText =
+            $passwordChangeRequired
+                ? 'Change Password'
+                : 'Sign In';
+
+        $html = "
+            <div style=\"font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;\">
+                <h2 style=\"margin:0 0 12px;color:#047857;\">
+                    Account Unlocked
+                </h2>
+
+                <p>Hello <strong>{$safeName}</strong>,</p>
+
+                <p>
+                    Your South Meridian HOA account has been unlocked by an
+                    authorized administrator.
+                </p>
+
+                {$passwordNoticeHtml}
+
+                <p style=\"margin:22px 0;\">
+                    <a
+                        href=\"{$safeActionUrl}\"
+                        style=\"display:inline-block;background:#047857;color:#fff;padding:11px 16px;text-decoration:none;border-radius:8px;font-weight:bold;\"
+                    >
+                        {$buttonText}
+                    </a>
+                </p>
+
+                <p>
+                    The password-change link is valid for one hour.
+                </p>
+
+                <p>
+                    If you did not request this unlock, please contact the HOA
+                    office.
+                </p>
+
+                <p>
+                    Regards,<br>
+                    <strong>South Meridian HOA</strong>
+                </p>
+            </div>
+        ";
+
+        $passwordNoticeText =
+            $passwordChangeRequired
+                ? "Your account has been unlocked. You must create a new password using this one-time link:\n{$actionUrl}\n\nThe link is valid for one hour.\n\n"
+                : "You may sign in again here:\n{$actionUrl}\n\n";
+
+        $text =
+            "Hello {$displayName},\n\n" .
+            "Your South Meridian HOA account has been unlocked by an authorized administrator.\n\n" .
+            $passwordNoticeText .
+            "South Meridian HOA";
+
+        return security_send_email(
+            $email,
+            $displayName,
+            $subject,
+            $html,
+            $text
+        );
     }
 }
 
@@ -331,65 +597,52 @@ if (!function_exists('security_current_block')) {
         mysqli $conn,
         array $account
     ): array {
-        $stateId =
-            security_upsert_state(
-                $conn,
-                $account
-            );
+        $state = security_ensure_state(
+            $conn,
+            $account
+        );
 
-        $state =
-            security_get_state(
-                $conn,
-                $stateId
-            );
-
-        if (!$state) {
-            return [
-                'blocked' => false
-            ];
-        }
+        $stateId = (int)$state['id'];
 
         if ((int)$state['hard_locked'] === 1) {
             return [
                 'blocked' => true,
                 'code' => 'hard_locked',
+                'seconds' => 0,
+                'mail_sent' => false,
+                'appeal_url' => '',
                 'message' =>
-                    'This account is locked for security. Check your email for the appeal instructions. An administrator must unlock the account before you can sign in again.'
+                    'This account is temporarily locked. Use the unlock appeal link sent to your email or contact the HOA office.'
             ];
         }
 
-        $until =
-            !empty($state['cooldown_until'])
-                ? strtotime(
-                    (string)$state['cooldown_until']
+        $cooldownSeconds =
+            max(
+                0,
+                min(
+                    30,
+                    (int)($state['cooldown_seconds'] ?? 0)
                 )
-                : false;
+            );
 
-        if ($until !== false && $until > time()) {
-            $seconds =
-                max(
-                    1,
-                    $until - time()
-                );
-
+        if ($cooldownSeconds > 0) {
             return [
                 'blocked' => true,
                 'code' => 'cooldown',
-                'seconds' => $seconds,
+                'seconds' => $cooldownSeconds,
+                'mail_sent' => false,
+                'appeal_url' => '',
                 'message' =>
-                    'Too many incorrect passwords. Please wait ' .
-                    $seconds .
-                    ' second' .
-                    ($seconds === 1 ? '' : 's') .
-                    ' before trying again.'
+                    "Too many incorrect passwords. Try again in {$cooldownSeconds} second" .
+                    ($cooldownSeconds === 1 ? '.' : 's.')
             ];
         }
 
-        if (
-            !empty($state['cooldown_until']) &&
-            $until !== false &&
-            $until <= time()
-        ) {
+        /*
+         * cooldown_until is kept only for backward compatibility.
+         * The real cooldown timer now uses last_failed_at + 30 seconds.
+         */
+        if (!empty($state['cooldown_until'])) {
             $stmt = $conn->prepare("
                 UPDATE login_security_state
                 SET cooldown_until = NULL
@@ -407,116 +660,13 @@ if (!function_exists('security_current_block')) {
         }
 
         return [
-            'blocked' => false
+            'blocked' => false,
+            'code' => '',
+            'seconds' => 0,
+            'mail_sent' => false,
+            'appeal_url' => '',
+            'message' => ''
         ];
-    }
-}
-
-if (!function_exists('security_create_appeal')) {
-    function security_create_appeal(
-        mysqli $conn,
-        int $stateId
-    ): array {
-        $token =
-            bin2hex(
-                random_bytes(32)
-            );
-
-        $tokenHash =
-            hash(
-                'sha256',
-                $token
-            );
-
-        $stmt = $conn->prepare("
-            INSERT INTO login_security_appeals
-            (
-                security_state_id,
-                token_hash,
-                status
-            )
-            VALUES (?,?,'available')
-        ");
-
-        $stmt->bind_param(
-            'is',
-            $stateId,
-            $tokenHash
-        );
-
-        $stmt->execute();
-
-        $appealId =
-            (int)$conn->insert_id;
-
-        $stmt->close();
-
-        return [
-            'id' => $appealId,
-            'token' => $token
-        ];
-    }
-}
-
-if (!function_exists('security_send_lock_email')) {
-    function security_send_lock_email(
-        array $account,
-        string $appealUrl
-    ): bool {
-        $safeName =
-            htmlspecialchars(
-                (string)($account['name'] ?? 'Member'),
-                ENT_QUOTES,
-                'UTF-8'
-            );
-
-        $safeUrl =
-            htmlspecialchars(
-                $appealUrl,
-                ENT_QUOTES,
-                'UTF-8'
-            );
-
-        $html = '
-        <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#1f2937;">
-          <div style="background:#077f46;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0;">
-            <h2 style="margin:0;font-size:21px;">South Meridian Homes</h2>
-          </div>
-          <div style="border:1px solid #e5e7eb;border-top:0;padding:24px;border-radius:0 0 14px 14px;">
-            <p>Hello <strong>' . $safeName . '</strong>,</p>
-            <p>
-              Your account was temporarily locked after repeated incorrect password attempts.
-              This is a security measure to protect your account.
-            </p>
-            <p>
-              The account will remain locked until an authorized administrator reviews and unlocks it.
-            </p>
-            <div style="margin:26px 0;text-align:center;">
-              <a href="' . $safeUrl . '"
-                 style="display:inline-block;background:#077f46;color:#fff;text-decoration:none;padding:12px 22px;border-radius:9px;font-weight:700;">
-                Submit Unlock Appeal
-              </a>
-            </div>
-            <p style="font-size:13px;color:#6b7280;">
-              If you did not attempt to sign in, submit the appeal and inform your HOA administrator.
-            </p>
-          </div>
-        </div>';
-
-        $text =
-            "South Meridian Homes\n\n" .
-            "Your account was locked after repeated incorrect password attempts.\n" .
-            "An administrator must unlock it.\n\n" .
-            "Submit your appeal here:\n" .
-            $appealUrl;
-
-        return security_send_email(
-            (string)$account['email'],
-            (string)($account['name'] ?? ''),
-            'Security Alert: Your South Meridian account was locked',
-            $html,
-            $text
-        );
     }
 }
 
@@ -525,145 +675,132 @@ if (!function_exists('security_register_failure')) {
         mysqli $conn,
         array $account
     ): array {
-        $stateId =
-            security_upsert_state(
-                $conn,
-                $account
-            );
+        $accountType = trim((string)($account['type'] ?? ''));
+        $accountId = (int)($account['id'] ?? 0);
+        $email = strtolower(trim((string)($account['email'] ?? '')));
+        $displayName = trim((string)($account['name'] ?? ''));
 
-        if ($stateId <= 0) {
-            return [
-                'code' => 'error',
-                'message' =>
-                    'Unable to update login security state.'
-            ];
-        }
+        security_ensure_state(
+            $conn,
+            $account
+        );
 
         $ip = security_client_ip();
-        $ua = security_user_agent();
+        $userAgent = security_user_agent();
 
         $conn->begin_transaction();
 
         try {
-            $state =
-                security_get_state(
-                    $conn,
-                    $stateId,
-                    true
-                );
+            $stmt = $conn->prepare("
+                SELECT
+                    *,
+                    CASE
+                        WHEN hard_locked = 1 THEN 0
+                        WHEN cooldown_stage = 1
+                             AND failed_attempts = 0
+                             AND last_failed_at IS NOT NULL
+                        THEN GREATEST(
+                            30 - TIMESTAMPDIFF(
+                                SECOND,
+                                last_failed_at,
+                                NOW()
+                            ),
+                            0
+                        )
+                        ELSE 0
+                    END AS cooldown_seconds
+                FROM login_security_state
+                WHERE account_type = ?
+                  AND account_id = ?
+                LIMIT 1
+                FOR UPDATE
+            ");
+
+            $stmt->bind_param(
+                'si',
+                $accountType,
+                $accountId
+            );
+
+            $stmt->execute();
+
+            $state = $stmt
+                ->get_result()
+                ->fetch_assoc();
+
+            $stmt->close();
 
             if (!$state) {
                 throw new RuntimeException(
-                    'Login security record not found.'
+                    'Login security state was not found.'
                 );
             }
+
+            $stateId = (int)$state['id'];
 
             if ((int)$state['hard_locked'] === 1) {
                 $conn->commit();
 
                 return [
                     'code' => 'hard_locked',
+                    'seconds' => 0,
+                    'remaining_attempts' => 0,
+                    'mail_sent' => false,
+                    'appeal_url' => '',
                     'message' =>
-                        'This account is locked for security. Check your email for the appeal instructions. An administrator must unlock the account before you can sign in again.'
+                        'This account is temporarily locked. Use the unlock appeal link sent to your email or contact the HOA office.'
                 ];
             }
 
-            $until =
-                !empty($state['cooldown_until'])
-                    ? strtotime(
-                        (string)$state['cooldown_until']
+            $cooldownSeconds =
+                max(
+                    0,
+                    min(
+                        30,
+                        (int)($state['cooldown_seconds'] ?? 0)
                     )
-                    : false;
+                );
 
-            if ($until !== false && $until > time()) {
-                $seconds =
-                    max(
-                        1,
-                        $until - time()
-                    );
-
+            if ($cooldownSeconds > 0) {
                 $conn->commit();
 
                 return [
                     'code' => 'cooldown',
-                    'seconds' => $seconds,
+                    'seconds' => $cooldownSeconds,
+                    'remaining_attempts' => 0,
+                    'mail_sent' => false,
+                    'appeal_url' => '',
                     'message' =>
-                        'Too many incorrect passwords. Please wait ' .
-                        $seconds .
-                        ' second' .
-                        ($seconds === 1 ? '' : 's') .
-                        ' before trying again.'
+                        "Too many incorrect passwords. Try again in {$cooldownSeconds} second" .
+                        ($cooldownSeconds === 1 ? '.' : 's.')
                 ];
             }
 
-            $failedAttempts =
+            $stage = (int)$state['cooldown_stage'];
+            $attempts =
                 (int)$state['failed_attempts'] + 1;
 
-            $stage =
-                (int)$state['cooldown_stage'];
-
-            if ($failedAttempts < 3) {
-                $stmt = $conn->prepare("
-                    UPDATE login_security_state
-                    SET
-                        failed_attempts = ?,
-                        cooldown_until = NULL,
-                        last_failed_at = NOW(),
-                        last_failed_ip = ?,
-                        last_user_agent = ?
-                    WHERE id = ?
-                ");
-
-                $stmt->bind_param(
-                    'issi',
-                    $failedAttempts,
-                    $ip,
-                    $ua,
-                    $stateId
-                );
-
-                $stmt->execute();
-                $stmt->close();
-
-                $conn->commit();
-
-                $remaining =
-                    3 - $failedAttempts;
-
-                return [
-                    'code' => 'incorrect',
-                    'remaining_attempts' =>
-                        $remaining,
-                    'message' =>
-                        'Incorrect password. ' .
-                        $remaining .
-                        ' attempt' .
-                        ($remaining === 1 ? '' : 's') .
-                        ' remaining.'
-                ];
-            }
-
             /*
-             * First set of 3 failures:
-             * lock for exactly 10 seconds.
+             * First three incorrect passwords:
+             * start one 30-second cooldown.
              */
-            if ($stage === 0) {
+            if ($stage === 0 && $attempts >= 3) {
                 $stmt = $conn->prepare("
                     UPDATE login_security_state
                     SET
                         failed_attempts = 0,
                         cooldown_stage = 1,
-                        cooldown_until = DATE_ADD(NOW(), INTERVAL 10 SECOND),
+                        cooldown_until = NULL,
                         last_failed_at = NOW(),
-                        last_failed_ip = ?,
-                        last_user_agent = ?
+                        last_failed_ip = NULLIF(?, ''),
+                        last_user_agent = NULLIF(?, '')
                     WHERE id = ?
                 ");
 
                 $stmt->bind_param(
                     'ssi',
                     $ip,
-                    $ua,
+                    $userAgent,
                     $stateId
                 );
 
@@ -674,159 +811,245 @@ if (!function_exists('security_register_failure')) {
 
                 return [
                     'code' => 'cooldown',
-                    'seconds' => 10,
+                    'seconds' => 30,
+                    'remaining_attempts' => 1,
+                    'mail_sent' => false,
+                    'appeal_url' => '',
                     'message' =>
-                        'Too many incorrect passwords. Your account is locked for 10 seconds. After the timer ends, you may try again.'
+                        'Too many incorrect passwords. Try again in 30 seconds. The next incorrect password will lock the account.'
                 ];
             }
 
             /*
-             * Second set of 3 failures:
-             * hard lock until an admin manually unlocks.
+             * After the 30-second cooldown, the very next wrong password
+             * hard-locks the account.
              */
+            if ($stage >= 1) {
+                $stmt = $conn->prepare("
+                    UPDATE login_security_state
+                    SET
+                        failed_attempts = 1,
+                        cooldown_until = NULL,
+                        hard_locked = 1,
+                        hard_locked_at = NOW(),
+                        last_failed_at = NOW(),
+                        last_failed_ip = NULLIF(?, ''),
+                        last_user_agent = NULLIF(?, ''),
+                        unlocked_at = NULL,
+                        unlocked_by_admin_id = NULL
+                    WHERE id = ?
+                ");
+
+                $stmt->bind_param(
+                    'ssi',
+                    $ip,
+                    $userAgent,
+                    $stateId
+                );
+
+                $stmt->execute();
+                $stmt->close();
+
+                /*
+                 * Commit the hard lock first. Even if the appeal insert or
+                 * email fails, the account must still appear in Login Security.
+                 */
+                $conn->commit();
+
+                $appealUrl = '';
+                $mailSent = false;
+
+                try {
+                    $stmt = $conn->prepare("
+                        UPDATE login_security_appeals
+                        SET
+                            status = 'rejected',
+                            reviewed_at = NOW(),
+                            admin_remarks =
+                                'Superseded by a newer account lock.'
+                        WHERE security_state_id = ?
+                          AND status = 'available'
+                    ");
+
+                    $stmt->bind_param(
+                        'i',
+                        $stateId
+                    );
+
+                    $stmt->execute();
+                    $stmt->close();
+
+                    $rawToken =
+                        bin2hex(
+                            random_bytes(32)
+                        );
+
+                    $tokenHash =
+                        hash(
+                            'sha256',
+                            $rawToken
+                        );
+
+                    $stmt = $conn->prepare("
+                        INSERT INTO login_security_appeals
+                        (
+                            security_state_id,
+                            token_hash,
+                            status,
+                            created_at
+                        )
+                        VALUES
+                        (
+                            ?,
+                            ?,
+                            'available',
+                            NOW()
+                        )
+                    ");
+
+                    $stmt->bind_param(
+                        'is',
+                        $stateId,
+                        $tokenHash
+                    );
+
+                    $stmt->execute();
+
+                    $appealId =
+                        (int)$conn->insert_id;
+
+                    $stmt->close();
+
+                    $appealUrl =
+                        security_appeal_url(
+                            $rawToken
+                        );
+
+                    $mailSent =
+                        security_send_lock_email(
+                            $email,
+                            $displayName,
+                            $appealUrl
+                        );
+
+                    if ($mailSent) {
+                        $stmt = $conn->prepare("
+                            UPDATE login_security_appeals
+                            SET email_sent_at = NOW()
+                            WHERE id = ?
+                            LIMIT 1
+                        ");
+
+                        $stmt->bind_param(
+                            'i',
+                            $appealId
+                        );
+
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+                } catch (Throwable $appealError) {
+                    error_log(
+                        'Login security appeal/email error: ' .
+                        $appealError->getMessage()
+                    );
+                }
+
+                return [
+                    'code' => 'hard_locked',
+                    'seconds' => 0,
+                    'remaining_attempts' => 0,
+                    'mail_sent' => $mailSent,
+                    'appeal_url' => '',
+                    'message' =>
+                        'Your account has been temporarily locked after the incorrect password entered after the 30-second cooldown. Check your email for the unlock appeal link.'
+                ];
+            }
+
             $stmt = $conn->prepare("
                 UPDATE login_security_state
                 SET
-                    failed_attempts = 0,
-                    cooldown_until = NULL,
-                    hard_locked = 1,
-                    hard_locked_at = NOW(),
+                    failed_attempts = ?,
                     last_failed_at = NOW(),
-                    last_failed_ip = ?,
-                    last_user_agent = ?
+                    last_failed_ip = NULLIF(?, ''),
+                    last_user_agent = NULLIF(?, '')
                 WHERE id = ?
             ");
 
             $stmt->bind_param(
-                'ssi',
+                'issi',
+                $attempts,
                 $ip,
-                $ua,
+                $userAgent,
                 $stateId
             );
 
             $stmt->execute();
             $stmt->close();
 
-            $appeal =
-                security_create_appeal(
-                    $conn,
-                    $stateId
-                );
-
             $conn->commit();
 
-            $appealUrl =
-                security_base_url() .
-                '/account_unlock_appeal.php?token=' .
-                urlencode(
-                    (string)$appeal['token']
+            $remaining =
+                max(
+                    0,
+                    3 - $attempts
                 );
 
-            $mailSent =
-                security_send_lock_email(
-                    $account,
-                    $appealUrl
-                );
-
-            if ($mailSent) {
-                $stmt = $conn->prepare("
-                    UPDATE login_security_appeals
-                    SET email_sent_at = NOW()
-                    WHERE id = ?
-                ");
-
-                $appealId =
-                    (int)$appeal['id'];
-
-                $stmt->bind_param(
-                    'i',
-                    $appealId
-                );
-
-                $stmt->execute();
-                $stmt->close();
+            return [
+                'code' => 'incorrect',
+                'seconds' => 0,
+                'remaining_attempts' => $remaining,
+                'mail_sent' => false,
+                'appeal_url' => '',
+                'message' =>
+                    "Incorrect password. {$remaining} attempt" .
+                    ($remaining === 1 ? '' : 's') .
+                    ' remaining before a 30-second cooldown.'
+            ];
+        } catch (Throwable $e) {
+            try {
+                $conn->rollback();
+            } catch (Throwable $ignored) {
             }
 
-            return [
-                'code' => 'hard_locked',
-                'mail_sent' => $mailSent,
-                'appeal_url' => $appealUrl,
-                'message' =>
-                    $mailSent
-                        ? 'Your account is now locked for security. We sent an email with an appeal link. An administrator must unlock the account before you can sign in again.'
-                        : 'Your account is now locked for security. The email could not be delivered, but you can use the appeal link below. An administrator must unlock the account before you can sign in again.'
-            ];
-
-        } catch (\Throwable $e) {
-            $conn->rollback();
-
-            error_log(
-                'Login security failure handler error: ' .
-                $e->getMessage()
-            );
-
-            return [
-                'code' => 'error',
-                'message' =>
-                    'Unable to process the login security check. Please try again.'
-            ];
+            throw $e;
         }
     }
 }
 
-if (!function_exists('security_send_unlock_email')) {
-    function security_send_unlock_email(
-        string $email,
-        string $name
-    ): bool {
-        $safeName =
-            htmlspecialchars(
-                $name !== ''
-                    ? $name
-                    : 'Member',
-                ENT_QUOTES,
-                'UTF-8'
-            );
+if (!function_exists('security_reset_after_success')) {
+    function security_reset_after_success(
+        mysqli $conn,
+        array $account
+    ): void {
+        $accountType = trim((string)($account['type'] ?? ''));
+        $accountId = (int)($account['id'] ?? 0);
 
-        $loginUrl =
-            security_base_url() .
-            '/index.php';
+        if ($accountType === '' || $accountId <= 0) {
+            return;
+        }
 
-        $safeLogin =
-            htmlspecialchars(
-                $loginUrl,
-                ENT_QUOTES,
-                'UTF-8'
-            );
+        $stmt = $conn->prepare("
+            UPDATE login_security_state
+            SET
+                failed_attempts = 0,
+                cooldown_stage = 0,
+                cooldown_until = NULL,
+                hard_locked = 0,
+                hard_locked_at = NULL,
+                unlocked_at = NULL,
+                unlocked_by_admin_id = NULL
+            WHERE account_type = ?
+              AND account_id = ?
+        ");
 
-        $html = '
-        <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#1f2937;">
-          <div style="background:#077f46;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0;">
-            <h2 style="margin:0;font-size:21px;">South Meridian Homes</h2>
-          </div>
-          <div style="border:1px solid #e5e7eb;border-top:0;padding:24px;border-radius:0 0 14px 14px;">
-            <p>Hello <strong>' . $safeName . '</strong>,</p>
-            <p>
-              An administrator reviewed your login-security case and unlocked your account.
-            </p>
-            <p>You may now sign in again.</p>
-            <p style="margin-top:24px;">
-              <a href="' . $safeLogin . '"
-                 style="display:inline-block;background:#077f46;color:#fff;text-decoration:none;padding:12px 22px;border-radius:9px;font-weight:700;">
-                Sign In
-              </a>
-            </p>
-          </div>
-        </div>';
-
-        return security_send_email(
-            $email,
-            $name,
-            'Your South Meridian account has been unlocked',
-            $html,
-            "Your South Meridian account has been unlocked. You may sign in again: " .
-            $loginUrl
+        $stmt->bind_param(
+            'si',
+            $accountType,
+            $accountId
         );
+
+        $stmt->execute();
+        $stmt->close();
     }
 }
-?>
